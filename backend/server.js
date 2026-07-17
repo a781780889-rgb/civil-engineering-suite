@@ -1,0 +1,846 @@
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const { URL } = require('url');
+
+const { calculateConcreteMaterials } = require('./utils/materialCalculator');
+const {
+  calculateIsolatedFooting,
+  calculateCombinedFooting,
+  calculateStripFooting,
+  calculateStrapFooting,
+  calculateRaftFoundation,
+} = require('./calculators/footings');
+const { calculateColumn } = require('./calculators/columns');
+const { calculateBeam } = require('./calculators/beams');
+const { calculateSolidSlab, calculateHollowBlockSlab } = require('./calculators/slabs');
+const { calculateWall } = require('./calculators/walls');
+const { calculateStaircase } = require('./calculators/staircases');
+const { calculateTank } = require('./calculators/tanks');
+const { calculatePool } = require('./calculators/pools');
+const { generatePDFReport } = require('./utils/nativePdfGenerator');
+const {
+  MIX_DESIGNS, REBAR_DIAMETERS, STEEL_GRADES, DESIGN_CODES, BAR_SURFACE,
+  calculateHookLength, calculateDevelopmentLength, calculateLapSpliceLength,
+  DEFAULT_STEEL_PRICING,
+} = require('./utils/constants');
+const { calculateTieShape } = require('./utils/tieShapesLibrary');
+const { runDesignChecks } = require('./utils/rebarDesignChecks');
+const { calculateSteelCost, calculateProjectSteelCost } = require('./utils/rebarPricing');
+const BOQ = require('./calculators/boq');
+const IMPORT = require('./calculators/import');
+const PriceLib = require('./utils/priceLibrary');
+const Reports = require('./utils/boqReports');
+const {
+  calculateFootingRebarDetailed,
+  calculateColumnRebarDetailed,
+  calculateBeamRebarDetailed,
+  calculateSlabRebarDetailed,
+  calculateWallRebarDetailed,
+  calculateStaircaseRebarDetailed,
+  calculateTankRebarDetailed,
+  calculatePoolRebarDetailed,
+  calculateCustomRebarElement,
+} = require('./calculators/rebarSection');
+
+const PORT = process.env.PORT || 3000;
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+};
+
+const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
+const REPORTS_DIR = path.join(__dirname, '..', 'reports');
+if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
+
+function sendJSON(res, statusCode, payload) {
+  const body = JSON.stringify(payload);
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Content-Length': Buffer.byteLength(body),
+  });
+  res.end(body);
+}
+
+function sendFile(res, filePath) {
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('الملف غير موجود');
+      return;
+    }
+    const ext = path.extname(filePath);
+    res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+    res.end(data);
+  });
+}
+
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => {
+      data += chunk;
+      if (data.length > 30 * 1024 * 1024) req.destroy(); // حد أعلى موسّع لدعم رفع ملفات Excel/PDF/DXF المشفّرة base64
+    });
+    req.on('end', () => {
+      if (!data) return resolve({});
+      try {
+        resolve(JSON.parse(data));
+      } catch (e) {
+        reject(new Error('صيغة JSON غير صحيحة في الطلب'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+const API_HANDLERS = {
+  '/api/concrete/reference-data': {
+    GET: async () => ({ success: true, data: { mix_designs: MIX_DESIGNS, rebar_diameters: REBAR_DIAMETERS } }),
+  },
+  '/api/concrete/footings/isolated': {
+    POST: async (body) => {
+      const structural = calculateIsolatedFooting(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/footings/combined': {
+    POST: async (body) => {
+      const structural = calculateCombinedFooting(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/footings/strip': {
+    POST: async (body) => {
+      const structural = calculateStripFooting(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/footings/strap': {
+    POST: async (body) => {
+      const structural = calculateStrapFooting(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.total_volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/footings/raft': {
+    POST: async (body) => {
+      const structural = calculateRaftFoundation(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/columns': {
+    POST: async (body) => {
+      const structural = calculateColumn(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/beams': {
+    POST: async (body) => {
+      const structural = calculateBeam(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/slabs/solid': {
+    POST: async (body) => {
+      const structural = calculateSolidSlab(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/slabs/hollow-block': {
+    POST: async (body) => {
+      const structural = calculateHollowBlockSlab(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.net_concrete_volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/walls': {
+    POST: async (body) => {
+      const structural = calculateWall(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/staircases': {
+    POST: async (body) => {
+      const structural = calculateStaircase(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.total_concrete_volume_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/tanks': {
+    POST: async (body) => {
+      const structural = calculateTank(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.concrete_volumes.total_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/pools': {
+    POST: async (body) => {
+      const structural = calculatePool(body);
+      const materials = calculateConcreteMaterials({ volume_m3: structural.concrete_volumes.total_m3, ...body });
+      return { success: true, data: { structural, materials } };
+    },
+  },
+  '/api/concrete/materials-only': {
+    POST: async (body) => ({ success: true, data: calculateConcreteMaterials(body) }),
+  },
+  '/api/concrete/export-pdf': {
+    POST: async (body) => {
+      const { projectName, engineerName, clientName, calculationType, inputs, results } = body;
+      if (!results) throw new Error('لا توجد نتائج لتصديرها');
+      const fileName = `report_${Date.now()}.pdf`;
+      const outputPath = path.join(REPORTS_DIR, fileName);
+      const { reportNumber } = await generatePDFReport({
+        projectName, engineerName, clientName,
+        reportTitle: 'تقرير حساب الخرسانة - Concrete Calculation Report',
+        calculationType: calculationType || 'Concrete Calculation',
+        inputs: inputs || {},
+        results,
+        outputPath,
+      });
+      return { success: true, reportNumber, downloadUrl: `/reports/${fileName}` };
+    },
+  },
+  '/api/health': {
+    GET: async () => ({ status: 'ok', module: 'Concrete Calculator - Section 1', time: new Date().toISOString() }),
+  },
+
+  // ===================== القسم الثاني: حاسبة حديد التسليح =====================
+  '/api/rebar/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        rebar_diameters: REBAR_DIAMETERS,
+        steel_grades: STEEL_GRADES,
+        design_codes: DESIGN_CODES,
+        bar_surface_types: BAR_SURFACE,
+        default_pricing: DEFAULT_STEEL_PRICING,
+        tie_shapes: ['rectangular', 'square', 'circular', 'polygonal', 'double', 'custom'],
+        hook_angles: [90, 135, 180],
+      },
+    }),
+  },
+  '/api/rebar/dashboard-summary': {
+    GET: async () => ({
+      success: true,
+      data: {
+        message: 'استخدم بيانات المشروع المحفوظة في الواجهة الأمامية لبناء بطاقات لوحة التحكم (الوزن الكلي، عدد الأسياخ، التكلفة، الهدر) من نتائج الحسابات المخزنة',
+      },
+    }),
+  },
+
+  '/api/rebar/hook-length': {
+    POST: async (body) => {
+      const { barDiameter_mm, hookAngle, isTie } = body;
+      if (!barDiameter_mm || !hookAngle) throw new Error('يجب إدخال قطر السيخ وزاوية الخطاف');
+      return { success: true, data: calculateHookLength(barDiameter_mm, hookAngle, !!isTie) };
+    },
+  },
+  '/api/rebar/development-length': {
+    POST: async (body) => ({ success: true, data: calculateDevelopmentLength(body) }),
+  },
+  '/api/rebar/lap-splice-length': {
+    POST: async (body) => {
+      const dev = calculateDevelopmentLength(body);
+      const lap = calculateLapSpliceLength(dev.development_length_mm, body.spliceClass || 'B');
+      return { success: true, data: { development: dev, lap_splice: lap } };
+    },
+  },
+  '/api/rebar/tie-shape': {
+    POST: async (body) => {
+      const { shapeType, ...params } = body;
+      if (!shapeType) throw new Error('يجب تحديد نوع شكل الكانة');
+      return { success: true, data: calculateTieShape(shapeType, params) };
+    },
+  },
+  '/api/rebar/design-checks': {
+    POST: async (body) => ({ success: true, data: runDesignChecks(body) }),
+  },
+  '/api/rebar/cost': {
+    POST: async (body) => ({ success: true, data: calculateSteelCost(body) }),
+  },
+  '/api/rebar/project-cost': {
+    POST: async (body) => {
+      const { elements, pricing } = body;
+      if (!elements || !Array.isArray(elements)) throw new Error('يجب إدخال قائمة عناصر (elements) لحساب التكلفة الإجمالية');
+      return { success: true, data: calculateProjectSteelCost(elements, pricing || {}) };
+    },
+  },
+
+  // ----- عناصر إنشائية: حديد تفصيلي -----
+  '/api/rebar/footings/isolated': {
+    POST: async (body) => ({ success: true, data: calculateFootingRebarDetailed('isolated', body) }),
+  },
+  '/api/rebar/footings/combined': {
+    POST: async (body) => ({ success: true, data: calculateFootingRebarDetailed('combined', body) }),
+  },
+  '/api/rebar/footings/strip': {
+    POST: async (body) => ({ success: true, data: calculateFootingRebarDetailed('strip', body) }),
+  },
+  '/api/rebar/footings/raft': {
+    POST: async (body) => ({ success: true, data: calculateFootingRebarDetailed('raft', body) }),
+  },
+  '/api/rebar/footings/strap': {
+    POST: async (body) => ({ success: true, data: calculateFootingRebarDetailed('strap', body) }),
+  },
+  '/api/rebar/columns': {
+    POST: async (body) => ({ success: true, data: calculateColumnRebarDetailed(body) }),
+  },
+  '/api/rebar/beams': {
+    POST: async (body) => ({ success: true, data: calculateBeamRebarDetailed(body) }),
+  },
+  '/api/rebar/slabs/solid': {
+    POST: async (body) => ({ success: true, data: calculateSlabRebarDetailed('solid', body) }),
+  },
+  '/api/rebar/slabs/hollow-block': {
+    POST: async (body) => ({ success: true, data: calculateSlabRebarDetailed('hollow', body) }),
+  },
+  '/api/rebar/walls': {
+    POST: async (body) => ({ success: true, data: calculateWallRebarDetailed(body) }),
+  },
+  '/api/rebar/staircases': {
+    POST: async (body) => ({ success: true, data: calculateStaircaseRebarDetailed(body) }),
+  },
+  '/api/rebar/tanks': {
+    POST: async (body) => ({ success: true, data: calculateTankRebarDetailed(body) }),
+  },
+  '/api/rebar/pools': {
+    POST: async (body) => ({ success: true, data: calculatePoolRebarDetailed(body) }),
+  },
+  '/api/rebar/custom-element': {
+    POST: async (body) => ({ success: true, data: calculateCustomRebarElement(body) }),
+  },
+
+  '/api/rebar/export-pdf': {
+    POST: async (body) => {
+      const { projectName, engineerName, clientName, calculationType, inputs, results } = body;
+      if (!results) throw new Error('لا توجد نتائج لتصديرها');
+      const fileName = `rebar_report_${Date.now()}.pdf`;
+      const outputPath = path.join(REPORTS_DIR, fileName);
+      const { reportNumber } = await generatePDFReport({
+        projectName, engineerName, clientName,
+        reportTitle: 'تقرير حساب حديد التسليح - Reinforcement Steel Report',
+        calculationType: calculationType || 'Rebar Calculation',
+        inputs: inputs || {},
+        results,
+        outputPath,
+      });
+      return { success: true, reportNumber, downloadUrl: `/reports/${fileName}` };
+    },
+  },
+
+  // ===================== القسم الثالث: نظام حصر الكميات (BOQ) - الجزء الأول =====================
+  '/api/boq/health': {
+    GET: async () => ({ status: 'ok', module: 'BOQ System - Part 1 (Engineering Calculations)', time: new Date().toISOString() }),
+  },
+
+  // ----- أعمال التربة -----
+  '/api/boq/earthworks/excavation': {
+    POST: async (body) => ({ success: true, data: BOQ.earthworks.calculateExcavationVolume(body) }),
+  },
+  '/api/boq/earthworks/trench': {
+    POST: async (body) => ({ success: true, data: BOQ.earthworks.calculateTrenchExcavation(body) }),
+  },
+  '/api/boq/earthworks/mass-grid': {
+    POST: async (body) => ({ success: true, data: BOQ.earthworks.calculateMassExcavationGrid(body) }),
+  },
+  '/api/boq/earthworks/filling-compaction': {
+    POST: async (body) => ({ success: true, data: BOQ.earthworks.calculateFillingCompaction(body) }),
+  },
+  '/api/boq/earthworks/soil-replacement': {
+    POST: async (body) => ({ success: true, data: BOQ.earthworks.calculateSoilReplacement(body) }),
+  },
+  '/api/boq/earthworks/backfilling': {
+    POST: async (body) => ({ success: true, data: BOQ.earthworks.calculateBackfilling(body) }),
+  },
+  '/api/boq/earthworks/spoil-disposal': {
+    POST: async (body) => ({ success: true, data: BOQ.earthworks.calculateSpoilDisposal(body) }),
+  },
+
+  // ----- المباني -----
+  '/api/boq/masonry/wall': {
+    POST: async (body) => ({ success: true, data: BOQ.masonry.calculateWallMasonry(body) }),
+  },
+  '/api/boq/masonry/project': {
+    POST: async (body) => ({ success: true, data: BOQ.masonry.calculateProjectMasonry(body) }),
+  },
+  '/api/boq/masonry/reference-data': {
+    GET: async () => ({ success: true, data: { units: BOQ.masonry.MASONRY_UNITS, weights: BOQ.masonry.UNIT_WEIGHTS_KG } }),
+  },
+
+  // ----- اللياسة والعزل -----
+  '/api/boq/plaster/cement': {
+    POST: async (body) => ({ success: true, data: BOQ.plasterWaterproofing.calculateCementPlaster(body) }),
+  },
+  '/api/boq/plaster/gypsum': {
+    POST: async (body) => ({ success: true, data: BOQ.plasterWaterproofing.calculateGypsumPlaster(body) }),
+  },
+  '/api/boq/waterproofing/general': {
+    POST: async (body) => ({ success: true, data: BOQ.plasterWaterproofing.calculateWaterproofing(body) }),
+  },
+  '/api/boq/waterproofing/thermal': {
+    POST: async (body) => ({ success: true, data: BOQ.plasterWaterproofing.calculateThermalInsulation(body) }),
+  },
+  '/api/boq/waterproofing/tank': {
+    POST: async (body) => ({ success: true, data: BOQ.plasterWaterproofing.calculateTankInsulation(body) }),
+  },
+  '/api/boq/waterproofing/bathroom': {
+    POST: async (body) => ({ success: true, data: BOQ.plasterWaterproofing.calculateBathroomWaterproofing(body) }),
+  },
+
+  // ----- الأرضيات والأسقف والدهانات -----
+  '/api/boq/flooring/tile': {
+    POST: async (body) => ({ success: true, data: BOQ.flooringCeilingPaint.calculateTileFlooring(body) }),
+  },
+  '/api/boq/flooring/parquet': {
+    POST: async (body) => ({ success: true, data: BOQ.flooringCeilingPaint.calculateParquetFlooring(body) }),
+  },
+  '/api/boq/flooring/epoxy': {
+    POST: async (body) => ({ success: true, data: BOQ.flooringCeilingPaint.calculateEpoxyFlooring(body) }),
+  },
+  '/api/boq/flooring/printed-concrete': {
+    POST: async (body) => ({ success: true, data: BOQ.flooringCeilingPaint.calculatePrintedConcrete(body) }),
+  },
+  '/api/boq/ceiling/gypsum': {
+    POST: async (body) => ({ success: true, data: BOQ.flooringCeilingPaint.calculateGypsumCeiling(body) }),
+  },
+  '/api/boq/ceiling/grid': {
+    POST: async (body) => ({ success: true, data: BOQ.flooringCeilingPaint.calculateGridCeiling(body) }),
+  },
+  '/api/boq/painting': {
+    POST: async (body) => ({ success: true, data: BOQ.flooringCeilingPaint.calculatePainting(body) }),
+  },
+
+  // ----- النجارة والألمنيوم والزجاج -----
+  '/api/boq/carpentry/doors': {
+    POST: async (body) => ({ success: true, data: BOQ.carpentryAluminum.calculateWoodenDoors(body) }),
+  },
+  '/api/boq/carpentry/windows': {
+    POST: async (body) => ({ success: true, data: BOQ.carpentryAluminum.calculateWoodenWindows(body) }),
+  },
+  '/api/boq/carpentry/kitchen': {
+    POST: async (body) => ({ success: true, data: BOQ.carpentryAluminum.calculateKitchenCabinets(body) }),
+  },
+  '/api/boq/carpentry/wardrobes': {
+    POST: async (body) => ({ success: true, data: BOQ.carpentryAluminum.calculateWardrobes(body) }),
+  },
+  '/api/boq/aluminum/curtain-wall': {
+    POST: async (body) => ({ success: true, data: BOQ.carpentryAluminum.calculateCurtainWallFacade(body) }),
+  },
+  '/api/boq/aluminum/windows': {
+    POST: async (body) => ({ success: true, data: BOQ.carpentryAluminum.calculateAluminumWindows(body) }),
+  },
+  '/api/boq/aluminum/doors': {
+    POST: async (body) => ({ success: true, data: BOQ.carpentryAluminum.calculateAluminumDoors(body) }),
+  },
+  '/api/boq/aluminum/glass-dome': {
+    POST: async (body) => ({ success: true, data: BOQ.carpentryAluminum.calculateGlassDome(body) }),
+  },
+
+  // ----- الأعمال الكهربائية والصحية -----
+  '/api/boq/electrical/cables': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateElectricalCables(body) }),
+  },
+  '/api/boq/electrical/conduits': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateElectricalConduits(body) }),
+  },
+  '/api/boq/electrical/panels': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateElectricalPanels(body) }),
+  },
+  '/api/boq/electrical/switches-outlets': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateSwitchesOutlets(body) }),
+  },
+  '/api/boq/electrical/earthing': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateEarthingSystem(body) }),
+  },
+  '/api/boq/electrical/fire-alarm': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateFireAlarmSystem(body) }),
+  },
+  '/api/boq/plumbing/water-supply': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateWaterSupplyPipes(body) }),
+  },
+  '/api/boq/plumbing/drainage': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateDrainagePipes(body) }),
+  },
+  '/api/boq/plumbing/vent': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateVentPipes(body) }),
+  },
+  '/api/boq/plumbing/pumps': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateWaterPumps(body) }),
+  },
+  '/api/boq/plumbing/tank-capacity': {
+    POST: async (body) => ({ success: true, data: BOQ.electricalPlumbing.calculateWaterTankCapacity(body) }),
+  },
+
+  // ----- أعمال الطرق -----
+  '/api/boq/roads/fill-layers': {
+    POST: async (body) => ({ success: true, data: BOQ.roadworks.calculateRoadFillLayers(body) }),
+  },
+  '/api/boq/roads/base-course': {
+    POST: async (body) => ({ success: true, data: BOQ.roadworks.calculateBaseCourse(body) }),
+  },
+  '/api/boq/roads/asphalt': {
+    POST: async (body) => ({ success: true, data: BOQ.roadworks.calculateAsphaltLayers(body) }),
+  },
+  '/api/boq/roads/sidewalks': {
+    POST: async (body) => ({ success: true, data: BOQ.roadworks.calculateSidewalks(body) }),
+  },
+  '/api/boq/roads/curbstones': {
+    POST: async (body) => ({ success: true, data: BOQ.roadworks.calculateCurbstones(body) }),
+  },
+  '/api/boq/roads/markings': {
+    POST: async (body) => ({ success: true, data: BOQ.roadworks.calculateRoadMarkings(body) }),
+  },
+
+  // =====================================================================
+  // القسم الثالث - الجزء الثاني: طرق الاستيراد (Excel/CSV/PDF/DXF) والذكاء الاصطناعي
+  // =====================================================================
+
+  // ----- استيراد CSV -----
+  '/api/import/csv': {
+    POST: async (body) => {
+      const text = body.csv_text || (body.file_base64 ? Buffer.from(body.file_base64, 'base64').toString('utf8') : null);
+      if (!text) throw new Error('يجب إرسال csv_text أو file_base64');
+      const result = IMPORT.csv.importBOQFromCSV(text, { delimiter: body.delimiter });
+      return { success: result.success, data: result };
+    },
+  },
+
+  // ----- استيراد Excel (.xlsx) -----
+  '/api/import/xlsx': {
+    POST: async (body) => {
+      if (!body.file_base64) throw new Error('يجب إرسال محتوى الملف file_base64 (Base64) لملف xlsx');
+      const buffer = Buffer.from(body.file_base64, 'base64');
+      const result = IMPORT.xlsx.importBOQFromXlsx(buffer);
+      return { success: result.success, data: result };
+    },
+  },
+
+  // ----- استخراج نصوص/جداول من PDF -----
+  '/api/import/pdf': {
+    POST: async (body) => {
+      if (!body.file_base64) throw new Error('يجب إرسال محتوى الملف file_base64 (Base64) لملف pdf');
+      const buffer = Buffer.from(body.file_base64, 'base64');
+      const extracted = IMPORT.pdf.extractPdfText(buffer);
+      const tableGuess = IMPORT.pdf.extractBOQTableFromText(extracted.lines);
+      return {
+        success: true,
+        data: {
+          source: 'pdf',
+          streams_found: extracted.streams_found,
+          text_streams_decoded: extracted.text_streams_decoded,
+          full_text: extracted.full_text,
+          line_count: extracted.lines.length,
+          boq_table_guess: tableGuess,
+        },
+      };
+    },
+  },
+
+  // ----- استيراد وتحليل DXF -----
+  '/api/import/dxf': {
+    POST: async (body) => {
+      const text = body.dxf_text || (body.file_base64 ? Buffer.from(body.file_base64, 'base64').toString('latin1') : null);
+      if (!text) throw new Error('يجب إرسال dxf_text أو file_base64');
+      const result = IMPORT.dxf.parseDxfFile(text);
+      return { success: true, data: result };
+    },
+  },
+
+  // ----- حالة تفعيل الذكاء الاصطناعي -----
+  '/api/import/ai/status': {
+    GET: async () => ({ success: true, data: { available: IMPORT.ai.isAIAvailable() } }),
+  },
+
+  // ----- تحليل بيانات مخطط مستخرجة (من PDF/DXF) بالذكاء الاصطناعي -----
+  '/api/import/ai/analyze-plan': {
+    POST: async (body) => {
+      const result = await IMPORT.ai.analyzeExtractedPlanData({
+        sourceType: body.source_type || 'unknown',
+        extractedText: body.extracted_text,
+        entitiesSummary: body.entities_summary,
+        projectType: body.project_type,
+      });
+      return result;
+    },
+  },
+
+  // ----- مقارنة نسختين من بيانات حصر بالذكاء الاصطناعي -----
+  '/api/import/ai/compare-boq': {
+    POST: async (body) => {
+      if (!body.version_a || !body.version_b) throw new Error('يجب إرسال version_a و version_b للمقارنة');
+      const result = await IMPORT.ai.compareBOQVersions({
+        versionA: body.version_a,
+        versionB: body.version_b,
+        labelA: body.label_a,
+        labelB: body.label_b,
+      });
+      return result;
+    },
+  },
+
+  // ----- سؤال هندسي حر بالذكاء الاصطناعي -----
+  '/api/import/ai/ask': {
+    POST: async (body) => {
+      if (!body.question) throw new Error('يجب إرسال question');
+      const result = await IMPORT.ai.answerEngineeringQuestion({
+        question: body.question,
+        context: body.context,
+      });
+      return result;
+    },
+  },
+
+  // ===================================================================
+  // القسم الثالث - مكتبة الأسعار المركزية (Price Library)
+  // ===================================================================
+  '/api/prices/effective': {
+    GET: async (_body, query) => PriceLib.getEffectivePrices({ projectId: query?.projectId || null, region: query?.region || null }),
+    POST: async (body) => PriceLib.getEffectivePrices({ projectId: body.projectId || null, region: body.region || null }),
+  },
+  '/api/prices/global': {
+    POST: async (body) => PriceLib.updateGlobalPrices(body),
+  },
+  '/api/prices/region': {
+    POST: async (body) => {
+      if (!body.region) throw new Error('اسم المنطقة مطلوب');
+      return PriceLib.updateRegionPrices(body.region, body.prices || {});
+    },
+  },
+  '/api/prices/project': {
+    POST: async (body) => {
+      if (!body.projectId) throw new Error('معرّف المشروع مطلوب');
+      return PriceLib.updateProjectPrices(body.projectId, body.prices || {});
+    },
+  },
+  '/api/prices/regions': {
+    GET: async () => ({ regions: PriceLib.listRegions() }),
+  },
+  '/api/prices/projects': {
+    GET: async () => ({ projects: PriceLib.listProjectsWithPricing() }),
+  },
+  '/api/prices/suppliers': {
+    GET: async (_body, query) => ({ suppliers: PriceLib.listSuppliers({ item: query?.item || null, region: query?.region || null }) }),
+    POST: async (body) => PriceLib.addSupplier(body),
+  },
+  '/api/prices/suppliers/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المورد مطلوب');
+      return PriceLib.deleteSupplier(body.id);
+    },
+  },
+  '/api/prices/suppliers/cheapest': {
+    GET: async (_body, query) => {
+      if (!query?.item) throw new Error('يجب تحديد اسم البند (item)');
+      return { item: query.item, cheapest: PriceLib.findCheapestSupplier(query.item) };
+    },
+  },
+  '/api/prices/line-item': {
+    POST: async (body) => PriceLib.priceLineItem(body),
+  },
+
+  // ===================================================================
+  // القسم الثالث - التقارير (BOQ Reports)
+  // ===================================================================
+  // body.items: [{ category, description, quantity, unit, wastePercent, priceKey, unitPrice }]
+  '/api/reports/boq': {
+    POST: async (body) => {
+      if (!Array.isArray(body.items) || body.items.length === 0) throw new Error('يجب توفير قائمة items لا تقل عن بند واحد');
+      const lineItems = body.items.map(Reports.makeLineItem);
+      const priced = Reports.priceLineItems(lineItems, { projectId: body.projectId, region: body.region });
+      return Reports.buildBOQTable(priced);
+    },
+  },
+  '/api/reports/quantity': {
+    POST: async (body) => {
+      if (!Array.isArray(body.items) || body.items.length === 0) throw new Error('يجب توفير قائمة items لا تقل عن بند واحد');
+      const lineItems = body.items.map(Reports.makeLineItem);
+      return Reports.buildQuantityReport(lineItems);
+    },
+  },
+  '/api/reports/prices': {
+    POST: async (body) => {
+      if (!Array.isArray(body.items) || body.items.length === 0) throw new Error('يجب توفير قائمة items لا تقل عن بند واحد');
+      const lineItems = body.items.map(Reports.makeLineItem);
+      const priced = Reports.priceLineItems(lineItems, { projectId: body.projectId, region: body.region });
+      return Reports.buildPriceReport(priced, { projectId: body.projectId, region: body.region });
+    },
+  },
+  '/api/reports/costs': {
+    POST: async (body) => {
+      if (!Array.isArray(body.items) || body.items.length === 0) throw new Error('يجب توفير قائمة items لا تقل عن بند واحد');
+      const lineItems = body.items.map(Reports.makeLineItem);
+      const priced = Reports.priceLineItems(lineItems, { projectId: body.projectId, region: body.region });
+      return Reports.buildCostReport(priced, {
+        taxPercent: body.taxPercent || 0,
+        discountPercent: body.discountPercent || 0,
+        laborCost: body.laborCost || 0,
+        equipmentCost: body.equipmentCost || 0,
+        transportCost: body.transportCost || 0,
+      });
+    },
+  },
+  '/api/reports/waste': {
+    POST: async (body) => {
+      if (!Array.isArray(body.items) || body.items.length === 0) throw new Error('يجب توفير قائمة items لا تقل عن بند واحد');
+      const lineItems = body.items.map(Reports.makeLineItem);
+      return Reports.buildWasteReport(lineItems);
+    },
+  },
+  '/api/reports/comparison': {
+    POST: async (body) => {
+      if (!Array.isArray(body.previousItems) || !Array.isArray(body.currentItems)) {
+        throw new Error('يجب توفير previousItems و currentItems');
+      }
+      const prev = body.previousItems.map(Reports.makeLineItem);
+      const curr = body.currentItems.map(Reports.makeLineItem);
+      return Reports.buildComparisonReport(prev, curr);
+    },
+  },
+  '/api/reports/completion': {
+    POST: async (body) => {
+      if (!Array.isArray(body.plannedItems) || !Array.isArray(body.executedItems)) {
+        throw new Error('يجب توفير plannedItems و executedItems');
+      }
+      const planned = body.plannedItems.map(Reports.makeLineItem);
+      const executed = body.executedItems.map(Reports.makeLineItem);
+      return Reports.buildCompletionReport(planned, executed);
+    },
+  },
+  '/api/reports/project-summary': {
+    POST: async (body) => {
+      if (!Array.isArray(body.items) || body.items.length === 0) throw new Error('يجب توفير قائمة items لا تقل عن بند واحد');
+      const lineItems = body.items.map(Reports.makeLineItem);
+      const priced = Reports.priceLineItems(lineItems, { projectId: body.projectId, region: body.region });
+      const quantityReport = Reports.buildQuantityReport(lineItems);
+      const boqTable = Reports.buildBOQTable(priced);
+      const wasteReport = Reports.buildWasteReport(lineItems);
+      const costReport = Reports.buildCostReport(priced, {
+        taxPercent: body.taxPercent || 0, discountPercent: body.discountPercent || 0,
+      });
+      let completionReport = null;
+      if (Array.isArray(body.executedItems)) {
+        const executed = body.executedItems.map(Reports.makeLineItem);
+        completionReport = Reports.buildCompletionReport(lineItems, executed);
+      }
+      return Reports.buildProjectSummaryReport({
+        projectName: body.projectName, quantityReport, boqTable, costReport, wasteReport, completionReport,
+      });
+    },
+  },
+
+  // ----- التصدير -----
+  '/api/reports/export/pdf': {
+    POST: async (body) => {
+      if (!Array.isArray(body.items) || body.items.length === 0) throw new Error('يجب توفير قائمة items لا تقل عن بند واحد');
+      const lineItems = body.items.map(Reports.makeLineItem);
+      const priced = Reports.priceLineItems(lineItems, { projectId: body.projectId, region: body.region });
+      const boqTable = Reports.buildBOQTable(priced);
+      const result = Reports.exportBOQToPDF(boqTable, {
+        projectName: body.projectName, engineerName: body.engineerName, clientName: body.clientName,
+      });
+      return { success: true, ...result };
+    },
+  },
+  '/api/reports/export/excel': {
+    POST: async (body) => {
+      if (!Array.isArray(body.items) || body.items.length === 0) throw new Error('يجب توفير قائمة items لا تقل عن بند واحد');
+      const lineItems = body.items.map(Reports.makeLineItem);
+      const priced = Reports.priceLineItems(lineItems, { projectId: body.projectId, region: body.region });
+      const boqTable = Reports.buildBOQTable(priced);
+      const result = Reports.exportBOQToExcel(boqTable);
+      return { success: true, ...result };
+    },
+  },
+  '/api/reports/export/csv': {
+    POST: async (body) => {
+      if (!Array.isArray(body.items) || body.items.length === 0) throw new Error('يجب توفير قائمة items لا تقل عن بند واحد');
+      const lineItems = body.items.map(Reports.makeLineItem);
+      const priced = Reports.priceLineItems(lineItems, { projectId: body.projectId, region: body.region });
+      const boqTable = Reports.buildBOQTable(priced);
+      const result = Reports.exportBOQToCSV(boqTable);
+      return { success: true, ...result };
+    },
+  },
+  '/api/reports/export/print': {
+    POST: async (body) => {
+      if (!Array.isArray(body.items) || body.items.length === 0) throw new Error('يجب توفير قائمة items لا تقل عن بند واحد');
+      const lineItems = body.items.map(Reports.makeLineItem);
+      const priced = Reports.priceLineItems(lineItems, { projectId: body.projectId, region: body.region });
+      const boqTable = Reports.buildBOQTable(priced);
+      const result = Reports.exportBOQToPrintableHTML(boqTable, {
+        projectName: body.projectName, engineerName: body.engineerName,
+      });
+      return { success: true, ...result };
+    },
+  },
+};
+
+const server = http.createServer(async (req, res) => {
+  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+  const pathname = decodeURIComponent(parsedUrl.pathname);
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
+    res.end();
+    return;
+  }
+
+  if (pathname.startsWith('/api/')) {
+    const handlerSet = API_HANDLERS[pathname];
+    if (!handlerSet || !handlerSet[req.method]) {
+      return sendJSON(res, 404, { success: false, error: 'المسار غير موجود' });
+    }
+    try {
+      const body = req.method === 'POST' ? await readRequestBody(req) : {};
+      const query = Object.fromEntries(parsedUrl.searchParams.entries());
+      const result = await handlerSet[req.method](body, query);
+      return sendJSON(res, 200, result);
+    } catch (err) {
+      return sendJSON(res, 400, { success: false, error: err.message });
+    }
+  }
+
+  if (pathname.startsWith('/reports/')) {
+    const filePath = path.join(REPORTS_DIR, pathname.replace('/reports/', ''));
+    if (!filePath.startsWith(REPORTS_DIR)) {
+      res.writeHead(403); res.end('ممنوع'); return;
+    }
+    return sendFile(res, filePath);
+  }
+
+  let staticPath = pathname === '/' ? '/index.html' : pathname;
+  const filePath = path.join(FRONTEND_DIR, staticPath);
+  if (!filePath.startsWith(FRONTEND_DIR)) {
+    res.writeHead(403); res.end('ممنوع'); return;
+  }
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    return sendFile(res, filePath);
+  }
+  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('الصفحة غير موجودة');
+});
+
+server.listen(PORT, () => {
+  console.log(`✅ خادم منصة الهندسة المدنية يعمل على المنفذ ${PORT}`);
+  console.log(`   افتح المتصفح على: http://localhost:${PORT}`);
+});

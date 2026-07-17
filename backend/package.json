@@ -1,0 +1,10 @@
+{
+  "name": "civil-engineering-suite-backend",
+  "version": "1.0.0",
+  "description": "منصة هندسة مدنية - القسم الأول (حاسبة الخرسانة) والقسم الثالث (حصر الكميات + الاستيراد Excel/CSV/PDF/DXF + الذكاء الاصطناعي) - بدون تبعيات خارجية",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {}
+}

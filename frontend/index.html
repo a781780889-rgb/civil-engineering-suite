@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>منصة الهندسة المدنية | حاسبة الخرسانة</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark">CES</div>
+    <div>
+      <h1>منصة الهندسة المدنية المتكاملة</h1>
+      <div class="subtitle">Civil Engineering Suite — Structural Calculation Engine</div>
+    </div>
+  </div>
+  <div class="section-badge">القسم 01 / حاسبة الخرسانة</div>
+</header>
+
+<div class="app-layout">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-title">عناصر إنشائية</div>
+    <div class="nav-item active" data-panel="footings">
+      <span class="nav-icon">◇</span> القواعد (منفصلة / مشتركة / لبشة)
+    </div>
+    <div class="nav-item" data-panel="columns">
+      <span class="nav-icon">▮</span> الأعمدة
+    </div>
+    <div class="nav-item" data-panel="beams">
+      <span class="nav-icon">▭</span> الكمرات
+    </div>
+    <div class="nav-item" data-panel="slabs">
+      <span class="nav-icon">▬</span> البلاطات
+    </div>
+    <div class="nav-item" data-panel="walls">
+      <span class="nav-icon">▯</span> الجدران الخرسانية
+    </div>
+    <div class="nav-item" data-panel="staircases">
+      <span class="nav-icon">≡</span> السلالم
+    </div>
+    <div class="nav-item" data-panel="tanks">
+      <span class="nav-icon">▤</span> الخزانات
+    </div>
+    <div class="nav-item" data-panel="pools">
+      <span class="nav-icon">◈</span> المسابح
+    </div>
+    <div class="sidebar-title" style="margin-top:16px">القسم الثاني</div>
+    <div class="nav-item" data-panel="rebar">
+      <span class="nav-icon">⛓</span> حاسبة حديد التسليح
+    </div>
+  </nav>
+
+  <main class="main-content">
+
+    <!-- ============ القواعد ============ -->
+    <section class="calc-panel active" id="panel-footings">
+      <div class="panel-header"><h2>حاسبة القواعد</h2><span class="panel-code">FOOTINGS.CALC</span></div>
+      <div class="panel-body">
+        <div class="subtab-row" id="footing-subtabs">
+          <button class="subtab active" data-sub="isolated">منفصلة</button>
+          <button class="subtab" data-sub="combined">مشتركة</button>
+          <button class="subtab" data-sub="strip">شريطية</button>
+          <button class="subtab" data-sub="strap">رابطة (Strap)</button>
+          <button class="subtab" data-sub="raft">لبشة</button>
+        </div>
+        <div id="footing-forms"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-calc-footing">حساب <span class="loading-spinner" style="display:none"></span></button>
+          <button class="btn btn-outline" id="btn-pdf-footing" style="display:none">تصدير تقرير PDF</button>
+        </div>
+        <div class="results-wrap" id="results-footing"></div>
+      </div>
+    </section>
+
+    <!-- ============ الأعمدة ============ -->
+    <section class="calc-panel" id="panel-columns">
+      <div class="panel-header"><h2>حاسبة الأعمدة</h2><span class="panel-code">COLUMNS.CALC</span></div>
+      <div class="panel-body">
+        <div class="form-grid" id="form-columns">
+          <div class="field-group-title">شكل المقطع</div>
+          <div class="field">
+            <label>شكل العمود</label>
+            <select id="col-shape">
+              <option value="rectangular">مستطيل</option>
+              <option value="circular">دائري</option>
+            </select>
+          </div>
+          <div class="field" id="col-width-field"><label>عرض المقطع (مم)</label><input type="number" id="col-width" value="300"></div>
+          <div class="field" id="col-depth-field"><label>عمق المقطع (مم)</label><input type="number" id="col-depth" value="500"></div>
+          <div class="field" id="col-diameter-field" style="display:none"><label>القطر (مم)</label><input type="number" id="col-diameter" value="400"></div>
+          <div class="field"><label>ارتفاع العمود (م)</label><input type="number" step="0.01" id="col-height" value="3.0"></div>
+
+          <div class="field-group-title">التسليح الطولي</div>
+          <div class="field"><label>قطر السيخ الرئيسي (مم)</label><input type="number" id="col-main-dia" value="16"></div>
+          <div class="field"><label>عدد الأسياخ الطولية</label><input type="number" id="col-main-count" value="8"></div>
+
+          <div class="field-group-title">الكانات</div>
+          <div class="field"><label>قطر الكانة (مم)</label><input type="number" id="col-tie-dia" value="8"></div>
+          <div class="field"><label>تباعد الكانات (مم)</label><input type="number" id="col-tie-spacing" value="200"></div>
+          <div class="field"><label>الغطاء الخرساني (مم)</label><input type="number" id="col-cover" value="40"></div>
+
+          <div class="field-group-title">الخرسانة والتكلفة</div>
+          <div class="field"><label>مقاومة الخرسانة</label><select id="col-mix"></select></div>
+          <div class="field"><label>نسبة الهدر %</label><input type="number" step="0.1" id="col-waste" value="5"></div>
+          <div class="field"><label>سعر كيس الأسمنت</label><input type="number" id="col-cement-price" value="0"></div>
+          <div class="field"><label>سعر م³ الرمل</label><input type="number" id="col-sand-price" value="0"></div>
+          <div class="field"><label>سعر م³ البحص</label><input type="number" id="col-gravel-price" value="0"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-calc-column">حساب <span class="loading-spinner" style="display:none"></span></button>
+          <button class="btn btn-outline" id="btn-pdf-column" style="display:none">تصدير تقرير PDF</button>
+        </div>
+        <div class="results-wrap" id="results-column"></div>
+      </div>
+    </section>
+
+    <!-- ============ الكمرات ============ -->
+    <section class="calc-panel" id="panel-beams">
+      <div class="panel-header"><h2>حاسبة الكمرات</h2><span class="panel-code">BEAMS.CALC</span></div>
+      <div class="panel-body">
+        <div class="form-grid">
+          <div class="field-group-title">أبعاد الكمرة</div>
+          <div class="field"><label>العرض (مم)</label><input type="number" id="beam-width" value="250"></div>
+          <div class="field"><label>الارتفاع (مم)</label><input type="number" id="beam-height" value="500"></div>
+          <div class="field"><label>الطول الصافي / البحر (م)</label><input type="number" step="0.01" id="beam-span" value="5.0"></div>
+
+          <div class="field-group-title">التسليح العلوي والسفلي</div>
+          <div class="field"><label>قطر التسليح العلوي (مم)</label><input type="number" id="beam-top-dia" value="16"></div>
+          <div class="field"><label>عدد الأسياخ العلوية</label><input type="number" id="beam-top-count" value="2"></div>
+          <div class="field"><label>قطر التسليح السفلي (مم)</label><input type="number" id="beam-bottom-dia" value="16"></div>
+          <div class="field"><label>عدد الأسياخ السفلية</label><input type="number" id="beam-bottom-count" value="3"></div>
+
+          <div class="field-group-title">الكانات</div>
+          <div class="field"><label>قطر الكانة (مم)</label><input type="number" id="beam-stirrup-dia" value="8"></div>
+          <div class="field"><label>تباعد الكانات (مم)</label><input type="number" id="beam-stirrup-spacing" value="150"></div>
+          <div class="field"><label>الغطاء الخرساني (مم)</label><input type="number" id="beam-cover" value="25"></div>
+
+          <div class="field-group-title">الخرسانة والتكلفة</div>
+          <div class="field"><label>مقاومة الخرسانة</label><select id="beam-mix"></select></div>
+          <div class="field"><label>نسبة الهدر %</label><input type="number" step="0.1" id="beam-waste" value="5"></div>
+          <div class="field"><label>سعر كيس الأسمنت</label><input type="number" id="beam-cement-price" value="0"></div>
+          <div class="field"><label>سعر م³ الرمل</label><input type="number" id="beam-sand-price" value="0"></div>
+          <div class="field"><label>سعر م³ البحص</label><input type="number" id="beam-gravel-price" value="0"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-calc-beam">حساب <span class="loading-spinner" style="display:none"></span></button>
+          <button class="btn btn-outline" id="btn-pdf-beam" style="display:none">تصدير تقرير PDF</button>
+        </div>
+        <div class="results-wrap" id="results-beam"></div>
+      </div>
+    </section>
+
+    <!-- ============ البلاطات ============ -->
+    <section class="calc-panel" id="panel-slabs">
+      <div class="panel-header"><h2>حاسبة البلاطات</h2><span class="panel-code">SLABS.CALC</span></div>
+      <div class="panel-body">
+        <div class="subtab-row" id="slab-subtabs">
+          <button class="subtab active" data-sub="solid">بلاطة صماء</button>
+          <button class="subtab" data-sub="hollow">بلاطة هوردي</button>
+        </div>
+        <div id="slab-forms"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-calc-slab">حساب <span class="loading-spinner" style="display:none"></span></button>
+          <button class="btn btn-outline" id="btn-pdf-slab" style="display:none">تصدير تقرير PDF</button>
+        </div>
+        <div class="results-wrap" id="results-slab"></div>
+      </div>
+    </section>
+
+    <!-- ============ الجدران ============ -->
+    <section class="calc-panel" id="panel-walls">
+      <div class="panel-header"><h2>حاسبة الجدران الخرسانية</h2><span class="panel-code">WALLS.CALC</span></div>
+      <div class="panel-body">
+        <div class="form-grid">
+          <div class="field-group-title">أبعاد الجدار</div>
+          <div class="field"><label>الطول (م)</label><input type="number" step="0.01" id="wall-length" value="6.0"></div>
+          <div class="field"><label>الارتفاع (م)</label><input type="number" step="0.01" id="wall-height" value="3.0"></div>
+          <div class="field"><label>السماكة (مم)</label><input type="number" id="wall-thickness" value="200"></div>
+          <div class="field"><label>عدد الطبقات (وجوه التسليح)</label><input type="number" id="wall-layers" value="2"></div>
+
+          <div class="field-group-title">التسليح</div>
+          <div class="field"><label>قطر التسليح الرأسي (مم)</label><input type="number" id="wall-v-dia" value="12"></div>
+          <div class="field"><label>تباعد رأسي (مم)</label><input type="number" id="wall-v-spacing" value="200"></div>
+          <div class="field"><label>قطر التسليح الأفقي (مم)</label><input type="number" id="wall-h-dia" value="10"></div>
+          <div class="field"><label>تباعد أفقي (مم)</label><input type="number" id="wall-h-spacing" value="200"></div>
+          <div class="field"><label>الغطاء الخرساني (مم)</label><input type="number" id="wall-cover" value="25"></div>
+
+          <div class="field-group-title">فتحات (اختياري)</div>
+          <div class="dynamic-rows" id="wall-openings"></div>
+          <button type="button" class="add-row-btn" id="add-wall-opening">+ إضافة فتحة (باب/شباك)</button>
+
+          <div class="field-group-title">الخرسانة والتكلفة</div>
+          <div class="field"><label>مقاومة الخرسانة</label><select id="wall-mix"></select></div>
+          <div class="field"><label>نسبة الهدر %</label><input type="number" step="0.1" id="wall-waste" value="5"></div>
+          <div class="field"><label>سعر كيس الأسمنت</label><input type="number" id="wall-cement-price" value="0"></div>
+          <div class="field"><label>سعر م³ الرمل</label><input type="number" id="wall-sand-price" value="0"></div>
+          <div class="field"><label>سعر م³ البحص</label><input type="number" id="wall-gravel-price" value="0"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-calc-wall">حساب <span class="loading-spinner" style="display:none"></span></button>
+          <button class="btn btn-outline" id="btn-pdf-wall" style="display:none">تصدير تقرير PDF</button>
+        </div>
+        <div class="results-wrap" id="results-wall"></div>
+      </div>
+    </section>
+
+    <!-- ============ السلالم ============ -->
+    <section class="calc-panel" id="panel-staircases">
+      <div class="panel-header"><h2>حاسبة السلالم</h2><span class="panel-code">STAIRS.CALC</span></div>
+      <div class="panel-body">
+        <div class="subtab-row" id="stair-subtabs">
+          <button class="subtab active" data-sub="straight">مستقيم</button>
+          <button class="subtab" data-sub="L-shaped">حرف L</button>
+          <button class="subtab" data-sub="U-shaped">حرف U</button>
+          <button class="subtab" data-sub="circular">دائري</button>
+        </div>
+        <div id="stair-forms"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-calc-stair">حساب <span class="loading-spinner" style="display:none"></span></button>
+          <button class="btn btn-outline" id="btn-pdf-stair" style="display:none">تصدير تقرير PDF</button>
+        </div>
+        <div class="results-wrap" id="results-stair"></div>
+      </div>
+    </section>
+
+    <!-- ============ الخزانات ============ -->
+    <section class="calc-panel" id="panel-tanks">
+      <div class="panel-header"><h2>حاسبة الخزانات</h2><span class="panel-code">TANKS.CALC</span></div>
+      <div class="panel-body">
+        <div class="form-grid" id="form-tanks">
+          <div class="field-group-title">النوع والموقع</div>
+          <div class="field"><label>شكل الخزان</label>
+            <select id="tank-shape"><option value="rectangular">مستطيل</option><option value="circular">دائري</option></select>
+          </div>
+          <div class="field"><label>الموقع</label>
+            <select id="tank-location"><option value="ground">أرضي</option><option value="elevated">علوي</option></select>
+          </div>
+          <div class="field" id="tank-length-field"><label>الطول (م)</label><input type="number" step="0.01" id="tank-length" value="4"></div>
+          <div class="field" id="tank-width-field"><label>العرض (م)</label><input type="number" step="0.01" id="tank-width" value="3"></div>
+          <div class="field" id="tank-diameter-field" style="display:none"><label>القطر (م)</label><input type="number" step="0.01" id="tank-diameter" value="3"></div>
+
+          <div class="field-group-title">الأبعاد الرأسية</div>
+          <div class="field"><label>ارتفاع المياه (م)</label><input type="number" step="0.01" id="tank-water-height" value="2.5"></div>
+          <div class="field"><label>فراغ الأمان (م)</label><input type="number" step="0.01" id="tank-freeboard" value="0.3"></div>
+          <div class="field"><label>سماكة القاعدة (مم)</label><input type="number" id="tank-base-thickness" value="200"></div>
+          <div class="field"><label>سماكة الجدران (مم)</label><input type="number" id="tank-wall-thickness" value="200"></div>
+          <div class="field"><label>سماكة السقف (مم)</label><input type="number" id="tank-roof-thickness" value="150"></div>
+
+          <div class="field-group-title">الأعصاب (اختياري)</div>
+          <div class="field"><label>يوجد أعصاب؟</label><select id="tank-has-ribs"><option value="false">لا</option><option value="true">نعم</option></select></div>
+          <div class="field"><label>عدد الأعصاب</label><input type="number" id="tank-rib-count" value="0"></div>
+
+          <div class="field-group-title">التسليح</div>
+          <div class="field"><label>قطر التسليح (مم)</label><input type="number" id="tank-bar-dia" value="12"></div>
+          <div class="field"><label>التباعد (مم)</label><input type="number" id="tank-bar-spacing" value="150"></div>
+          <div class="field"><label>الغطاء الخرساني (مم)</label><input type="number" id="tank-cover" value="50"></div>
+
+          <div class="field-group-title">العزل واللياسة</div>
+          <div class="field"><label>سماكة العزل (مم)</label><input type="number" id="tank-insulation-thickness" value="3"></div>
+          <div class="field"><label>سعر م² العزل</label><input type="number" id="tank-insulation-price" value="0"></div>
+          <div class="field"><label>سعر م² اللياسة</label><input type="number" id="tank-plaster-price" value="0"></div>
+
+          <div class="field-group-title">الخرسانة والتكلفة</div>
+          <div class="field"><label>مقاومة الخرسانة</label><select id="tank-mix"></select></div>
+          <div class="field"><label>نسبة الهدر %</label><input type="number" step="0.1" id="tank-waste" value="5"></div>
+          <div class="field"><label>سعر كيس الأسمنت</label><input type="number" id="tank-cement-price" value="0"></div>
+          <div class="field"><label>سعر م³ الرمل</label><input type="number" id="tank-sand-price" value="0"></div>
+          <div class="field"><label>سعر م³ البحص</label><input type="number" id="tank-gravel-price" value="0"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-calc-tank">حساب <span class="loading-spinner" style="display:none"></span></button>
+          <button class="btn btn-outline" id="btn-pdf-tank" style="display:none">تصدير تقرير PDF</button>
+        </div>
+        <div class="results-wrap" id="results-tank"></div>
+      </div>
+    </section>
+
+    <!-- ============ المسابح ============ -->
+    <section class="calc-panel" id="panel-pools">
+      <div class="panel-header"><h2>حاسبة المسابح</h2><span class="panel-code">POOLS.CALC</span></div>
+      <div class="panel-body">
+        <div class="subtab-row" id="pool-subtabs">
+          <button class="subtab active" data-sub="rectangular">مستطيل</button>
+          <button class="subtab" data-sub="circular">دائري</button>
+          <button class="subtab" data-sub="freeform">حر الشكل</button>
+        </div>
+        <div id="pool-forms"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-calc-pool">حساب <span class="loading-spinner" style="display:none"></span></button>
+          <button class="btn btn-outline" id="btn-pdf-pool" style="display:none">تصدير تقرير PDF</button>
+        </div>
+        <div class="results-wrap" id="results-pool"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم الثاني: حاسبة حديد التسليح ============ -->
+    <section class="calc-panel" id="panel-rebar">
+      <div class="panel-header"><h2>حاسبة حديد التسليح (Reinforcement Steel Calculator)</h2><span class="panel-code">REBAR.CALC — ACI 318</span></div>
+      <div class="panel-body">
+
+        <!-- لوحة معلومات مباشرة -->
+        <div class="result-cards" id="rebar-dashboard-cards"></div>
+
+        <div class="subtab-row" id="rebar-subtabs">
+          <button class="subtab active" data-sub="footing">قواعد</button>
+          <button class="subtab" data-sub="column">أعمدة</button>
+          <button class="subtab" data-sub="beam">كمرات</button>
+          <button class="subtab" data-sub="slab">بلاطات</button>
+          <button class="subtab" data-sub="wall">جدران</button>
+          <button class="subtab" data-sub="staircase">سلالم</button>
+          <button class="subtab" data-sub="tank">خزانات</button>
+          <button class="subtab" data-sub="pool">مسابح</button>
+          <button class="subtab" data-sub="custom">عنصر مخصص (أي عنصر آخر)</button>
+          <button class="subtab" data-sub="tools">أدوات: خطافات / كانات / تراكب</button>
+        </div>
+
+        <div id="rebar-forms"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-calc-rebar">حساب <span class="loading-spinner" style="display:none"></span></button>
+          <button class="btn btn-outline" id="btn-pdf-rebar" style="display:none">تصدير تقرير PDF</button>
+        </div>
+        <div class="results-wrap" id="results-rebar"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===== PDF Export Modal ===== -->
+<div class="modal-overlay" id="pdf-modal">
+  <div class="modal-box">
+    <h3>تصدير تقرير PDF</h3>
+    <div class="field"><label>اسم المشروع</label><input type="text" id="pdf-project-name" placeholder="مثال: مشروع فيلا الرياض"></div>
+    <div class="field"><label>اسم المهندس</label><input type="text" id="pdf-engineer-name" placeholder="اسمك"></div>
+    <div class="field"><label>اسم العميل (اختياري)</label><input type="text" id="pdf-client-name"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="pdf-confirm-btn">إنشاء التقرير</button>
+      <button class="btn btn-outline" id="pdf-cancel-btn">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
