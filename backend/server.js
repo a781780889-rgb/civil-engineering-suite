@@ -56,7 +56,22 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
 };
 
-const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
+// يحدد مسار الفرونت إند تلقائياً بغض النظر عن Root Directory المستخدم في الاستضافة:
+// يجرب أولاً '../frontend' (حالة Root Directory = backend)، ثم './frontend' (حالة Root Directory = جذر المشروع)
+function resolveFrontendDir() {
+  const candidates = [
+    path.join(__dirname, '..', 'frontend'),
+    path.join(__dirname, 'frontend'),
+    path.join(process.cwd(), 'frontend'),
+    path.join(process.cwd(), 'backend', '..', 'frontend'),
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'index.html'))) return dir;
+  }
+  // لم يُعثر على المجلد بعد؛ نرجع أول احتمال ليظهر خطأ واضح في السجلات بدل فشل صامت
+  return candidates[0];
+}
+const FRONTEND_DIR = resolveFrontendDir();
 const REPORTS_DIR = path.join(__dirname, '..', 'reports');
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
@@ -1151,5 +1166,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`✅ خادم منصة الهندسة المدنية يعمل على المنفذ ${PORT}`);
+  console.log(`📁 مجلد الواجهة الأمامية: ${FRONTEND_DIR} (index.html موجود: ${fs.existsSync(path.join(FRONTEND_DIR, 'index.html'))})`);
   console.log(`   افتح المتصفح على: http://localhost:${PORT}`);
 });
