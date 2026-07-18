@@ -31,6 +31,7 @@ const BOQ = require('./calculators/boq');
 const IMPORT = require('./calculators/import');
 const PriceLib = require('./utils/priceLibrary');
 const Reports = require('./utils/boqReports');
+const PM = require('./utils/projectManagement');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -787,6 +788,314 @@ const API_HANDLERS = {
         projectName: body.projectName, engineerName: body.engineerName,
       });
       return { success: true, ...result };
+    },
+  },
+
+  // ===================================================================
+  // القسم الرابع - إدارة المشاريع (Project Management System)
+  // ===================================================================
+
+  // ----- لوحة المعلومات -----
+  '/api/pm/dashboard': {
+    GET: async () => PM.getDashboard(),
+  },
+
+  // ----- المشاريع (CRUD) -----
+  '/api/pm/projects': {
+    GET: async (_body, query) => PM.listProjects({
+      status: query?.status || null,
+      priority: query?.priority || null,
+      q: query?.q || null,
+      sortBy: query?.sortBy || 'created_at',
+      sortDir: query?.sortDir || 'desc',
+      page: query?.page ? Number(query.page) : 1,
+      pageSize: query?.pageSize ? Number(query.pageSize) : 50,
+    }),
+    POST: async (body) => PM.createProject(body),
+  },
+  '/api/pm/projects/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف المشروع (id) مطلوب');
+      return PM.getProject(query.id);
+    },
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المشروع (id) مطلوب');
+      return PM.getProject(body.id);
+    },
+  },
+  '/api/pm/projects/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المشروع (id) مطلوب');
+      const { id, ...rest } = body;
+      return PM.updateProject(id, rest);
+    },
+  },
+  '/api/pm/projects/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المشروع (id) مطلوب');
+      return PM.deleteProject(body.id);
+    },
+  },
+
+  // ----- المراحل -----
+  '/api/pm/phases': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.listPhases(query.projectId);
+    },
+  },
+  '/api/pm/phases/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المرحلة (id) مطلوب');
+      const { id, ...rest } = body;
+      return PM.updatePhase(id, rest);
+    },
+  },
+
+  // ----- المهام -----
+  '/api/pm/tasks': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.listTasks(query.projectId, { status: query.status, assignee: query.assignee, phaseId: query.phaseId });
+    },
+    POST: async (body) => PM.createTask(body),
+  },
+  '/api/pm/tasks/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المهمة (id) مطلوب');
+      const { id, ...rest } = body;
+      return PM.updateTask(id, rest);
+    },
+  },
+  '/api/pm/tasks/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المهمة (id) مطلوب');
+      return PM.deleteTask(body.id);
+    },
+  },
+  '/api/pm/tasks/comment': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المهمة (id) مطلوب');
+      return PM.addTaskComment(body.id, { author: body.author, text: body.text });
+    },
+  },
+
+  // ----- الجدول الزمني -----
+  '/api/pm/schedule/critical-path': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.computeCriticalPath(query.projectId);
+    },
+  },
+  '/api/pm/schedule/comparison': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.compareScheduleVsActual(query.projectId);
+    },
+  },
+
+  // ----- الفريق -----
+  '/api/pm/team': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.listTeam(query.projectId);
+    },
+    POST: async (body) => PM.addTeamMember(body),
+  },
+  '/api/pm/team/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف العضو (id) مطلوب');
+      const { id, ...rest } = body;
+      return PM.updateTeamMember(id, rest);
+    },
+  },
+  '/api/pm/team/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف العضو (id) مطلوب');
+      return PM.removeTeamMember(body.id);
+    },
+  },
+
+  // ----- الميزانية والمعاملات المالية -----
+  '/api/pm/finance/transactions': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.listTransactions(query.projectId, { type: query.type });
+    },
+    POST: async (body) => PM.addTransaction(body),
+  },
+  '/api/pm/finance/transactions/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المعاملة (id) مطلوب');
+      return PM.deleteTransaction(body.id);
+    },
+  },
+  '/api/pm/finance/summary': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.getFinancialSummary(query.projectId);
+    },
+  },
+
+  // ----- الموارد -----
+  '/api/pm/resources': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.listResources(query.projectId, { resourceType: query.resourceType });
+    },
+    POST: async (body) => PM.assignResource(body),
+  },
+  '/api/pm/resources/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المورد (id) مطلوب');
+      const { id, ...rest } = body;
+      return PM.updateResource(id, rest);
+    },
+  },
+
+  // ----- المخاطر -----
+  '/api/pm/risks': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.listRisks(query.projectId, { level: query.level, status: query.status });
+    },
+    POST: async (body) => PM.addRisk(body),
+  },
+  '/api/pm/risks/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الخطر (id) مطلوب');
+      const { id, ...rest } = body;
+      return PM.updateRisk(id, rest);
+    },
+  },
+
+  // ----- الجودة -----
+  '/api/pm/quality': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.listQualityRecords(query.projectId);
+    },
+    POST: async (body) => PM.addQualityRecord(body),
+  },
+
+  // ----- السلامة -----
+  '/api/pm/safety': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.listSafetyRecords(query.projectId);
+    },
+    POST: async (body) => PM.addSafetyRecord(body),
+  },
+
+  // ----- المستندات -----
+  '/api/pm/documents': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.listDocuments(query.projectId, { docType: query.docType, q: query.q });
+    },
+    POST: async (body) => PM.addDocument(body),
+  },
+  '/api/pm/documents/new-version': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المستند (id) مطلوب');
+      return PM.updateDocumentVersion(body.id, { url: body.url, uploaded_by: body.uploaded_by });
+    },
+  },
+
+  // ----- الاجتماعات -----
+  '/api/pm/meetings': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.listMeetings(query.projectId);
+    },
+    POST: async (body) => PM.createMeeting(body),
+  },
+
+  // ----- الإشعارات -----
+  '/api/pm/notifications': {
+    GET: async (_body, query) => PM.listNotifications(query?.projectId || null, { unreadOnly: query?.unreadOnly === 'true' }),
+  },
+  '/api/pm/notifications/read': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الإشعار (id) مطلوب');
+      return PM.markNotificationRead(body.id);
+    },
+  },
+
+  // ----- سجل التدقيق -----
+  '/api/pm/audit-log': {
+    GET: async (_body, query) => PM.getAuditLog(query?.projectId || null, { limit: query?.limit ? Number(query.limit) : 200 }),
+  },
+
+  // ----- التكامل مع بقية الأقسام -----
+  '/api/pm/integration/snapshot': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.getIntegrationSnapshot(query.projectId);
+    },
+  },
+
+  // ----- التقارير -----
+  '/api/pm/reports/daily': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.buildDailyReport(query.projectId, query.date || null);
+    },
+  },
+  '/api/pm/reports/executive': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.buildExecutiveReport(query.projectId);
+    },
+  },
+  '/api/pm/reports/export/pdf': {
+    POST: async (body) => {
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      const report = body.reportType === 'daily' ? PM.buildDailyReport(body.projectId, body.date) : PM.buildExecutiveReport(body.projectId);
+      const project = PM.getProject(body.projectId, { includeRelations: false });
+      const result = PM.exportReportToPDF(report, { title: body.title || 'Project Management Report', projectName: project.name });
+      return { success: true, ...result };
+    },
+  },
+  '/api/pm/reports/export/excel': {
+    POST: async (body) => {
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      const report = body.reportType === 'daily' ? PM.buildDailyReport(body.projectId, body.date) : PM.buildExecutiveReport(body.projectId);
+      const result = PM.exportReportToExcel(report, { title: body.title || 'PM Report' });
+      return { success: true, ...result };
+    },
+  },
+  '/api/pm/reports/export/csv': {
+    POST: async (body) => {
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      const report = body.reportType === 'daily' ? PM.buildDailyReport(body.projectId, body.date) : PM.buildExecutiveReport(body.projectId);
+      const result = PM.exportReportToCSV(report);
+      return { success: true, ...result };
+    },
+  },
+
+  // ----- الذكاء الاصطناعي -----
+  '/api/pm/ai/analyze-project': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.aiAnalyzeProject(query.projectId);
+    },
+    POST: async (body) => {
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return PM.aiAnalyzeProject(body.projectId);
+    },
+  },
+  '/api/pm/ai/summarize-meeting': {
+    POST: async (body) => {
+      if (!body.meetingId) throw new Error('معرّف الاجتماع (meetingId) مطلوب');
+      return PM.aiSummarizeMeeting(body.meetingId);
+    },
+  },
+  '/api/pm/ai/ask': {
+    POST: async (body) => {
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      if (!body.question) throw new Error('يجب إرسال question');
+      return PM.aiAnswerProjectQuestion(body.projectId, body.question);
     },
   },
 };
