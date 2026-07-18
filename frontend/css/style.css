@@ -474,3 +474,111 @@ a:focus-visible, button:focus-visible, .nav-item:focus-visible, .subtab:focus-vi
   border-radius: 50%; animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================
+   القسم الرابع — إدارة المشاريع (Project Management)
+   ============================================ */
+
+.pm-toolbar {
+  display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; align-items: center;
+}
+.pm-toolbar input[type="text"], .pm-toolbar select {
+  padding: 10px 12px; border: 1px solid #c9bd9c; border-radius: var(--radius);
+  font-family: var(--mono); font-size: 13.5px; background: #fff; color: var(--ink);
+}
+.pm-toolbar input[type="text"] { flex: 1; min-width: 200px; }
+.pm-toolbar .btn { margin-right: auto; }
+
+.pm-table-wrap { overflow-x: auto; }
+
+.pm-card {
+  background: #fffdf8; border: 1px solid #e2dac2; border-radius: var(--radius);
+  padding: 16px 18px; margin-bottom: 4px;
+}
+.pm-card-title {
+  font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--accent-copper); margin-bottom: 12px; border-bottom: 1px dashed #d8cfb8; padding-bottom: 8px;
+}
+
+.pm-grid-2 {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 16px;
+}
+
+.pm-bars { display: flex; flex-direction: column; gap: 10px; }
+.pm-bar-row { display: grid; grid-template-columns: 130px 1fr 50px; gap: 10px; align-items: center; font-size: 12.5px; }
+.pm-bar-row .pm-bar-label { color: var(--ink-soft); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-bar-track { background: var(--paper-dim); border-radius: 999px; height: 10px; overflow: hidden; }
+.pm-bar-fill { background: var(--accent-copper); height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+.pm-bar-row .pm-bar-value { font-family: var(--mono); text-align: left; color: var(--ink); }
+
+.pm-activity-log { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+.pm-activity-item {
+  display: flex; gap: 10px; align-items: baseline; font-size: 13px; padding: 6px 0;
+  border-bottom: 1px dashed #eae4d3;
+}
+.pm-activity-item .ts { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); white-space: nowrap; }
+.pm-activity-item .desc { color: var(--ink); }
+
+.pm-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
+  font-family: var(--mono);
+}
+.pm-badge-planning { background: #eef2f7; color: #35506b; border: 1px solid #b9c8d8; }
+.pm-badge-active { background: #e7f4ec; color: #245c3d; border: 1px solid var(--success); }
+.pm-badge-on_hold { background: #fdf3e0; color: #7a5613; border: 1px solid var(--warn); }
+.pm-badge-delayed { background: #fbe9e7; color: #7d2a22; border: 1px solid var(--danger); }
+.pm-badge-completed { background: #e2ecf7; color: #1c4a7a; border: 1px solid #6a9bc9; }
+.pm-badge-cancelled { background: #eee; color: #666; border: 1px solid #ccc; }
+
+.pm-badge-priority-low { background: #eee; color: #666; }
+.pm-badge-priority-normal { background: #eef2f7; color: #35506b; }
+.pm-badge-priority-high { background: #fdf3e0; color: #7a5613; }
+.pm-badge-priority-urgent { background: #fbe9e7; color: #7d2a22; }
+
+.pm-badge-risk-low { background: #e7f4ec; color: #245c3d; border: 1px solid var(--success); }
+.pm-badge-risk-medium { background: #fdf3e0; color: #7a5613; border: 1px solid var(--warn); }
+.pm-badge-risk-high { background: #fbe9e7; color: #7d2a22; border: 1px solid var(--danger); }
+.pm-badge-risk-critical { background: #c0453a; color: #fff; border: 1px solid #8f2f28; }
+
+.pm-link-btn {
+  background: none; border: none; color: var(--accent-copper); cursor: pointer;
+  font-family: var(--mono); font-size: 12.5px; text-decoration: underline; padding: 0;
+}
+
+.pm-mini-btn {
+  padding: 6px 12px; font-size: 12px; border-radius: var(--radius); border: 1px solid var(--blueprint-navy);
+  background: transparent; color: var(--blueprint-navy); cursor: pointer; font-family: var(--mono);
+}
+.pm-mini-btn:hover { background: var(--blueprint-navy); color: var(--paper); }
+.pm-mini-btn-danger { border-color: var(--danger); color: var(--danger); }
+.pm-mini-btn-danger:hover { background: var(--danger); color: #fff; }
+
+.pm-empty-state {
+  text-align: center; padding: 40px 20px; color: var(--ink-soft); font-family: var(--mono); font-size: 13.5px;
+}
+
+.pm-notif-item {
+  padding: 10px 14px; border-radius: var(--radius); margin-bottom: 8px; font-size: 13px;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.pm-notif-info { background: #eef2f7; border: 1px solid #b9c8d8; color: #35506b; }
+.pm-notif-warning { background: #fdf3e0; border: 1px solid var(--warn); color: #7a5613; }
+.pm-notif-danger { background: #fbe9e7; border: 1px solid var(--danger); color: #7d2a22; }
+.pm-notif-success { background: #e7f4ec; border: 1px solid var(--success); color: #245c3d; }
+
+.pm-gantt-row { display: grid; grid-template-columns: 220px 1fr; gap: 10px; align-items: center; padding: 6px 0; }
+.pm-gantt-label { font-size: 12.5px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-gantt-track { position: relative; background: var(--paper-dim); height: 20px; border-radius: var(--radius); }
+.pm-gantt-fill { position: absolute; top: 0; bottom: 0; background: var(--accent-copper); border-radius: var(--radius); }
+.pm-gantt-fill.critical { background: var(--danger); }
+
+.pm-ai-box {
+  background: linear-gradient(135deg, var(--blueprint-navy) 0%, var(--blueprint-navy-deep) 100%);
+  color: var(--paper); border-radius: var(--radius); padding: 20px;
+}
+.pm-ai-box .pm-card-title { color: var(--accent-copper-bright); border-bottom-color: rgba(255,255,255,0.15); }
+.pm-ai-insight { padding: 8px 0; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 13.5px; line-height: 1.6; }
+.pm-ai-insight:last-child { border-bottom: none; }
+
+.pm-inline-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; align-items: end; }
+.pm-inline-form .field { margin: 0; }
