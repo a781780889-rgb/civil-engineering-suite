@@ -57,6 +57,13 @@
     <div class="nav-item" data-panel="pm-projects">
       <span class="nav-icon">▣</span> إدارة المشاريع
     </div>
+    <div class="sidebar-title" style="margin-top:16px">القسم الخامس</div>
+    <div class="nav-item" data-panel="schedule-dashboard">
+      <span class="nav-icon">▦</span> لوحة الجدول الزمني
+    </div>
+    <div class="nav-item" data-panel="schedule-main">
+      <span class="nav-icon">⏱</span> الجدول الزمني للمشاريع
+    </div>
   </nav>
 
   <main class="main-content">
@@ -476,7 +483,155 @@
       </div>
     </section>
 
+    <!-- ============ القسم الخامس: لوحة معلومات الجدول الزمني ============ -->
+    <section class="calc-panel" id="panel-schedule-dashboard">
+      <div class="panel-header"><h2>لوحة معلومات الجدول الزمني</h2><span class="panel-code">SCHEDULE.DASHBOARD</span></div>
+      <div class="panel-body">
+        <div class="result-cards" id="sch-dash-cards"></div>
+        <div class="pm-grid-2">
+          <div class="pm-card">
+            <div class="pm-card-title">توزيع حالات الأنشطة</div>
+            <div id="sch-chart-status" class="pm-bars"></div>
+          </div>
+          <div class="pm-card">
+            <div class="pm-card-title">نسبة الإنجاز لكل جدول زمني</div>
+            <div id="sch-chart-progress" class="pm-bars"></div>
+          </div>
+        </div>
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">آخر التحديثات</div>
+          <div id="sch-activity-log" class="pm-activity-log"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم الخامس: الجدول الزمني للمشاريع ============ -->
+    <section class="calc-panel" id="panel-schedule-main">
+      <div class="panel-header"><h2>نظام الجدول الزمني الاحترافي</h2><span class="panel-code">SCHEDULE.CPM</span></div>
+      <div class="panel-body">
+
+        <!-- ----- اختيار المشروع والجدول ----- -->
+        <div id="sch-selector-view">
+          <div class="pm-toolbar">
+            <select id="sch-select-project"><option value="">اختر المشروع...</option></select>
+            <select id="sch-select-schedule" disabled><option value="">اختر الجدول الزمني...</option></select>
+            <button class="btn btn-primary" id="sch-btn-new-schedule">+ جدول زمني جديد</button>
+            <button class="btn btn-outline" id="sch-btn-open-schedule" disabled>فتح الجدول</button>
+          </div>
+
+          <div id="sch-new-form" class="pm-card" style="display:none;margin-top:14px">
+            <div class="pm-card-title">إنشاء جدول زمني جديد</div>
+            <div class="pm-inline-form">
+              <div class="field"><label>اسم الجدول الزمني *</label><input type="text" id="sch-f-name"></div>
+              <div class="field"><label>تاريخ البداية *</label><input type="date" id="sch-f-start"></div>
+              <div class="field"><label>ساعات العمل اليومية</label><input type="number" id="sch-f-hours" value="8"></div>
+              <div class="field"><label>أيام العمل الأسبوعية</label><input type="number" id="sch-f-days" value="6"></div>
+              <button class="btn btn-primary" id="sch-btn-save-schedule">حفظ الجدول</button>
+              <button class="btn btn-outline" id="sch-btn-cancel-new-schedule">إلغاء</button>
+            </div>
+            <div id="sch-new-form-alert"></div>
+          </div>
+
+          <div class="pm-table-wrap" style="margin-top:14px">
+            <table class="detail-table">
+              <thead><tr><th>الرمز</th><th>اسم الجدول</th><th>تاريخ البداية</th><th>الإصدار</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="sch-list-tbody"><tr><td colspan="6" class="pm-empty-state">اختر مشروعاً لعرض جداوله الزمنية</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ----- مساحة عمل الجدول الزمني ----- -->
+        <div id="sch-workspace-view" style="display:none">
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-outline" id="sch-btn-back-to-selector">→ رجوع لاختيار الجدول</button>
+          </div>
+
+          <div class="pm-card" id="sch-workspace-header"></div>
+
+          <div class="subtab-row" id="sch-workspace-subtabs">
+            <button class="subtab active" data-sub="wbs">هيكل الأنشطة (WBS)</button>
+            <button class="subtab" data-sub="relations">العلاقات</button>
+            <button class="subtab" data-sub="gantt">Gantt / المسار الحرج</button>
+            <button class="subtab" data-sub="tracking">متابعة التنفيذ</button>
+            <button class="subtab" data-sub="resources">الموارد</button>
+            <button class="subtab" data-sub="scurve">S-Curve</button>
+            <button class="subtab" data-sub="baselines">الإصدارات وإعادة الجدولة</button>
+            <button class="subtab" data-sub="notifications">الإشعارات</button>
+            <button class="subtab" data-sub="reports">التقارير</button>
+            <button class="subtab" data-sub="ai">المساعد الذكي</button>
+          </div>
+
+          <div id="sch-workspace-content"></div>
+        </div>
+
+      </div>
+    </section>
+
   </main>
+</div>
+
+<!-- ===== Activity Modal ===== -->
+<div class="modal-overlay" id="sch-activity-modal">
+  <div class="modal-box" style="max-width:640px">
+    <h3 id="sch-activity-modal-title">نشاط جديد</h3>
+    <div class="form-grid">
+      <div class="field"><label>اسم النشاط *</label><input type="text" id="sch-act-name"></div>
+      <div class="field"><label>الكود</label><input type="text" id="sch-act-code" placeholder="تلقائي"></div>
+      <div class="field"><label>مستوى WBS</label>
+        <select id="sch-act-wbs-level">
+          <option value="phase">مرحلة</option>
+          <option value="section">قسم</option>
+          <option value="main_activity">نشاط رئيسي</option>
+          <option value="sub_activity">نشاط فرعي</option>
+          <option value="task" selected>مهمة</option>
+          <option value="subtask">مهمة فرعية</option>
+        </select>
+      </div>
+      <div class="field"><label>النشاط الأب (WBS)</label><select id="sch-act-parent"><option value="">بدون (جذر)</option></select></div>
+      <div class="field"><label>المسؤول</label><input type="text" id="sch-act-assignee"></div>
+      <div class="field"><label>الأولوية</label>
+        <select id="sch-act-priority">
+          <option value="low">منخفضة</option><option value="normal" selected>عادية</option>
+          <option value="high">عالية</option><option value="urgent">عاجلة</option>
+        </select>
+      </div>
+      <div class="field"><label>تاريخ البداية</label><input type="date" id="sch-act-start"></div>
+      <div class="field"><label>تاريخ النهاية</label><input type="date" id="sch-act-end"></div>
+      <div class="field"><label>المدة (يوم) — إن لم تُحدد التواريخ</label><input type="number" id="sch-act-duration" value="1"></div>
+      <div class="field"><label>نسبة الإنجاز %</label><input type="number" id="sch-act-progress" value="0" min="0" max="100"></div>
+      <div class="field"><label>الموقع</label><input type="text" id="sch-act-location"></div>
+      <div class="field" style="grid-column:1/-1"><label>ملاحظات</label><input type="text" id="sch-act-notes"></div>
+      <div class="field"><label><input type="checkbox" id="sch-act-milestone" style="width:auto"> نقطة تحقق (Milestone)</label></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="sch-activity-modal-save">حفظ النشاط</button>
+      <button class="btn btn-outline" id="sch-activity-modal-cancel">إلغاء</button>
+    </div>
+    <div id="sch-activity-modal-alert"></div>
+  </div>
+</div>
+
+<!-- ===== Relation Modal ===== -->
+<div class="modal-overlay" id="sch-relation-modal">
+  <div class="modal-box">
+    <h3>علاقة جديدة بين نشاطين</h3>
+    <div class="field"><label>النشاط السابق (Predecessor) *</label><select id="sch-rel-pred"></select></div>
+    <div class="field"><label>النشاط اللاحق (Successor) *</label><select id="sch-rel-succ"></select></div>
+    <div class="field"><label>نوع العلاقة</label>
+      <select id="sch-rel-type">
+        <option value="FS">Finish to Start (FS)</option>
+        <option value="SS">Start to Start (SS)</option>
+        <option value="FF">Finish to Finish (FF)</option>
+        <option value="SF">Start to Finish (SF)</option>
+      </select>
+    </div>
+    <div class="field"><label>Lag / Lead (بالأيام، سالب = Lead)</label><input type="number" id="sch-rel-lag" value="0"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="sch-relation-modal-save">إضافة العلاقة</button>
+      <button class="btn btn-outline" id="sch-relation-modal-cancel">إلغاء</button>
+    </div>
+    <div id="sch-relation-modal-alert"></div>
+  </div>
 </div>
 
 <!-- ===== PDF Export Modal ===== -->
@@ -495,5 +650,6 @@
 
 <script src="js/app.js"></script>
 <script src="js/pm.js"></script>
+<script src="js/schedule.js"></script>
 </body>
 </html>
