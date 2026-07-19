@@ -3,6 +3,8 @@
 // القسم الثامن: إدارة السلامة المهنية (Occupational Health & Safety)
 // الجزء 1/4: البنية الأساسية + لوحة التحكم + خطط السلامة +
 //            إدارة المخاطر (Risk Assessment) + إدارة الحوادث والإصابات
+// الجزء 2/4: إدارة التفتيشات + تصاريح العمل (Permit to Work) +
+//            معدات الوقاية الشخصية (PPE)
 // ============================================================
 
 const HSE_API = '/api/hse';
@@ -10,6 +12,9 @@ let HSE_REF = null;
 let hsePlanEditingId = null;
 let hseRiskEditingId = null;
 let hseIncEditingId = null;
+let hseInspEditingId = null;
+let hsePermitEditingId = null;
+let hsePpeEditingId = null;
 
 // ---------- أدوات عامة ----------
 function hseFetch(path, { method = 'GET', body = null, query = null } = {}) {
@@ -884,3 +889,702 @@ document.getElementById('hse-inc-btn-update-investigation')?.addEventListener('c
     hseAlert(alertEl, 'error', e.message);
   }
 });
+
+// ================================================================
+// إدارة التفتيشات (Inspections)
+// ================================================================
+
+function hseInspStatusTag(status) {
+  const map = { scheduled: 'tag-info', in_progress: 'tag-bad', completed: 'tag-info', approved: 'tag-ok' };
+  return map[status] || 'tag-info';
+}
+
+function hseFindingSeverityTag(sev) {
+  const map = { minor: 'tag-ok', moderate: 'tag-info', major: 'tag-bad', critical: 'tag-bad' };
+  return map[sev] || 'tag-info';
+}
+
+function hseFindingStatusTag(status) {
+  const map = { open: 'tag-bad', in_progress: 'tag-info', closed: 'tag-ok', overdue: 'tag-bad', reinspection_required: 'tag-bad' };
+  return map[status] || 'tag-info';
+}
+
+document.querySelector('[data-panel="hse-inspections"]')?.addEventListener('click', async () => {
+  await hseEnsureRefData();
+  hseInspShowListView();
+  hseLoadInspTable();
+});
+
+function hseInspShowListView() {
+  document.getElementById('hse-insp-list-view').style.display = '';
+  document.getElementById('hse-insp-form-view').style.display = 'none';
+  document.getElementById('hse-insp-detail-view').style.display = 'none';
+}
+
+async function hseLoadInspTable() {
+  const ref = await hseEnsureRefData();
+  const tbody = document.getElementById('hse-insp-tbody');
+
+  const typeFilter = document.getElementById('hse-insp-filter-type');
+  if (typeFilter.options.length <= 1) typeFilter.innerHTML += hseOptionsHTML(ref.inspection_types, ref.inspection_type_labels);
+  const statusFilter = document.getElementById('hse-insp-filter-status');
+  if (statusFilter.options.length <= 1) statusFilter.innerHTML += hseOptionsHTML(ref.inspection_statuses, ref.inspection_status_labels);
+
+  try {
+    const res = await hseFetch('/inspections', {
+      query: {
+        search: document.getElementById('hse-insp-search').value || null,
+        type: typeFilter.value || null,
+        status: statusFilter.value || null,
+      },
+    });
+    const items = res.data;
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="9" class="pm-empty-state">لا توجد جولات تفتيش مسجّلة</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(i => `
+      <tr>
+        <td>${i.code}</td>
+        <td>${ref.inspection_type_labels[i.type] || i.type}</td>
+        <td>${hseEsc(i.project_id)}</td>
+        <td>${hseEsc(i.location) || '—'}</td>
+        <td>${hseFmtDateTime(i.scheduled_date)}</td>
+        <td>${hseEsc(i.inspector_name)}</td>
+        <td>${i.findings_count}</td>
+        <td><span class="tag ${hseInspStatusTag(i.status)}">${ref.inspection_status_labels[i.status] || i.status}</span></td>
+        <td>
+          <button class="pm-link-btn" data-hse-insp-view="${i.id}">عرض</button>
+          <button class="pm-link-btn" data-hse-insp-edit="${i.id}">تعديل</button>
+          <button class="pm-link-btn pm-mini-btn-danger" data-hse-insp-delete="${i.id}">حذف</button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-hse-insp-view]').forEach(b => b.addEventListener('click', () => hseInspShowDetail(b.dataset.hseInspView)));
+    tbody.querySelectorAll('[data-hse-insp-edit]').forEach(b => b.addEventListener('click', () => hseInspShowForm(b.dataset.hseInspEdit)));
+    tbody.querySelectorAll('[data-hse-insp-delete]').forEach(b => b.addEventListener('click', () => hseInspDelete(b.dataset.hseInspDelete)));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="alert alert-error">${e.message}</div></td></tr>`;
+  }
+}
+
+document.getElementById('hse-insp-search')?.addEventListener('input', debounceHse(() => hseLoadInspTable(), 300));
+document.getElementById('hse-insp-filter-type')?.addEventListener('change', () => hseLoadInspTable());
+document.getElementById('hse-insp-filter-status')?.addEventListener('change', () => hseLoadInspTable());
+document.getElementById('hse-insp-btn-new')?.addEventListener('click', () => hseInspShowForm(null));
+document.getElementById('hse-insp-btn-back-to-list')?.addEventListener('click', () => { hseInspShowListView(); hseLoadInspTable(); });
+document.getElementById('hse-insp-btn-back-from-detail')?.addEventListener('click', () => { hseInspShowListView(); hseLoadInspTable(); });
+
+function hseChecklistToLines(checklist) {
+  return (checklist || []).map(c => {
+    const resultLabel = { compliant: 'مطابق', non_compliant: 'غير مطابق', not_applicable: 'لا ينطبق' }[c.result] || c.result;
+    return `${c.item} | ${resultLabel}${c.notes ? ' | ' + c.notes : ''}`;
+  }).join('\n');
+}
+
+function hseLinesToChecklist(text) {
+  const resultMap = { 'مطابق': 'compliant', 'غير مطابق': 'non_compliant', 'لا ينطبق': 'not_applicable' };
+  return hseLinesToArray(text).map(line => {
+    const parts = line.split('|').map(s => s.trim());
+    const result = resultMap[parts[1]] || 'not_applicable';
+    return { item: parts[0] || '', result, notes: parts[2] || null };
+  }).filter(c => c.item);
+}
+
+async function hseInspShowForm(id) {
+  const ref = await hseEnsureRefData();
+  hseInspEditingId = id;
+
+  document.getElementById('hse-insp-list-view').style.display = 'none';
+  document.getElementById('hse-insp-detail-view').style.display = 'none';
+  document.getElementById('hse-insp-form-view').style.display = '';
+  document.getElementById('hse-insp-form-alert').innerHTML = '';
+
+  document.getElementById('hse-insp-f-type').innerHTML = hseOptionsHTML(ref.inspection_types, ref.inspection_type_labels);
+  document.getElementById('hse-insp-f-status').innerHTML = hseOptionsHTML(ref.inspection_statuses, ref.inspection_status_labels);
+
+  const ids = ['project', 'location', 'scheduled', 'inspector', 'checklist', 'notes'];
+  ids.forEach(k => { const el2 = document.getElementById(`hse-insp-f-${k}`); if (el2) el2.value = ''; });
+  document.getElementById('hse-insp-f-status').value = 'scheduled';
+
+  if (id) {
+    try {
+      const res = await hseFetch('/inspections/get', { query: { id } });
+      const i = res.data;
+      document.getElementById('hse-insp-f-type').value = i.type || '';
+      document.getElementById('hse-insp-f-project').value = i.project_id || '';
+      document.getElementById('hse-insp-f-location').value = i.location || '';
+      document.getElementById('hse-insp-f-scheduled').value = i.scheduled_date ? i.scheduled_date.slice(0, 16) : '';
+      document.getElementById('hse-insp-f-inspector').value = i.inspector_name || '';
+      document.getElementById('hse-insp-f-status').value = i.status || 'scheduled';
+      document.getElementById('hse-insp-f-checklist').value = hseChecklistToLines(i.checklist);
+      document.getElementById('hse-insp-f-notes').value = i.general_notes || '';
+    } catch (e) {
+      hseAlert(document.getElementById('hse-insp-form-alert'), 'error', e.message);
+    }
+  }
+}
+
+document.getElementById('hse-insp-btn-save')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('hse-insp-form-alert');
+  const scheduledRaw = document.getElementById('hse-insp-f-scheduled').value;
+  const payload = {
+    type: document.getElementById('hse-insp-f-type').value,
+    project_id: document.getElementById('hse-insp-f-project').value.trim(),
+    location: document.getElementById('hse-insp-f-location').value.trim() || null,
+    scheduled_date: scheduledRaw ? new Date(scheduledRaw).toISOString() : null,
+    inspector_name: document.getElementById('hse-insp-f-inspector').value.trim(),
+    status: document.getElementById('hse-insp-f-status').value,
+    checklist: hseLinesToChecklist(document.getElementById('hse-insp-f-checklist').value),
+    general_notes: document.getElementById('hse-insp-f-notes').value.trim() || null,
+  };
+  try {
+    if (hseInspEditingId) {
+      await hseFetch('/inspections/update', { method: 'POST', body: { id: hseInspEditingId, ...payload } });
+    } else {
+      await hseFetch('/inspections', { method: 'POST', body: payload });
+    }
+    hseInspShowListView();
+    hseLoadInspTable();
+  } catch (e) {
+    hseAlert(alertEl, 'error', e.message);
+  }
+});
+
+async function hseInspDelete(id) {
+  if (!confirm('هل تريد حذف جولة التفتيش هذه؟')) return;
+  try {
+    await hseFetch('/inspections/delete', { method: 'POST', body: { id } });
+    hseLoadInspTable();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function hseInspShowDetail(id) {
+  const ref = await hseEnsureRefData();
+  hseInspEditingId = id;
+  document.getElementById('hse-insp-list-view').style.display = 'none';
+  document.getElementById('hse-insp-form-view').style.display = 'none';
+  document.getElementById('hse-insp-detail-view').style.display = '';
+
+  document.getElementById('hse-find-f-severity').innerHTML = hseOptionsHTML(ref.finding_severities, ref.finding_severity_labels);
+
+  await hseRenderInspDetail(id);
+}
+
+async function hseRenderInspDetail(id) {
+  const ref = await hseEnsureRefData();
+  const content = document.getElementById('hse-insp-detail-content');
+  content.innerHTML = '<div class="pm-empty-state">جارٍ التحميل...</div>';
+  try {
+    const res = await hseFetch('/inspections/get', { query: { id } });
+    const i = res.data;
+    content.innerHTML = `
+      <div class="pm-card">
+        <div class="pm-card-title">${i.code} — ${ref.inspection_type_labels[i.type]} <span class="tag ${hseInspStatusTag(i.status)}">${ref.inspection_status_labels[i.status]}</span></div>
+        <p><b>المشروع:</b> ${hseEsc(i.project_id)} &nbsp; <b>الموقع:</b> ${hseEsc(i.location) || '—'} &nbsp; <b>التاريخ:</b> ${hseFmtDateTime(i.scheduled_date)}</p>
+        <p><b>المفتش:</b> ${hseEsc(i.inspector_name)}</p>
+        ${i.general_notes ? `<p><b>ملاحظات عامة:</b> ${hseEsc(i.general_notes)}</p>` : ''}
+      </div>
+      <div class="pm-card">
+        <div class="pm-card-title">قائمة التحقق (Checklist)</div>
+        ${i.checklist && i.checklist.length ? `
+          <table class="detail-table">
+            <thead><tr><th>#</th><th>البند</th><th>النتيجة</th><th>ملاحظات</th></tr></thead>
+            <tbody>
+              ${i.checklist.map(c => `<tr><td>${c.seq}</td><td>${hseEsc(c.item)}</td><td><span class="tag ${c.result === 'compliant' ? 'tag-ok' : c.result === 'non_compliant' ? 'tag-bad' : 'tag-info'}">${ref.checklist_item_result_labels[c.result] || c.result}</span></td><td>${hseEsc(c.notes) || '—'}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        ` : `<div class="pm-empty-state">لا توجد بنود تحقق مسجّلة</div>`}
+      </div>
+    `;
+
+    await hseLoadFindingsTable(id);
+  } catch (e) {
+    content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+async function hseLoadFindingsTable(inspectionId) {
+  const ref = await hseEnsureRefData();
+  const tbody = document.getElementById('hse-find-tbody');
+  tbody.innerHTML = `<tr><td colspan="6" class="pm-empty-state">جارٍ التحميل...</td></tr>`;
+  try {
+    const res = await hseFetch('/inspections/findings', { query: { inspectionId } });
+    const items = res.data;
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="pm-empty-state">لا توجد مخالفات مسجّلة</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(f => `
+      <tr>
+        <td>${f.code}</td>
+        <td>${hseEsc(f.description)}</td>
+        <td><span class="tag ${hseFindingSeverityTag(f.severity)}">${ref.finding_severity_labels[f.severity] || f.severity}</span></td>
+        <td>${hseFmtDate(f.due_date)}</td>
+        <td><span class="tag ${hseFindingStatusTag(f.status)}">${ref.finding_status_labels[f.status] || f.status}</span></td>
+        <td>${f.status !== 'closed' ? `<button class="pm-link-btn" data-hse-find-close="${f.id}">إغلاق</button>` : '—'}</td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-hse-find-close]').forEach(b => b.addEventListener('click', () => hseFindingClose(b.dataset.hseFindClose, inspectionId)));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-error">${e.message}</div></td></tr>`;
+  }
+}
+
+document.getElementById('hse-find-btn-add')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('hse-find-form-alert');
+  const payload = {
+    inspection_id: hseInspEditingId,
+    description: document.getElementById('hse-find-f-description').value.trim(),
+    severity: document.getElementById('hse-find-f-severity').value,
+    responsible_person: document.getElementById('hse-find-f-responsible').value.trim() || null,
+    due_date: document.getElementById('hse-find-f-due-date').value || null,
+    corrective_action: document.getElementById('hse-find-f-corrective').value.trim() || null,
+  };
+  try {
+    await hseFetch('/inspections/findings', { method: 'POST', body: payload });
+    document.getElementById('hse-find-f-description').value = '';
+    document.getElementById('hse-find-f-responsible').value = '';
+    document.getElementById('hse-find-f-due-date').value = '';
+    document.getElementById('hse-find-f-corrective').value = '';
+    alertEl.innerHTML = '';
+    hseLoadFindingsTable(hseInspEditingId);
+  } catch (e) {
+    hseAlert(alertEl, 'error', e.message);
+  }
+});
+
+async function hseFindingClose(id, inspectionId) {
+  try {
+    await hseFetch('/inspections/findings/update', { method: 'POST', body: { id, status: 'closed' } });
+    hseLoadFindingsTable(inspectionId);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+document.getElementById('hse-insp-btn-approve')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('hse-insp-approve-alert');
+  try {
+    await hseFetch('/inspections/approve', { method: 'POST', body: { id: hseInspEditingId } });
+    alertEl.innerHTML = '';
+    hseRenderInspDetail(hseInspEditingId);
+  } catch (e) {
+    hseAlert(alertEl, 'error', e.message);
+  }
+});
+
+// ================================================================
+// إدارة تصاريح العمل (Permit to Work)
+// ================================================================
+
+function hsePermitStatusTag(status) {
+  const map = {
+    draft: 'tag-info', pending_approval: 'tag-info', approved: 'tag-ok', active: 'tag-ok',
+    suspended: 'tag-bad', closed: 'tag-info', expired: 'tag-bad', rejected: 'tag-bad',
+  };
+  return map[status] || 'tag-info';
+}
+
+document.querySelector('[data-panel="hse-permits"]')?.addEventListener('click', async () => {
+  await hseEnsureRefData();
+  hsePermitShowListView();
+  hseLoadPermitTable();
+});
+
+function hsePermitShowListView() {
+  document.getElementById('hse-permit-list-view').style.display = '';
+  document.getElementById('hse-permit-form-view').style.display = 'none';
+  document.getElementById('hse-permit-detail-view').style.display = 'none';
+}
+
+async function hseLoadPermitTable() {
+  const ref = await hseEnsureRefData();
+  const tbody = document.getElementById('hse-permit-tbody');
+
+  const typeFilter = document.getElementById('hse-permit-filter-type');
+  if (typeFilter.options.length <= 1) typeFilter.innerHTML += hseOptionsHTML(ref.permit_types, ref.permit_type_labels);
+  const statusFilter = document.getElementById('hse-permit-filter-status');
+  if (statusFilter.options.length <= 1) statusFilter.innerHTML += hseOptionsHTML(ref.permit_statuses, ref.permit_status_labels);
+
+  try {
+    const res = await hseFetch('/permits', {
+      query: {
+        search: document.getElementById('hse-permit-search').value || null,
+        type: typeFilter.value || null,
+        status: statusFilter.value || null,
+      },
+    });
+    const items = res.data;
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="pm-empty-state">لا توجد تصاريح عمل مسجّلة</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(p => `
+      <tr>
+        <td>${p.code}</td>
+        <td>${ref.permit_type_labels[p.type] || p.type}</td>
+        <td>${hseEsc(p.project_id)}</td>
+        <td>${hseEsc(p.location)}</td>
+        <td>${hseFmtDateTime(p.start_date)}</td>
+        <td>${hseFmtDateTime(p.end_date)}</td>
+        <td><span class="tag ${hsePermitStatusTag(p.status)}">${ref.permit_status_labels[p.status] || p.status}</span></td>
+        <td>
+          <button class="pm-link-btn" data-hse-permit-view="${p.id}">عرض</button>
+          <button class="pm-link-btn" data-hse-permit-edit="${p.id}">تعديل</button>
+          <button class="pm-link-btn pm-mini-btn-danger" data-hse-permit-delete="${p.id}">حذف</button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-hse-permit-view]').forEach(b => b.addEventListener('click', () => hsePermitShowDetail(b.dataset.hsePermitView)));
+    tbody.querySelectorAll('[data-hse-permit-edit]').forEach(b => b.addEventListener('click', () => hsePermitShowForm(b.dataset.hsePermitEdit)));
+    tbody.querySelectorAll('[data-hse-permit-delete]').forEach(b => b.addEventListener('click', () => hsePermitDelete(b.dataset.hsePermitDelete)));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="alert alert-error">${e.message}</div></td></tr>`;
+  }
+}
+
+document.getElementById('hse-permit-search')?.addEventListener('input', debounceHse(() => hseLoadPermitTable(), 300));
+document.getElementById('hse-permit-filter-type')?.addEventListener('change', () => hseLoadPermitTable());
+document.getElementById('hse-permit-filter-status')?.addEventListener('change', () => hseLoadPermitTable());
+document.getElementById('hse-permit-btn-new')?.addEventListener('click', () => hsePermitShowForm(null));
+document.getElementById('hse-permit-btn-back-to-list')?.addEventListener('click', () => { hsePermitShowListView(); hseLoadPermitTable(); });
+document.getElementById('hse-permit-btn-back-from-detail')?.addEventListener('click', () => { hsePermitShowListView(); hseLoadPermitTable(); });
+
+async function hsePermitShowForm(id) {
+  const ref = await hseEnsureRefData();
+  hsePermitEditingId = id;
+
+  document.getElementById('hse-permit-list-view').style.display = 'none';
+  document.getElementById('hse-permit-detail-view').style.display = 'none';
+  document.getElementById('hse-permit-form-view').style.display = '';
+  document.getElementById('hse-permit-form-alert').innerHTML = '';
+
+  document.getElementById('hse-permit-f-type').innerHTML = hseOptionsHTML(ref.permit_types, ref.permit_type_labels);
+
+  const ids = ['project', 'location', 'description', 'start', 'end', 'responsible', 'team', 'risk-summary', 'precautions'];
+  ids.forEach(k => { const el2 = document.getElementById(`hse-permit-f-${k}`); if (el2) el2.value = ''; });
+
+  if (id) {
+    try {
+      const res = await hseFetch('/permits/get', { query: { id } });
+      const p = res.data;
+      document.getElementById('hse-permit-f-type').value = p.type || '';
+      document.getElementById('hse-permit-f-project').value = p.project_id || '';
+      document.getElementById('hse-permit-f-location').value = p.location || '';
+      document.getElementById('hse-permit-f-description').value = p.work_description || '';
+      document.getElementById('hse-permit-f-start').value = p.start_date ? p.start_date.slice(0, 16) : '';
+      document.getElementById('hse-permit-f-end').value = p.end_date ? p.end_date.slice(0, 16) : '';
+      document.getElementById('hse-permit-f-responsible').value = p.responsible_person || '';
+      document.getElementById('hse-permit-f-team').value = hseArrayToLines(p.work_team);
+      document.getElementById('hse-permit-f-risk-summary').value = p.risk_assessment_summary || '';
+      document.getElementById('hse-permit-f-precautions').value = hseArrayToLines(p.precautions);
+    } catch (e) {
+      hseAlert(document.getElementById('hse-permit-form-alert'), 'error', e.message);
+    }
+  }
+}
+
+document.getElementById('hse-permit-btn-save')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('hse-permit-form-alert');
+  const startRaw = document.getElementById('hse-permit-f-start').value;
+  const endRaw = document.getElementById('hse-permit-f-end').value;
+  const payload = {
+    type: document.getElementById('hse-permit-f-type').value,
+    project_id: document.getElementById('hse-permit-f-project').value.trim(),
+    location: document.getElementById('hse-permit-f-location').value.trim(),
+    work_description: document.getElementById('hse-permit-f-description').value.trim(),
+    start_date: startRaw ? new Date(startRaw).toISOString() : null,
+    end_date: endRaw ? new Date(endRaw).toISOString() : null,
+    responsible_person: document.getElementById('hse-permit-f-responsible').value.trim(),
+    work_team: hseLinesToArray(document.getElementById('hse-permit-f-team').value),
+    risk_assessment_summary: document.getElementById('hse-permit-f-risk-summary').value.trim() || null,
+    precautions: hseLinesToArray(document.getElementById('hse-permit-f-precautions').value),
+  };
+  try {
+    if (hsePermitEditingId) {
+      await hseFetch('/permits/update', { method: 'POST', body: { id: hsePermitEditingId, ...payload } });
+    } else {
+      await hseFetch('/permits', { method: 'POST', body: payload });
+    }
+    hsePermitShowListView();
+    hseLoadPermitTable();
+  } catch (e) {
+    hseAlert(alertEl, 'error', e.message);
+  }
+});
+
+async function hsePermitDelete(id) {
+  if (!confirm('هل تريد حذف تصريح العمل هذا؟')) return;
+  try {
+    await hseFetch('/permits/delete', { method: 'POST', body: { id } });
+    hseLoadPermitTable();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function hsePermitShowDetail(id) {
+  hsePermitEditingId = id;
+  document.getElementById('hse-permit-list-view').style.display = 'none';
+  document.getElementById('hse-permit-form-view').style.display = 'none';
+  document.getElementById('hse-permit-detail-view').style.display = '';
+  await hseRenderPermitDetail(id);
+}
+
+async function hseRenderPermitDetail(id) {
+  const ref = await hseEnsureRefData();
+  const content = document.getElementById('hse-permit-detail-content');
+  content.innerHTML = '<div class="pm-empty-state">جارٍ التحميل...</div>';
+  try {
+    const res = await hseFetch('/permits/get', { query: { id } });
+    const p = res.data;
+    content.innerHTML = `
+      <div class="pm-card">
+        <div class="pm-card-title">${p.code} — ${ref.permit_type_labels[p.type]} <span class="tag ${hsePermitStatusTag(p.status)}">${ref.permit_status_labels[p.status]}</span></div>
+        <p><b>المشروع:</b> ${hseEsc(p.project_id)} &nbsp; <b>الموقع:</b> ${hseEsc(p.location)}</p>
+        <p><b>من:</b> ${hseFmtDateTime(p.start_date)} &nbsp; <b>إلى:</b> ${hseFmtDateTime(p.end_date)}</p>
+        <p><b>وصف العمل:</b> ${hseEsc(p.work_description)}</p>
+        <p><b>المسؤول:</b> ${hseEsc(p.responsible_person)}</p>
+        ${p.work_team && p.work_team.length ? `<p><b>فريق التنفيذ:</b> ${p.work_team.map(hseEsc).join('، ')}</p>` : ''}
+        ${p.risk_assessment_summary ? `<p><b>ملخص تقييم المخاطر:</b> ${hseEsc(p.risk_assessment_summary)}</p>` : ''}
+      </div>
+      ${hseListSection('إجراءات الاحتياط المطلوبة', p.precautions)}
+      <div class="pm-card">
+        <div class="pm-card-title">سجل الموافقات</div>
+        ${p.approvals && p.approvals.length ? `
+          <table class="detail-table">
+            <thead><tr><th>المعتمِد</th><th>الصفة</th><th>ملاحظات</th><th>التاريخ</th></tr></thead>
+            <tbody>${p.approvals.map(a => `<tr><td>${hseEsc(a.approver_name)}</td><td>${hseEsc(a.approver_role) || '—'}</td><td>${hseEsc(a.notes) || '—'}</td><td>${hseFmtDateTime(a.approved_at)}</td></tr>`).join('')}</tbody>
+          </table>
+        ` : `<div class="pm-empty-state">لا توجد موافقات مسجّلة بعد</div>`}
+      </div>
+    `;
+
+    const activateBtn = document.getElementById('hse-permit-btn-activate');
+    const closeBtn = document.getElementById('hse-permit-btn-close');
+    const approveBtn = document.getElementById('hse-permit-btn-approve');
+    if (approveBtn) approveBtn.disabled = !['draft', 'pending_approval'].includes(p.status);
+    if (activateBtn) activateBtn.disabled = p.status !== 'approved';
+    if (closeBtn) closeBtn.disabled = !['active', 'approved', 'suspended'].includes(p.status);
+  } catch (e) {
+    content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+document.getElementById('hse-permit-btn-approve')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('hse-permit-action-alert');
+  const payload = {
+    id: hsePermitEditingId,
+    approver_name: document.getElementById('hse-permit-f-approver-name').value.trim(),
+    approver_role: document.getElementById('hse-permit-f-approver-role').value.trim() || null,
+    notes: document.getElementById('hse-permit-f-approver-notes').value.trim() || null,
+  };
+  try {
+    await hseFetch('/permits/approve', { method: 'POST', body: payload });
+    alertEl.innerHTML = '';
+    hseRenderPermitDetail(hsePermitEditingId);
+  } catch (e) {
+    hseAlert(alertEl, 'error', e.message);
+  }
+});
+
+document.getElementById('hse-permit-btn-activate')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('hse-permit-action-alert');
+  try {
+    await hseFetch('/permits/activate', { method: 'POST', body: { id: hsePermitEditingId } });
+    alertEl.innerHTML = '';
+    hseRenderPermitDetail(hsePermitEditingId);
+  } catch (e) {
+    hseAlert(alertEl, 'error', e.message);
+  }
+});
+
+document.getElementById('hse-permit-btn-close')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('hse-permit-action-alert');
+  try {
+    await hseFetch('/permits/close', { method: 'POST', body: { id: hsePermitEditingId } });
+    alertEl.innerHTML = '';
+    hseRenderPermitDetail(hsePermitEditingId);
+  } catch (e) {
+    hseAlert(alertEl, 'error', e.message);
+  }
+});
+
+// ================================================================
+// إدارة معدات الوقاية الشخصية (PPE)
+// ================================================================
+
+function hsePpeStatusTag(status) {
+  const map = { issued: 'tag-ok', due_for_replacement: 'tag-bad', replaced: 'tag-info', returned: 'tag-info' };
+  return map[status] || 'tag-info';
+}
+
+document.querySelector('[data-panel="hse-ppe"]')?.addEventListener('click', async () => {
+  await hseEnsureRefData();
+  hsePpeShowListView();
+  hseLoadPpeTable();
+});
+
+function hsePpeShowListView() {
+  document.getElementById('hse-ppe-list-view').style.display = '';
+  document.getElementById('hse-ppe-form-view').style.display = 'none';
+}
+
+document.getElementById('hse-ppe-btn-load-compliance')?.addEventListener('click', () => hseLoadPpeCompliance());
+
+async function hseLoadPpeCompliance() {
+  const cardsEl = document.getElementById('hse-ppe-compliance-cards');
+  const projectId = document.getElementById('hse-ppe-compliance-project').value.trim() || null;
+  try {
+    const res = await hseFetch('/ppe/compliance-summary', { query: { projectId } });
+    const d = res.data;
+    cardsEl.innerHTML = `
+      <div class="result-card"><div class="label">إجمالي معدات الوقاية المسجّلة</div><div class="value">${d.total_ppe_items}</div></div>
+      <div class="result-card"><div class="label">مستحقة الاستبدال</div><div class="value">${d.due_for_replacement}</div></div>
+      <div class="result-card"><div class="label">نسبة الالتزام</div><div class="value">${d.compliance_rate}<span class="unit">%</span></div></div>
+    `;
+  } catch (e) {
+    hseAlert(cardsEl, 'error', e.message);
+  }
+}
+
+async function hseLoadPpeTable() {
+  const ref = await hseEnsureRefData();
+  const tbody = document.getElementById('hse-ppe-tbody');
+
+  const typeFilter = document.getElementById('hse-ppe-filter-type');
+  if (typeFilter.options.length <= 1) typeFilter.innerHTML += hseOptionsHTML(ref.ppe_types, ref.ppe_type_labels);
+  const statusFilter = document.getElementById('hse-ppe-filter-status');
+  if (statusFilter.options.length <= 1) statusFilter.innerHTML += hseOptionsHTML(ref.ppe_item_statuses, ref.ppe_item_status_labels);
+
+  try {
+    const res = await hseFetch('/ppe', {
+      query: {
+        search: document.getElementById('hse-ppe-search').value || null,
+        type: typeFilter.value || null,
+        status: statusFilter.value || null,
+      },
+    });
+    const items = res.data;
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="pm-empty-state">لا توجد سجلات معدات وقاية</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(p => `
+      <tr>
+        <td>${p.code}</td>
+        <td>${ref.ppe_type_labels[p.type] || p.type}</td>
+        <td>${hseEsc(p.employee_name)}</td>
+        <td>${p.quantity}</td>
+        <td><span class="tag ${p.condition === 'damaged' || p.condition === 'expired' ? 'tag-bad' : 'tag-ok'}">${ref.ppe_condition_labels[p.condition] || p.condition}</span></td>
+        <td>${hseFmtDate(p.replacement_due_date)}</td>
+        <td><span class="tag ${hsePpeStatusTag(p.status)}">${ref.ppe_item_status_labels[p.status] || p.status}</span></td>
+        <td>
+          <button class="pm-link-btn" data-hse-ppe-edit="${p.id}">تعديل</button>
+          ${p.status !== 'replaced' ? `<button class="pm-link-btn" data-hse-ppe-replace="${p.id}">استبدال</button>` : ''}
+          <button class="pm-link-btn pm-mini-btn-danger" data-hse-ppe-delete="${p.id}">حذف</button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-hse-ppe-edit]').forEach(b => b.addEventListener('click', () => hsePpeShowForm(b.dataset.hsePpeEdit)));
+    tbody.querySelectorAll('[data-hse-ppe-replace]').forEach(b => b.addEventListener('click', () => hsePpeReplace(b.dataset.hsePpeReplace)));
+    tbody.querySelectorAll('[data-hse-ppe-delete]').forEach(b => b.addEventListener('click', () => hsePpeDelete(b.dataset.hsePpeDelete)));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="alert alert-error">${e.message}</div></td></tr>`;
+  }
+}
+
+document.getElementById('hse-ppe-search')?.addEventListener('input', debounceHse(() => hseLoadPpeTable(), 300));
+document.getElementById('hse-ppe-filter-type')?.addEventListener('change', () => hseLoadPpeTable());
+document.getElementById('hse-ppe-filter-status')?.addEventListener('change', () => hseLoadPpeTable());
+document.getElementById('hse-ppe-btn-new')?.addEventListener('click', () => hsePpeShowForm(null));
+document.getElementById('hse-ppe-btn-back-to-list')?.addEventListener('click', () => { hsePpeShowListView(); hseLoadPpeTable(); });
+
+async function hsePpeShowForm(id) {
+  const ref = await hseEnsureRefData();
+  hsePpeEditingId = id;
+
+  document.getElementById('hse-ppe-list-view').style.display = 'none';
+  document.getElementById('hse-ppe-form-view').style.display = '';
+  document.getElementById('hse-ppe-form-alert').innerHTML = '';
+
+  document.getElementById('hse-ppe-f-type').innerHTML = hseOptionsHTML(ref.ppe_types, ref.ppe_type_labels);
+  document.getElementById('hse-ppe-f-condition').innerHTML = hseOptionsHTML(ref.ppe_conditions, ref.ppe_condition_labels);
+
+  const ids = ['project', 'employee', 'role', 'lifespan', 'notes'];
+  ids.forEach(k => { const el2 = document.getElementById(`hse-ppe-f-${k}`); if (el2) el2.value = ''; });
+  document.getElementById('hse-ppe-f-quantity').value = '1';
+  document.getElementById('hse-ppe-f-condition').value = 'new';
+  document.getElementById('hse-ppe-f-issue-date').value = new Date().toISOString().slice(0, 10);
+
+  if (id) {
+    try {
+      const res = await hseFetch('/ppe/get', { query: { id } });
+      const p = res.data;
+      document.getElementById('hse-ppe-f-type').value = p.type || '';
+      document.getElementById('hse-ppe-f-project').value = p.project_id || '';
+      document.getElementById('hse-ppe-f-employee').value = p.employee_name || '';
+      document.getElementById('hse-ppe-f-role').value = p.employee_role || '';
+      document.getElementById('hse-ppe-f-quantity').value = p.quantity || 1;
+      document.getElementById('hse-ppe-f-condition').value = p.condition || 'new';
+      document.getElementById('hse-ppe-f-issue-date').value = p.issue_date ? hseFmtDate(p.issue_date) : '';
+      document.getElementById('hse-ppe-f-lifespan').value = p.lifespan_days || '';
+      document.getElementById('hse-ppe-f-notes').value = p.notes || '';
+    } catch (e) {
+      hseAlert(document.getElementById('hse-ppe-form-alert'), 'error', e.message);
+    }
+  }
+}
+
+document.getElementById('hse-ppe-btn-save')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('hse-ppe-form-alert');
+  const payload = {
+    type: document.getElementById('hse-ppe-f-type').value,
+    project_id: document.getElementById('hse-ppe-f-project').value.trim() || null,
+    employee_name: document.getElementById('hse-ppe-f-employee').value.trim(),
+    employee_role: document.getElementById('hse-ppe-f-role').value.trim() || null,
+    quantity: Number(document.getElementById('hse-ppe-f-quantity').value) || 1,
+    condition: document.getElementById('hse-ppe-f-condition').value,
+    issue_date: document.getElementById('hse-ppe-f-issue-date').value,
+    lifespan_days: document.getElementById('hse-ppe-f-lifespan').value ? Number(document.getElementById('hse-ppe-f-lifespan').value) : null,
+    notes: document.getElementById('hse-ppe-f-notes').value.trim() || null,
+  };
+  try {
+    if (hsePpeEditingId) {
+      await hseFetch('/ppe/update', { method: 'POST', body: { id: hsePpeEditingId, ...payload } });
+    } else {
+      await hseFetch('/ppe', { method: 'POST', body: payload });
+    }
+    hsePpeShowListView();
+    hseLoadPpeTable();
+  } catch (e) {
+    hseAlert(alertEl, 'error', e.message);
+  }
+});
+
+async function hsePpeReplace(id) {
+  if (!confirm('هل تريد استبدال هذه المعدة بسجل تسليم جديد؟')) return;
+  try {
+    await hseFetch('/ppe/replace', { method: 'POST', body: { id } });
+    hseLoadPpeTable();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function hsePpeDelete(id) {
+  if (!confirm('هل تريد حذف سجل معدة الوقاية هذا؟')) return;
+  try {
+    await hseFetch('/ppe/delete', { method: 'POST', body: { id } });
+    hseLoadPpeTable();
+  } catch (e) {
+    alert(e.message);
+  }
+}
