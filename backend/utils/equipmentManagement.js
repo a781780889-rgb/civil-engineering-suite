@@ -5,11 +5,13 @@
  * إدارة الحجز + تتبع المعدات.                                        [منجز]
  * الجزء الثاني: إدارة الوقود + الصيانة (الدورية والطارئة) + قطع الغيار
  *               + إدارة المشغلين.                                     [منجز]
+ * الجزء الثالث: إدارة التكاليف (تشغيل/وقود/صيانة/قطع غيار/عمالة/نقل/
+ *               إيجار/تأمين/إهلاك) + إدارة الإنتاجية (استغلال/كفاءة/
+ *               MTTR/MTBF) + مركز التنبيهات الموحّد (9 أنواع تنبيهات).[منجز]
  * التخزين: ملف JSON على القرص (backend/data/equipment.json) بنفس نمط
  * scheduling.js / projectManagement.js - بدون تبعيات خارجية.
  *
  * الأجزاء اللاحقة (ستُبنى في تحديثات لاحقة على نفس هذا الملف):
- *  - الجزء الثالث: التكاليف + الإنتاجية + التنبيهات
  *  - الجزء الرابع: التقارير + الذكاء الاصطناعي + التكامل + الصلاحيات المتقدمة
  */
 
@@ -238,6 +240,9 @@ function createEquipment(body) {
     warranty_expiry: body.warranty_expiry || null,
     insurance_expiry: body.insurance_expiry || null,
     rental_cost_per_hour: body.rental_cost_per_hour != null ? r2(body.rental_cost_per_hour) : null,
+    insurance_annual_cost: body.insurance_annual_cost != null ? r2(body.insurance_annual_cost) : 0,
+    operator_labor_cost_per_hour: body.operator_labor_cost_per_hour != null ? r2(body.operator_labor_cost_per_hour) : 0,
+    transport_cost_total: body.transport_cost_total != null ? r2(body.transport_cost_total) : 0,
 
     // مرفقات
     documents: Array.isArray(body.documents) ? body.documents : [],
@@ -1341,6 +1346,370 @@ function getOperatorLicenseAlerts({ withinDays = 30 } = {}) {
 
 // ===================== لوحة معلومات موجزة (أساسية - سيتم توسيعها بالجزء الثالث) =====================
 
+// =====================================================================
+// الجزء الثالث (3/4) من القسم السابع: إدارة التكاليف + إدارة الإنتاجية
+// + مركز التنبيهات الموحّد
+// =====================================================================
+
+// ----------------------- إدارة التكاليف -----------------------
+
+// يحسب التكلفة الإجمالية والتفصيلية لمعدة واحدة خلال فترة زمنية اختيارية
+// (منذ الشراء إن لم تُحدَّد الفترة)، بالاعتماد فعلياً على البيانات
+// المسجّلة في: سجلات التشغيل (عمالة)، الوقود، الصيانة، قطع الغيار،
+// إضافة إلى الإيجار والتأمين والإهلاك المخزّنة على سجل المعدة.
+function getEquipmentCostBreakdown(equipmentId, { dateFrom = null, dateTo = null } = {}) {
+  const store = loadStore();
+  const equipment = store.equipment[equipmentId];
+  if (!equipment) throw new Error('المعدة غير موجودة');
+
+  const inRange = (d) => (!d ? true : (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo));
+
+  const opsInRange = Object.values(store.operationLogs).filter(
+    o => o.equipment_id === equipmentId && o.ended_at && inRange(String(o.started_at).slice(0, 10))
+  );
+  const operatingHours = r2(opsInRange.reduce((s, o) => s + (o.duration_hours || 0), 0));
+
+  const laborCost = r2(operatingHours * (equipment.operator_labor_cost_per_hour || 0));
+
+  const fuelLogs = Object.values(store.fuelLogs).filter(
+    f => f.equipment_id === equipmentId && inRange(String(f.filled_at).slice(0, 10))
+  );
+  const fuelCost = r2(fuelLogs.reduce((s, f) => s + (f.cost || 0), 0));
+
+  const maintRecords = Object.values(store.maintenanceRecords).filter(
+    m => m.equipment_id === equipmentId && inRange(String(m.started_at).slice(0, 10))
+  );
+  const maintenanceLaborCost = r2(maintRecords.reduce((s, m) => s + (m.repair_cost || 0), 0));
+  const sparePartsCost = r2(maintRecords.reduce((s, m) => s + (m.spare_parts_cost || 0), 0));
+  const maintenanceTotalCost = r2(maintenanceLaborCost + sparePartsCost);
+
+  const rentalCost = equipment.ownership === 'rented'
+    ? r2(operatingHours * (equipment.rental_cost_per_hour || 0))
+    : 0;
+
+  let insuranceCost = equipment.insurance_annual_cost || 0;
+  if (dateFrom && dateTo) {
+    const days = Math.max(1, r2((new Date(dateTo) - new Date(dateFrom)) / 86400000));
+    insuranceCost = r2((equipment.insurance_annual_cost || 0) * (days / 365));
+  }
+
+  const transportCost = equipment.transport_cost_total || 0;
+  const depreciationCost = equipment.depreciation_value || 0;
+
+  const operatingCost = r2(fuelCost + laborCost);
+  const totalCost = r2(
+    operatingCost + maintenanceTotalCost + rentalCost + insuranceCost + transportCost + depreciationCost
+  );
+  const costPerOperatingHour = operatingHours > 0 ? r2(totalCost / operatingHours) : 0;
+
+  return {
+    success: true,
+    data: {
+      equipment_id: equipmentId,
+      equipment_name: equipment.name,
+      equipment_code: equipment.code,
+      period: { from: dateFrom, to: dateTo },
+      operating_hours: operatingHours,
+      breakdown: {
+        operating_cost: operatingCost,
+        fuel_cost: fuelCost,
+        labor_cost: laborCost,
+        maintenance_cost: maintenanceTotalCost,
+        maintenance_labor_cost: maintenanceLaborCost,
+        spare_parts_cost: sparePartsCost,
+        transport_cost: transportCost,
+        rental_cost: rentalCost,
+        insurance_cost: insuranceCost,
+        depreciation_cost: depreciationCost,
+      },
+      total_cost: totalCost,
+      cost_per_operating_hour: costPerOperatingHour,
+    },
+  };
+}
+
+function getFleetCostSummary({ projectId = null, dateFrom = null, dateTo = null } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.equipment).filter(e => e.is_active !== false);
+  if (projectId) items = items.filter(e => e.current_project_id === projectId);
+
+  const rows = items.map(e => getEquipmentCostBreakdown(e.id, { dateFrom, dateTo }).data);
+
+  const totals = rows.reduce((acc, r) => {
+    acc.operating_cost += r.breakdown.operating_cost;
+    acc.fuel_cost += r.breakdown.fuel_cost;
+    acc.labor_cost += r.breakdown.labor_cost;
+    acc.maintenance_cost += r.breakdown.maintenance_cost;
+    acc.spare_parts_cost += r.breakdown.spare_parts_cost;
+    acc.transport_cost += r.breakdown.transport_cost;
+    acc.rental_cost += r.breakdown.rental_cost;
+    acc.insurance_cost += r.breakdown.insurance_cost;
+    acc.depreciation_cost += r.breakdown.depreciation_cost;
+    acc.total_cost += r.total_cost;
+    return acc;
+  }, {
+    operating_cost: 0, fuel_cost: 0, labor_cost: 0, maintenance_cost: 0,
+    spare_parts_cost: 0, transport_cost: 0, rental_cost: 0, insurance_cost: 0,
+    depreciation_cost: 0, total_cost: 0,
+  });
+  for (const k of Object.keys(totals)) totals[k] = r2(totals[k]);
+
+  const byEquipment = rows
+    .map(r => ({ equipment_id: r.equipment_id, equipment_name: r.equipment_name, equipment_code: r.equipment_code, total_cost: r.total_cost }))
+    .sort((a, b) => b.total_cost - a.total_cost);
+
+  return {
+    success: true,
+    data: {
+      period: { from: dateFrom, to: dateTo },
+      equipment_count: rows.length,
+      totals,
+      most_costly_equipment: byEquipment.slice(0, 10),
+      by_equipment: byEquipment,
+    },
+  };
+}
+
+function logTransportCost(body) {
+  const store = loadStore();
+  const { equipment_id, amount, note = null } = body || {};
+  if (!equipment_id) throw new Error('معرّف المعدة مطلوب');
+  const equipment = store.equipment[equipment_id];
+  if (!equipment) throw new Error('المعدة غير موجودة');
+  if (amount == null || Number(amount) <= 0) throw new Error('قيمة تكلفة النقل يجب أن تكون أكبر من صفر');
+
+  equipment.transport_cost_total = r2((equipment.transport_cost_total || 0) + Number(amount));
+  equipment.updated_at = nowISO();
+
+  audit(store, { action: 'log_transport_cost', entity: 'equipment', entityId: equipment_id, details: { amount: r2(amount), note } });
+  saveStore(store);
+  return { success: true, data: { equipment_id, transport_cost_total: equipment.transport_cost_total } };
+}
+
+// ----------------------- إدارة الإنتاجية -----------------------
+
+function getEquipmentProductivity(equipmentId, { dateFrom = null, dateTo = null } = {}) {
+  const store = loadStore();
+  const equipment = store.equipment[equipmentId];
+  if (!equipment) throw new Error('المعدة غير موجودة');
+
+  const inRange = (d) => (!d ? true : (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo));
+
+  const opsInRange = Object.values(store.operationLogs).filter(
+    o => o.equipment_id === equipmentId && o.ended_at && inRange(String(o.started_at).slice(0, 10))
+  );
+  const operatingHours = r2(opsInRange.reduce((s, o) => s + (o.duration_hours || 0), 0));
+
+  let calendarHours = null;
+  if (dateFrom && dateTo) {
+    calendarHours = r2(((new Date(dateTo) - new Date(dateFrom)) / 3600000) + 24);
+  } else if (opsInRange.length) {
+    const dates = opsInRange.map(o => o.started_at).sort();
+    calendarHours = r2(((new Date() - new Date(dates[0])) / 3600000));
+  }
+  const utilizationRate = calendarHours && calendarHours > 0 ? r2(Math.min(100, (operatingHours / calendarHours) * 100)) : 0;
+
+  const maintRecords = Object.values(store.maintenanceRecords).filter(
+    m => m.equipment_id === equipmentId && inRange(String(m.started_at).slice(0, 10))
+  );
+  const completedMaint = maintRecords.filter(m => m.status === 'completed' && m.downtime_hours != null);
+  const downtimeHours = r2(completedMaint.reduce((s, m) => s + (m.downtime_hours || 0), 0));
+  const mttr = completedMaint.length ? r2(downtimeHours / completedMaint.length) : 0;
+
+  const faults = maintRecords.filter(m => m.maintenance_type === 'emergency');
+  const faultRate = operatingHours > 0 ? r2(faults.length / (operatingHours / 100)) : 0;
+  let mtbf = null;
+  if (faults.length > 1) {
+    const sorted = faults.slice().sort((a, b) => (a.started_at || '').localeCompare(b.started_at || ''));
+    const spanDays = (new Date(sorted[sorted.length - 1].started_at) - new Date(sorted[0].started_at)) / 86400000;
+    mtbf = r2(spanDays / (faults.length - 1));
+  }
+
+  const fuelLogs = Object.values(store.fuelLogs).filter(
+    f => f.equipment_id === equipmentId && inRange(String(f.filled_at).slice(0, 10))
+  );
+  const totalFuel = r2(fuelLogs.reduce((s, f) => s + (f.quantity || 0), 0));
+  const fuelEfficiency = totalFuel > 0 ? r2(operatingHours / totalFuel) : null;
+
+  const workDays = new Set(opsInRange.map(o => String(o.started_at).slice(0, 10))).size;
+  const avgHoursPerWorkDay = workDays > 0 ? r2(operatingHours / workDays) : 0;
+
+  const operatingEfficiency = r2(Math.max(0, utilizationRate - Math.min(30, faultRate * 5)));
+
+  return {
+    success: true,
+    data: {
+      equipment_id: equipmentId,
+      equipment_name: equipment.name,
+      equipment_code: equipment.code,
+      period: { from: dateFrom, to: dateTo },
+      operating_hours: operatingHours,
+      downtime_hours: downtimeHours,
+      work_days: workDays,
+      average_hours_per_work_day: avgHoursPerWorkDay,
+      utilization_rate_percent: utilizationRate,
+      operating_efficiency_percent: operatingEfficiency,
+      fuel_efficiency_hours_per_unit: fuelEfficiency,
+      fault_rate_per_100h: faultRate,
+      faults_count: faults.length,
+      average_time_between_faults_days: mtbf,
+      average_repair_time_hours_mttr: mttr,
+    },
+  };
+}
+
+function compareEquipmentProductivity({ type = null, category = null, dateFrom = null, dateTo = null } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.equipment).filter(e => e.is_active !== false);
+  if (type) items = items.filter(e => e.type === type);
+  if (category) items = items.filter(e => e.category === category);
+  if (!items.length) return { success: true, data: { count: 0, items: [] } };
+
+  const rows = items.map(e => {
+    const p = getEquipmentProductivity(e.id, { dateFrom, dateTo }).data;
+    return {
+      equipment_id: e.id, equipment_name: e.name, equipment_code: e.code, type: e.type,
+      utilization_rate_percent: p.utilization_rate_percent,
+      operating_efficiency_percent: p.operating_efficiency_percent,
+      fault_rate_per_100h: p.fault_rate_per_100h,
+      operating_hours: p.operating_hours,
+    };
+  }).sort((a, b) => b.operating_efficiency_percent - a.operating_efficiency_percent);
+
+  const avgEfficiency = r2(rows.reduce((s, r) => s + r.operating_efficiency_percent, 0) / rows.length);
+
+  return {
+    success: true,
+    data: {
+      count: rows.length,
+      average_efficiency_percent: avgEfficiency,
+      best_performing: rows[0] || null,
+      worst_performing: rows[rows.length - 1] || null,
+      items: rows,
+    },
+  };
+}
+
+// ----------------------- مركز التنبيهات الموحّد -----------------------
+
+function eqDateOnly(d) { return d ? String(d).slice(0, 10) : '—'; }
+
+function getAlertsCenter({ withinDays = 14, fuelLowThresholdPercent = 15 } = {}) {
+  const store = loadStore();
+  const alerts = [];
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const horizon = new Date(today); horizon.setDate(horizon.getDate() + Number(withinDays || 14));
+  const horizonStr = horizon.toISOString().slice(0, 10);
+
+  const equipmentList = Object.values(store.equipment).filter(e => e.is_active !== false);
+
+  const maintAlerts = getUpcomingMaintenanceAlerts({ withinDays }).data;
+  for (const a of maintAlerts) {
+    alerts.push({
+      category: a.type.startsWith('hours') ? 'maintenance_hours' : 'maintenance_date',
+      severity: a.type.includes('overdue') ? 'critical' : 'warning',
+      equipment_id: a.equipment_id, equipment_name: a.equipment_name, equipment_code: a.equipment_code,
+      message: a.type.includes('overdue')
+        ? `صيانة متأخرة عن موعدها: ${a.description || ''}`
+        : `صيانة قادمة خلال ${withinDays} يوم: ${a.description || ''}`,
+      details: a,
+    });
+  }
+
+  for (const e of equipmentList) {
+    if (e.warranty_expiry) {
+      if (e.warranty_expiry < todayStr) {
+        alerts.push({ category: 'warranty_expired', severity: 'warning', equipment_id: e.id, equipment_name: e.name, equipment_code: e.code, message: `انتهى ضمان المعدة بتاريخ ${e.warranty_expiry}` });
+      } else if (e.warranty_expiry <= horizonStr) {
+        alerts.push({ category: 'warranty_expiring', severity: 'info', equipment_id: e.id, equipment_name: e.name, equipment_code: e.code, message: `ينتهي ضمان المعدة بتاريخ ${e.warranty_expiry}` });
+      }
+    }
+    if (e.insurance_expiry) {
+      if (e.insurance_expiry < todayStr) {
+        alerts.push({ category: 'insurance_expired', severity: 'critical', equipment_id: e.id, equipment_name: e.name, equipment_code: e.code, message: `انتهى تأمين المعدة بتاريخ ${e.insurance_expiry}` });
+      } else if (e.insurance_expiry <= horizonStr) {
+        alerts.push({ category: 'insurance_expiring', severity: 'warning', equipment_id: e.id, equipment_name: e.name, equipment_code: e.code, message: `ينتهي تأمين المعدة بتاريخ ${e.insurance_expiry}` });
+      }
+    }
+    if (e.total_operating_hours > 3000 && e.purchase_date) {
+      const years = Math.max(1, (today - new Date(e.purchase_date)) / (365 * 86400000));
+      if (e.total_operating_hours / years > 2500) {
+        alerts.push({ category: 'operating_hours_exceeded', severity: 'info', equipment_id: e.id, equipment_name: e.name, equipment_code: e.code, message: `معدل استخدام مرتفع: ${r2(e.total_operating_hours / years)} ساعة/سنة تقريباً` });
+      }
+    }
+  }
+
+  for (const e of equipmentList) {
+    if (!e.tank_capacity_l) continue;
+    const lastFuel = Object.values(store.fuelLogs)
+      .filter(f => f.equipment_id === e.id)
+      .sort((a, b) => (b.filled_at || '').localeCompare(a.filled_at || ''))[0];
+    if (lastFuel && lastFuel.quantity && e.tank_capacity_l) {
+      const pctFilled = r2((lastFuel.quantity / e.tank_capacity_l) * 100);
+      if (pctFilled < fuelLowThresholdPercent) {
+        alerts.push({ category: 'low_fuel', severity: 'warning', equipment_id: e.id, equipment_name: e.name, equipment_code: e.code, message: `آخر تعبئة وقود كانت منخفضة (${pctFilled}% من سعة الخزان)` });
+      }
+    }
+  }
+
+  for (const e of equipmentList) {
+    const hasLogs = Object.values(store.fuelLogs).some(f => f.equipment_id === e.id);
+    if (!hasLogs) continue;
+    try {
+      const stats = getFuelStats(e.id, { period: 'month' }).data;
+      for (const anomaly of stats.abnormal_consumption_entries) {
+        alerts.push({ category: 'high_fuel_consumption', severity: 'warning', equipment_id: e.id, equipment_name: e.name, equipment_code: e.code, message: `استهلاك وقود غير طبيعي بتاريخ ${eqDateOnly(anomaly.filled_at)} (${anomaly.quantity} مقابل متوسط ${anomaly.average_quantity})` });
+      }
+    } catch (_) { /* تجاهل معدة بدون بيانات كافية */ }
+  }
+
+  const recentCutoff = new Date(today); recentCutoff.setDate(recentCutoff.getDate() - 3);
+  const recentFaults = Object.values(store.maintenanceRecords).filter(
+    m => m.maintenance_type === 'emergency' && new Date(m.started_at) >= recentCutoff
+  );
+  for (const f of recentFaults) {
+    const e = store.equipment[f.equipment_id];
+    if (!e) continue;
+    alerts.push({ category: 'new_fault', severity: f.severity === 'critical' ? 'critical' : 'warning', equipment_id: e.id, equipment_name: e.name, equipment_code: e.code, message: `عطل جديد مسجّل: ${f.fault_description || ''}`, details: { maintenance_record_id: f.id } });
+  }
+
+  const openMaint = Object.values(store.maintenanceRecords).filter(
+    m => ['scheduled', 'in_progress'].includes(m.status) && new Date(m.started_at) <= recentCutoff
+  );
+  for (const m of openMaint) {
+    const e = store.equipment[m.equipment_id];
+    if (!e) continue;
+    alerts.push({ category: 'repair_delayed', severity: 'critical', equipment_id: e.id, equipment_name: e.name, equipment_code: e.code, message: `إصلاح متأخر منذ ${eqDateOnly(m.started_at)} ولم يكتمل بعد`, details: { maintenance_record_id: m.id } });
+  }
+
+  const licenseAlerts = getOperatorLicenseAlerts({ withinDays }).data;
+  for (const a of licenseAlerts) {
+    alerts.push({
+      category: a.status === 'expired' ? 'operator_license_expired' : 'operator_license_expiring',
+      severity: a.status === 'expired' ? 'critical' : 'warning',
+      operator_id: a.operator_id, operator_name: a.operator_name,
+      message: a.status === 'expired' ? `انتهت رخصة المشغّل ${a.operator_name}` : `تنتهي رخصة المشغّل ${a.operator_name} خلال ${withinDays} يوم`,
+      details: a,
+    });
+  }
+
+  const bySeverity = { critical: 0, warning: 0, info: 0 };
+  for (const a of alerts) bySeverity[a.severity] = (bySeverity[a.severity] || 0) + 1;
+
+  return {
+    success: true,
+    data: {
+      count: alerts.length,
+      by_severity: bySeverity,
+      alerts: alerts.sort((a, b) => {
+        const order = { critical: 0, warning: 1, info: 2 };
+        return order[a.severity] - order[b.severity];
+      }),
+    },
+  };
+}
+
 function getBasicDashboard(projectId = null) {
   const store = loadStore();
   let items = Object.values(store.equipment).filter(e => e.is_active !== false);
@@ -1455,4 +1824,17 @@ module.exports = {
 
   // لوحة معلومات أساسية
   getBasicDashboard,
+
+  // ----- الجزء الثالث -----
+  // إدارة التكاليف
+  getEquipmentCostBreakdown,
+  getFleetCostSummary,
+  logTransportCost,
+
+  // إدارة الإنتاجية
+  getEquipmentProductivity,
+  compareEquipmentProductivity,
+
+  // مركز التنبيهات الموحّد
+  getAlertsCenter,
 };
