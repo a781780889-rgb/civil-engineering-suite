@@ -101,6 +101,9 @@
     <div class="nav-item" data-panel="eq-alerts">
       <span class="nav-icon">🔔</span> مركز التنبيهات
     </div>
+    <div class="nav-item" data-panel="eq-reports">
+      <span class="nav-icon">📄</span> تقارير المعدات
+    </div>
   </nav>
 
   <main class="main-content">
@@ -1157,6 +1160,56 @@
           </div>
           <div class="result-cards" id="eq-alerts-summary-cards"></div>
           <div id="eq-alerts-list" style="margin-top:12px"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===== الجزء الرابع (4-أ): تقارير المعدات ===== -->
+    <section class="calc-panel" id="panel-eq-reports">
+      <div class="panel-header"><h2>تقارير المعدات (Equipment Reports)</h2><span class="panel-code">EQUIPMENT.REPORTS</span></div>
+      <div class="panel-body">
+
+        <div class="pm-card">
+          <div class="pm-card-title">إعداد التقرير</div>
+          <div class="pm-toolbar">
+            <select id="eq-rep-type">
+              <option value="fleet_register">تقرير المعدات</option>
+              <option value="operations">تقرير التشغيل</option>
+              <option value="maintenance">تقرير الصيانة</option>
+              <option value="fuel">تقرير الوقود</option>
+              <option value="faults">تقرير الأعطال</option>
+              <option value="productivity">تقرير الإنتاجية</option>
+              <option value="costs">تقرير التكاليف</option>
+              <option value="depreciation">تقرير الإهلاك</option>
+              <option value="usage_by_project">تقرير الاستخدام حسب المشروع</option>
+              <option value="executive_summary">التقرير التنفيذي</option>
+            </select>
+            <select id="eq-rep-equipment"><option value="">كل المعدات</option></select>
+            <input type="text" id="eq-rep-project" placeholder="معرّف المشروع (مطلوب لتقرير الاستخدام حسب المشروع)">
+            <input type="date" id="eq-rep-from" title="من تاريخ">
+            <input type="date" id="eq-rep-to" title="إلى تاريخ">
+            <button class="btn btn-primary" id="eq-btn-run-report">عرض التقرير</button>
+          </div>
+          <div class="pm-toolbar">
+            <input type="text" id="eq-rep-project-name" placeholder="اسم المشروع (يظهر في التقرير المصدَّر)">
+            <button class="btn btn-outline" id="eq-btn-export-pdf">تصدير PDF</button>
+            <button class="btn btn-outline" id="eq-btn-export-excel">تصدير Excel</button>
+            <button class="btn btn-outline" id="eq-btn-export-csv">تصدير CSV</button>
+            <button class="btn btn-outline" id="eq-btn-export-print">نسخة للطباعة</button>
+          </div>
+          <div id="eq-rep-alert"></div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title" id="eq-rep-result-title">نتيجة التقرير</div>
+          <div class="result-cards" id="eq-rep-summary-cards"></div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-rep-table">
+              <thead id="eq-rep-thead"></thead>
+              <tbody id="eq-rep-tbody"></tbody>
+            </table>
+          </div>
         </div>
 
       </div>
