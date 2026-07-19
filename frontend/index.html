@@ -153,6 +153,15 @@
     <div class="nav-item" data-panel="hse-trn-certificates">
       <span class="nav-icon">📜</span> الشهادات وصلاحيتها
     </div>
+    <div class="nav-item" data-panel="hse-hzm-dashboard">
+      <span class="nav-icon">☣️</span> لوحة معلومات المواد الخطرة
+    </div>
+    <div class="nav-item" data-panel="hse-hzm-items">
+      <span class="nav-icon">🧪</span> المواد الخطرة وبطاقات SDS
+    </div>
+    <div class="nav-item" data-panel="hse-hzm-alerts">
+      <span class="nav-icon">⏰</span> تنبيهات المواد الخطرة
+    </div>
   </nav>
 
   <main class="main-content">
@@ -2171,6 +2180,132 @@
       </div>
     </section>
 
+    <!-- ============ القسم الثامن — إدارة المواد الخطرة (HSE Hazmat) ============ -->
+
+    <section class="calc-panel" id="panel-hse-hzm-dashboard">
+      <div class="calc-card">
+        <h2>القسم الثامن — لوحة معلومات المواد الخطرة</h2>
+        <div class="toolbar">
+          <input type="text" id="hse-hzm-dash-project" placeholder="معرّف المشروع (اختياري - اتركه فارغاً لعرض كل المشاريع)">
+          <button class="btn btn-outline" id="hse-hzm-btn-load-dashboard">تحميل</button>
+        </div>
+        <div class="result-cards" id="hse-hzm-dash-cards"></div>
+        <div class="pm-grid">
+          <div>
+            <h3>توزيع المواد حسب تصنيف الخطر (GHS)</h3>
+            <div id="hse-hzm-chart-hazard-class" class="pm-bars"></div>
+          </div>
+          <div>
+            <h3>أهم التنبيهات (مخزون منخفض / مراجعة SDS)</h3>
+            <div id="hse-hzm-dash-alerts" class="pm-activity-log"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="calc-panel" id="panel-hse-hzm-items">
+      <div class="calc-card">
+        <h2>القسم الثامن — المواد الخطرة وبطاقات بيانات السلامة (SDS)</h2>
+
+        <div id="hse-hzm-item-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-hzm-item-search" placeholder="بحث بالاسم / الرمز / رقم CAS...">
+            <select id="hse-hzm-item-filter-class"><option value="">كل التصنيفات</option></select>
+            <select id="hse-hzm-item-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-hzm-item-btn-new">+ مادة خطرة جديدة</button>
+          </div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-hzm-item-table">
+              <thead><tr><th>الرمز</th><th>الاسم</th><th>تصنيف الخطر</th><th>الرصيد الحالي</th><th>حالة المخزون</th><th>حالة SDS</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="hse-hzm-item-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-hzm-item-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-hzm-item-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <h3 id="hse-hzm-item-form-title">مادة خطرة جديدة</h3>
+          <div class="form-grid" id="hse-hzm-item-form">
+            <div class="field"><label>اسم المادة *</label><input type="text" id="hse-hzm-item-f-name"></div>
+            <div class="field"><label>رقم CAS</label><input type="text" id="hse-hzm-item-f-cas-number"></div>
+            <div class="field"><label>تصنيف الخطر (GHS) *</label><select id="hse-hzm-item-f-hazardclass"></select></div>
+            <div class="field"><label>وحدة القياس *</label><select id="hse-hzm-item-f-unit"></select></div>
+            <div class="field"><label>الحد الأدنى للمخزون</label><input type="number" id="hse-hzm-item-f-min-stock-level" min="0" step="0.01"></div>
+            <div class="field"><label>تاريخ انتهاء صلاحية المادة</label><input type="date" id="hse-hzm-item-f-expiry-date"></div>
+            <div class="field" id="hse-hzm-item-f-opening-quantity-row"><label>الرصيد الافتتاحي</label><input type="number" id="hse-hzm-item-f-opening-quantity" min="0" step="0.01"></div>
+            <div class="field"><label>معرّف المشروع (اختياري)</label><input type="text" id="hse-hzm-item-f-project-id"></div>
+
+            <div class="field field-full"><h4>بطاقة بيانات السلامة (SDS)</h4></div>
+            <div class="field"><label>رقم SDS *</label><input type="text" id="hse-hzm-item-f-sds-number"></div>
+            <div class="field"><label>تاريخ إصدار SDS *</label><input type="date" id="hse-hzm-item-f-sds-issue-date"></div>
+            <div class="field"><label>جهة إصدار SDS *</label><input type="text" id="hse-hzm-item-f-sds-issuer"></div>
+            <div class="field"><label>تاريخ المراجعة الدورية القادمة</label><input type="date" id="hse-hzm-item-f-sds-review-date"></div>
+
+            <div class="field field-full"><h4>التخزين والنقل</h4></div>
+            <div class="field"><label>شرط التخزين *</label><select id="hse-hzm-item-f-storage"></select></div>
+            <div class="field"><label>موقع التخزين</label><input type="text" id="hse-hzm-item-f-storage-location"></div>
+            <div class="field"><label>طريقة النقل</label><select id="hse-hzm-item-f-transport"></select></div>
+            <div class="field field-full"><label>مواد غير متوافقة (يجب عدم تخزينها معها)</label><textarea id="hse-hzm-item-f-incompatible-materials" rows="2"></textarea></div>
+
+            <div class="field field-full"><h4>الاستخدام والوقاية والطوارئ</h4></div>
+            <div class="field field-full"><label>تعليمات الاستخدام</label><textarea id="hse-hzm-item-f-usage-instructions" rows="2"></textarea></div>
+            <div class="field field-full"><label>معدات الوقاية الشخصية المطلوبة</label><textarea id="hse-hzm-item-f-required-ppe-notes" rows="2"></textarea></div>
+            <div class="field field-full"><label>إجراءات الطوارئ</label><textarea id="hse-hzm-item-f-emergency-procedures" rows="2"></textarea></div>
+            <div class="field field-full"><label>الإسعافات الأولية</label><textarea id="hse-hzm-item-f-first-aid-measures" rows="2"></textarea></div>
+            <div class="field field-full"><label>الاستجابة في حالة الانسكاب/التسرب</label><textarea id="hse-hzm-item-f-spill-response" rows="2"></textarea></div>
+            <div class="field field-full"><label>إجراءات مكافحة الحريق</label><textarea id="hse-hzm-item-f-fire-fighting-measures" rows="2"></textarea></div>
+            <div class="field field-full"><label>تعليمات التخلص الآمن</label><textarea id="hse-hzm-item-f-disposal-instructions" rows="2"></textarea></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-hzm-item-btn-save">حفظ المادة الخطرة</button></div>
+          <div id="hse-hzm-item-form-alert"></div>
+        </div>
+
+        <div id="hse-hzm-item-detail-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-hzm-item-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-hzm-item-detail-content"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="calc-panel" id="panel-hse-hzm-alerts">
+      <div class="calc-card">
+        <h2>القسم الثامن — تنبيهات المواد الخطرة</h2>
+        <div class="toolbar">
+          <input type="text" id="hse-hzm-alerts-project" placeholder="معرّف المشروع (اختياري)">
+          <button class="btn btn-outline" id="hse-hzm-alerts-btn-load">تحميل</button>
+        </div>
+        <div id="hse-hzm-alerts-error"></div>
+
+        <h3>مراجعة بطاقات بيانات السلامة (SDS) خلال 60 يوم</h3>
+        <div class="table-wrap">
+          <table class="detail-table">
+            <thead><tr><th>الرمز</th><th>الاسم</th><th>تاريخ المراجعة القادم</th><th>الحالة</th></tr></thead>
+            <tbody id="hse-hzm-alerts-sds-tbody"></tbody>
+          </table>
+        </div>
+
+        <h3 style="margin-top:16px">مواد أقل من الحد الأدنى للمخزون</h3>
+        <div class="table-wrap">
+          <table class="detail-table">
+            <thead><tr><th>الرمز</th><th>الاسم</th><th>الرصيد الحالي</th><th>الحد الأدنى</th><th>الحالة</th></tr></thead>
+            <tbody id="hse-hzm-alerts-stock-tbody"></tbody>
+          </table>
+        </div>
+
+        <h3 style="margin-top:16px">مواد تقترب من انتهاء الصلاحية خلال 60 يوم</h3>
+        <div class="table-wrap">
+          <table class="detail-table">
+            <thead><tr><th>الرمز</th><th>الاسم</th><th>تاريخ الانتهاء</th><th>الأيام المتبقية</th></tr></thead>
+            <tbody id="hse-hzm-alerts-expiry-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -2259,5 +2394,6 @@
 <script src="js/hse.js"></script>
 <script src="js/hseEmergency.js"></script>
 <script src="js/hseTraining.js"></script>
+<script src="js/hseHazmat.js"></script>
 </body>
 </html>
