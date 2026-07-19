@@ -162,6 +162,15 @@
     <div class="nav-item" data-panel="hse-hzm-alerts">
       <span class="nav-icon">⏰</span> تنبيهات المواد الخطرة
     </div>
+    <div class="nav-item" data-panel="hse-fire-dashboard">
+      <span class="nav-icon">🧯</span> لوحة معلومات مكافحة الحريق
+    </div>
+    <div class="nav-item" data-panel="hse-fire-items">
+      <span class="nav-icon">🚒</span> معدات مكافحة الحريق
+    </div>
+    <div class="nav-item" data-panel="hse-fire-alerts">
+      <span class="nav-icon">⏱️</span> تنبيهات مكافحة الحريق
+    </div>
   </nav>
 
   <main class="main-content">
@@ -2306,6 +2315,149 @@
       </div>
     </section>
 
+    <section class="calc-panel" id="panel-hse-fire-dashboard">
+      <div class="calc-card">
+        <h2>القسم الثامن — لوحة معلومات معدات مكافحة الحريق</h2>
+        <div class="toolbar">
+          <input type="text" id="hse-fire-dash-project" placeholder="معرّف المشروع (اختياري - اتركه فارغاً لعرض كل المشاريع)">
+          <button class="btn btn-outline" id="hse-fire-btn-load-dashboard">تحميل</button>
+        </div>
+        <div class="result-cards" id="hse-fire-dash-cards"></div>
+        <div class="pm-grid">
+          <div>
+            <h3>توزيع المعدات حسب النوع</h3>
+            <div id="hse-fire-chart-type" class="pm-bars"></div>
+          </div>
+          <div>
+            <h3>أهم التنبيهات (فحص مستحق / أعطال مفتوحة)</h3>
+            <div id="hse-fire-dash-alerts" class="pm-activity-log"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="calc-panel" id="panel-hse-fire-items">
+      <div class="calc-card">
+        <h2>القسم الثامن — معدات مكافحة الحريق</h2>
+
+        <div id="hse-fire-item-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-fire-item-search" placeholder="بحث بالرمز / الرقم التسلسلي / الموقع / الصانع...">
+            <select id="hse-fire-item-filter-type"><option value="">كل الأنواع</option></select>
+            <select id="hse-fire-item-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-fire-item-btn-new">+ معدة جديدة</button>
+          </div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-fire-item-table">
+              <thead><tr><th>الرمز</th><th>النوع</th><th>الموقع</th><th>الفحص القادم</th><th>تاريخ الانتهاء</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="hse-fire-item-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-fire-item-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-fire-item-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <h3 id="hse-fire-item-form-title">معدة مكافحة حريق جديدة</h3>
+          <div class="form-grid" id="hse-fire-item-form">
+            <div class="field"><label>نوع المعدة *</label><select id="hse-fire-item-f-type"></select></div>
+            <div class="field"><label>دورية الفحص الدوري *</label><select id="hse-fire-item-f-frequency"></select></div>
+            <div class="field"><label>الصانع</label><input type="text" id="hse-fire-item-f-manufacturer"></div>
+            <div class="field"><label>الرقم التسلسلي</label><input type="text" id="hse-fire-item-f-serial-number"></div>
+            <div class="field"><label>تاريخ التركيب</label><input type="date" id="hse-fire-item-f-installation-date"></div>
+            <div class="field"><label>تاريخ آخر فحص</label><input type="date" id="hse-fire-item-f-last-inspection-date"></div>
+            <div class="field"><label>تاريخ الفحص القادم (اختياري - يُحسب تلقائياً)</label><input type="date" id="hse-fire-item-f-next-inspection-date"></div>
+            <div class="field"><label>تاريخ انتهاء الصلاحية / إعادة التعبئة</label><input type="date" id="hse-fire-item-f-expiry-date"></div>
+            <div class="field"><label>معرّف المشروع (اختياري)</label><input type="text" id="hse-fire-item-f-project-id"></div>
+
+            <div class="field field-full" id="hse-fire-item-f-extinguisher-fields" style="display:none">
+              <h4>خاص بطفايات الحريق</h4>
+              <div class="form-grid">
+                <div class="field"><label>نوع عامل الإطفاء *</label><select id="hse-fire-item-f-agent-type"></select></div>
+                <div class="field"><label>وزن/سعة الطفاية (كجم)</label><input type="number" id="hse-fire-item-f-weight-capacity-kg" min="0" step="0.1"></div>
+              </div>
+            </div>
+
+            <div class="field field-full" id="hse-fire-item-f-hose-sprinkler-fields" style="display:none">
+              <h4>خاص بخراطيم الإطفاء وأنظمة الرش الآلي</h4>
+              <div class="form-grid">
+                <div class="field"><label>ضغط التشغيل (بار)</label><input type="number" id="hse-fire-item-f-operating-pressure-bar" min="0" step="0.1"></div>
+                <div class="field"><label>طول الخرطوم (متر)</label><input type="number" id="hse-fire-item-f-hose-length-m" min="0" step="0.1"></div>
+              </div>
+            </div>
+
+            <div class="field field-full" id="hse-fire-item-f-alarm-fields" style="display:none">
+              <h4>خاص بأنظمة الإنذار وكاشفات الدخان</h4>
+              <div class="form-grid">
+                <div class="field"><label>نوع الكاشف</label><input type="text" id="hse-fire-item-f-detector-type"></div>
+                <div class="field"><label>منطقة التغطية</label><input type="text" id="hse-fire-item-f-coverage-zone"></div>
+              </div>
+            </div>
+
+            <div class="field field-full" id="hse-fire-item-f-exit-fields" style="display:none">
+              <h4>خاص بمخارج الطوارئ</h4>
+              <div class="form-grid">
+                <div class="field"><label>سعة المخرج (عدد الأشخاص)</label><input type="number" id="hse-fire-item-f-exit-capacity-persons" min="0"></div>
+                <div class="field"><label><input type="checkbox" id="hse-fire-item-f-exit-signage" style="width:auto"> لافتة المخرج مُضاءة</label></div>
+              </div>
+            </div>
+
+            <div class="field field-full"><h4>الموقع</h4></div>
+            <div class="field"><label>المبنى *</label><input type="text" id="hse-fire-item-f-location-building"></div>
+            <div class="field"><label>الطابق</label><input type="text" id="hse-fire-item-f-location-floor"></div>
+            <div class="field"><label>المنطقة</label><input type="text" id="hse-fire-item-f-location-zone"></div>
+            <div class="field field-full"><label>ملاحظات الموقع</label><textarea id="hse-fire-item-f-location-notes" rows="2"></textarea></div>
+            <div class="field field-full"><label>ملاحظات عامة</label><textarea id="hse-fire-item-f-notes" rows="2"></textarea></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-fire-item-btn-save">حفظ المعدة</button></div>
+          <div id="hse-fire-item-form-alert"></div>
+        </div>
+
+        <div id="hse-fire-item-detail-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-fire-item-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-fire-item-detail-content"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="calc-panel" id="panel-hse-fire-alerts">
+      <div class="calc-card">
+        <h2>القسم الثامن — تنبيهات معدات مكافحة الحريق</h2>
+        <div class="toolbar">
+          <input type="text" id="hse-fire-alerts-project" placeholder="معرّف المشروع (اختياري)">
+          <button class="btn btn-outline" id="hse-fire-alerts-btn-load">تحميل</button>
+        </div>
+        <div id="hse-fire-alerts-error"></div>
+
+        <h3>معدات تقترب من انتهاء الصلاحية / إعادة التعبئة خلال 60 يوم</h3>
+        <div class="table-wrap">
+          <table class="detail-table">
+            <thead><tr><th>الرمز</th><th>النوع</th><th>الموقع</th><th>تاريخ الانتهاء</th><th>الأيام المتبقية</th></tr></thead>
+            <tbody id="hse-fire-alerts-expiry-tbody"></tbody>
+          </table>
+        </div>
+
+        <h3 style="margin-top:16px">معدات مستحقة للفحص الدوري خلال 30 يوم</h3>
+        <div class="table-wrap">
+          <table class="detail-table">
+            <thead><tr><th>الرمز</th><th>النوع</th><th>الموقع</th><th>تاريخ الفحص القادم</th><th>الحالة</th></tr></thead>
+            <tbody id="hse-fire-alerts-due-tbody"></tbody>
+          </table>
+        </div>
+
+        <h3 style="margin-top:16px">أعطال مفتوحة</h3>
+        <div class="table-wrap">
+          <table class="detail-table">
+            <thead><tr><th>النوع</th><th>الموقع</th><th>نوع الصيانة</th><th>الوصف</th><th>الحالة</th></tr></thead>
+            <tbody id="hse-fire-alerts-faults-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -2394,6 +2546,7 @@
 <script src="js/hse.js"></script>
 <script src="js/hseEmergency.js"></script>
 <script src="js/hseTraining.js"></script>
-<script src="js/hseHazmat.js"></script>
+<script src="js/hseHazmat.frontend.js"></script>
+<script src="js/hseFireSafety.js"></script>
 </body>
 </html>
