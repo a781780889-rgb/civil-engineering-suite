@@ -40,6 +40,7 @@ const SEC = require('./utils/businessSecurity');
 const GOV = require('./utils/businessGovernance');
 const EQ = require('./utils/equipmentManagement');
 const EQR = require('./utils/equipmentReports');
+const EQI = require('./utils/equipmentIntelligence');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -2507,6 +2508,95 @@ const API_HANDLERS = {
       return { success: true, ...result };
     },
   },
+
+  // ===================== الجزء الرابع (4-ب): الذكاء الاصطناعي =====================
+  '/api/equipment/ai/status': {
+    GET: async () => ({ success: true, data: { available: EQI.isAIAvailable() } }),
+  },
+  '/api/equipment/ai/predict-failures': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQI.predictEquipmentFailures(query.equipmentId);
+    },
+  },
+  '/api/equipment/ai/predict-fleet-risk': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      return EQI.predictFleetFailureRisk({ projectId: query?.projectId || null });
+    },
+  },
+  '/api/equipment/ai/fuel-analysis': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQI.analyzeFuelConsumptionPatterns(query.equipmentId);
+    },
+  },
+  '/api/equipment/ai/suggest-maintenance-schedule': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQI.suggestPreventiveMaintenanceSchedule(query.equipmentId);
+    },
+  },
+  '/api/equipment/ai/efficiency-vs-peers': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQI.analyzeEquipmentEfficiencyVsPeers(query.equipmentId);
+    },
+  },
+  '/api/equipment/ai/suggest-allocation': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'ai', 'use');
+      return EQI.suggestFleetAllocation();
+    },
+  },
+  '/api/equipment/ai/estimate-future-cost': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQI.estimateFutureOperatingCost(query.equipmentId, { horizonMonths: query.horizonMonths ? Number(query.horizonMonths) : 3 });
+    },
+  },
+  '/api/equipment/ai/proactive-alerts': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      return EQI.generateProactiveEfficiencyAlerts({ efficiencyThresholdPercent: query?.threshold ? Number(query.threshold) : 60 });
+    },
+  },
+  '/api/equipment/ai/fleet-summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      return EQI.generateFleetAnalyticalSummary({ projectId: query?.projectId || null });
+    },
+  },
+  '/api/equipment/ai/ask': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'ai', 'use');
+      return EQI.askEquipmentAssistant(body.question, { equipmentId: body.equipmentId || null, projectId: body.projectId || null });
+    },
+  },
+
+  // ===================== الجزء الرابع (4-ب): التكامل =====================
+  '/api/equipment/integration/snapshot': {
+    GET: async (_body, query) => ({ success: true, data: EQI.equipmentIntegrationSnapshot({ projectId: query?.projectId || null }) }),
+  },
+  '/api/equipment/maintenance/critical-fault': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'equipment', 'maintenance');
+      return EQI.logCriticalFaultWithIntegration(body);
+    },
+  },
+
+  // ===================== الجزء الرابع (4-ب): الصلاحيات المتقدمة =====================
+  '/api/equipment/roles/seed': {
+    POST: async (_body, _query, req) => {
+      requirePermission(req, 'security', 'manage');
+      return EQI.ensureEquipmentRolesSeeded();
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -2569,5 +2659,14 @@ server.listen(PORT, () => {
     SEC.scheduleAutoBackup({ intervalHours: 24 });
   } catch (e) {
     console.error('⚠️  تعذّرت تهيئة وحدة الأمان (المستخدم الافتراضي/النسخ الاحتياطي التلقائي):', e.message);
+  }
+
+  // الجزء الرابع (4-ب) من القسم السابع: زرع أدوار قسم المعدات عند أول تشغيل
+  // (احتياطي: الأدوار أصلاً ضمن DEFAULT_ROLES في businessSecurity.js؛ هذا يضمن
+  // زرعها أيضاً في تنصيبات سابقة تملك ملف أدوار محفوظ لا يحتوي عليها بعد)
+  try {
+    EQI.ensureEquipmentRolesSeeded();
+  } catch (e) {
+    console.error('⚠️  تعذّرت تهيئة أدوار قسم إدارة المعدات:', e.message);
   }
 });
