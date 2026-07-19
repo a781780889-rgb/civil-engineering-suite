@@ -45,6 +45,7 @@ const HSE = require('./utils/hseManagement');
 const HSE_EMG = require('./utils/hseEmergency');
 const HSE_TRN = require('./utils/hseTraining');
 const HSE_HZM = require('./utils/hseHazmat');
+const HSE_FIRE = require('./utils/hseFireSafety');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -3253,6 +3254,119 @@ const API_HANDLERS = {
     GET: async (_body, query) => HSE_HZM.getExpiringMaterials({
       projectId: query?.projectId, withinDays: query?.withinDays,
     }),
+  },
+
+  // ===================== إدارة معدات مكافحة الحريق =====================
+
+  '/api/hse/fire/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        equipment_types: HSE_FIRE.EQUIPMENT_TYPES,
+        equipment_type_labels: HSE_FIRE.EQUIPMENT_TYPE_LABELS,
+        extinguisher_agent_types: HSE_FIRE.EXTINGUISHER_AGENT_TYPES,
+        extinguisher_agent_type_labels: HSE_FIRE.EXTINGUISHER_AGENT_TYPE_LABELS,
+        inspection_frequencies: HSE_FIRE.INSPECTION_FREQUENCIES,
+        inspection_frequency_labels: HSE_FIRE.INSPECTION_FREQUENCY_LABELS,
+        equipment_statuses: HSE_FIRE.EQUIPMENT_STATUSES,
+        equipment_status_labels: HSE_FIRE.EQUIPMENT_STATUS_LABELS,
+        inspection_results: HSE_FIRE.INSPECTION_RESULTS,
+        inspection_result_labels: HSE_FIRE.INSPECTION_RESULT_LABELS,
+        maintenance_types: HSE_FIRE.MAINTENANCE_TYPES,
+        maintenance_type_labels: HSE_FIRE.MAINTENANCE_TYPE_LABELS,
+        maintenance_statuses: HSE_FIRE.MAINTENANCE_STATUSES,
+        maintenance_status_labels: HSE_FIRE.MAINTENANCE_STATUS_LABELS,
+      },
+    }),
+  },
+
+  '/api/hse/fire/dashboard': {
+    GET: async (_body, query) => HSE_FIRE.getFireSafetyDashboard(query?.projectId || null),
+  },
+
+  // ----- معدات مكافحة الحريق -----
+  '/api/hse/fire/items': {
+    GET: async (_body, query) => HSE_FIRE.listFireEquipment({
+      projectId: query?.projectId, equipmentType: query?.equipmentType,
+      locationBuilding: query?.locationBuilding, status: query?.status, search: query?.search,
+    }),
+    POST: async (body) => HSE_FIRE.createFireEquipment(body),
+  },
+  '/api/hse/fire/items/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف المعدة (id) مطلوب');
+      return HSE_FIRE.getFireEquipment(query.id);
+    },
+  },
+  '/api/hse/fire/items/update': {
+    POST: async (body) => {
+      const { id, ...rest } = body;
+      if (!id) throw new Error('معرّف المعدة (id) مطلوب');
+      return HSE_FIRE.updateFireEquipment(id, rest);
+    },
+  },
+  '/api/hse/fire/items/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المعدة (id) مطلوب');
+      return HSE_FIRE.deleteFireEquipment(body.id);
+    },
+  },
+
+  // ----- سجل الفحص الدوري -----
+  '/api/hse/fire/inspections': {
+    GET: async (_body, query) => HSE_FIRE.listInspections({
+      itemId: query?.itemId, projectId: query?.projectId, result: query?.result,
+      dateFrom: query?.dateFrom, dateTo: query?.dateTo,
+    }),
+    POST: async (body) => HSE_FIRE.createInspection(body),
+  },
+  '/api/hse/fire/inspections/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف سجل الفحص (id) مطلوب');
+      return HSE_FIRE.deleteInspection(body.id);
+    },
+  },
+
+  // ----- سجل الصيانة/الأعطال -----
+  '/api/hse/fire/maintenance': {
+    GET: async (_body, query) => HSE_FIRE.listMaintenance({
+      itemId: query?.itemId, projectId: query?.projectId, status: query?.status, type: query?.type,
+    }),
+    POST: async (body) => HSE_FIRE.createMaintenance(body),
+  },
+  '/api/hse/fire/maintenance/update': {
+    POST: async (body) => {
+      const { id, ...rest } = body;
+      if (!id) throw new Error('معرّف سجل الصيانة (id) مطلوب');
+      return HSE_FIRE.updateMaintenance(id, rest);
+    },
+  },
+  '/api/hse/fire/maintenance/close': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف سجل الصيانة (id) مطلوب');
+      return HSE_FIRE.closeMaintenance(body.id, { resolution: body.resolution, closed_by: body.closed_by });
+    },
+  },
+  '/api/hse/fire/maintenance/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف سجل الصيانة (id) مطلوب');
+      return HSE_FIRE.deleteMaintenance(body.id);
+    },
+  },
+
+  // ----- تنبيهات -----
+  '/api/hse/fire/alerts/expiring-equipment': {
+    GET: async (_body, query) => HSE_FIRE.getExpiringEquipment({
+      projectId: query?.projectId, withinDays: query?.withinDays,
+    }),
+  },
+  '/api/hse/fire/alerts/due-inspection': {
+    GET: async (_body, query) => HSE_FIRE.getDueForInspection({
+      projectId: query?.projectId, withinDays: query?.withinDays,
+    }),
+  },
+  '/api/hse/fire/alerts/open-faults': {
+    GET: async (_body, query) => HSE_FIRE.getOpenFaults({ projectId: query?.projectId || null }),
   },
 };
 
