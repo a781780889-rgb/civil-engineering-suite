@@ -4,6 +4,7 @@
 // الجزء 1/4: البيانات الأساسية + إدارة التشغيل + إدارة الحجز + تتبع المعدات
 // الجزء 2/4: الوقود + الصيانة (الدورية والطارئة) + قطع الغيار + المشغلون
 // الجزء 3/4: إدارة التكاليف + إدارة الإنتاجية + مركز التنبيهات الموحّد
+// الجزء 4-أ/4: التقارير الاحترافية (10 تقارير + تصدير PDF/Excel/CSV/طباعة)
 // ============================================================
 
 const EQ_API = '/api/equipment';
@@ -1479,32 +1480,164 @@ function eqAlertSeverityTag(severity) {
 
 const EQ_ALERT_SEVERITY_LABELS = { critical: 'حرج', warning: 'تحذير', info: 'معلومة' };
 
-async function eqLoadAlertsCenter() {
-  const cardsEl = document.getElementById('eq-alerts-summary-cards');
-  const listEl = document.getElementById('eq-alerts-list');
+// ================================================================
+// الجزء الرابع (4-أ من 4-ب): تقارير المعدات
+// ================================================================
+
+const EQ_REPORT_COLUMNS = {
+  fleet_register: {
+    headers: ['#', 'الرمز', 'الاسم', 'الفئة', 'النوع', 'الحالة', 'الملكية', 'ساعات التشغيل', 'سعر الشراء'],
+    keys: ['seq', 'code', 'name', 'category', 'type', 'status', 'ownership', 'total_operating_hours', 'purchase_price'],
+  },
+  operations: {
+    headers: ['#', 'المعدة', 'المشروع', 'البداية', 'النهاية', 'المدة (ساعة)'],
+    keys: ['seq', 'equipment_name', 'project_id', 'started_at', 'ended_at', 'duration_hours'],
+  },
+  maintenance: {
+    headers: ['#', 'المعدة', 'النوع', 'الخطورة', 'البداية', 'الانتهاء', 'ساعات التوقف', 'التكلفة الإجمالية'],
+    keys: ['seq', 'equipment_id', 'maintenance_type', 'severity', 'started_at', 'completed_at', 'downtime_hours', 'total_cost'],
+  },
+  fuel: {
+    headers: ['#', 'المعدة', 'نوع الوقود', 'الكمية', 'سعر الوحدة', 'التكلفة', 'تاريخ التعبئة'],
+    keys: ['seq', 'equipment_id', 'fuel_type', 'quantity', 'unit_price', 'cost', 'filled_at'],
+  },
+  faults: {
+    headers: ['#', 'المعدة', 'الوصف', 'الخطورة', 'البداية', 'ساعات التوقف', 'تكلفة الإصلاح'],
+    keys: ['seq', 'equipment_id', 'fault_description', 'severity', 'started_at', 'downtime_hours', 'repair_cost'],
+  },
+  productivity: {
+    headers: ['#', 'الرمز', 'الاسم', 'ساعات التشغيل', 'نسبة الاستغلال %', 'كفاءة التشغيل %', 'معدل الأعطال/100س'],
+    keys: ['seq', 'equipment_code', 'equipment_name', 'operating_hours', 'utilization_rate_percent', 'operating_efficiency_percent', 'fault_rate_per_100h'],
+  },
+  costs: {
+    headers: ['#', 'الرمز', 'الاسم', 'التكلفة الإجمالية'],
+    keys: ['seq', 'equipment_code', 'equipment_name', 'total_cost'],
+  },
+  depreciation: {
+    headers: ['#', 'الرمز', 'الاسم', 'سعر الشراء', 'العمر (سنة)', 'الإهلاك السنوي', 'الإهلاك المتراكم', 'صافي القيمة الدفترية'],
+    keys: ['seq', 'equipment_code', 'equipment_name', 'purchase_price', 'age_years', 'annual_depreciation', 'accumulated_depreciation', 'net_book_value'],
+  },
+  usage_by_project: {
+    headers: ['#', 'الرمز', 'الاسم', 'النوع', 'الحالة', 'ساعات التشغيل', 'التكلفة الإجمالية'],
+    keys: ['seq', 'equipment_code', 'equipment_name', 'type', 'status', 'operating_hours', 'total_cost'],
+  },
+};
+
+let eqLastReport = null;
+
+document.querySelector('[data-panel="eq-reports"]')?.addEventListener('click', async () => {
+  await eqPopulateEquipmentSelect(document.getElementById('eq-rep-equipment'), { placeholder: 'كل المعدات' });
+});
+
+function eqReportRequestFilters() {
+  return {
+    equipmentId: document.getElementById('eq-rep-equipment').value || null,
+    projectId: document.getElementById('eq-rep-project').value || null,
+    dateFrom: document.getElementById('eq-rep-from').value || null,
+    dateTo: document.getElementById('eq-rep-to').value || null,
+  };
+}
+
+function eqReportEndpointFor(reportType) {
+  return {
+    fleet_register: '/reports/fleet-register',
+    operations: '/reports/operations',
+    maintenance: '/reports/maintenance',
+    fuel: '/reports/fuel',
+    faults: '/reports/faults',
+    productivity: '/reports/productivity',
+    costs: '/reports/costs',
+    depreciation: '/reports/depreciation',
+    usage_by_project: '/reports/usage-by-project',
+    executive_summary: '/reports/executive-summary',
+  }[reportType];
+}
+
+function eqExecutiveSummaryCardsHTML(d) {
+  return `
+    <div class="result-card"><div class="label">إجمالي المعدات</div><div class="value">${d.fleet_overview.total_equipment}</div></div>
+    <div class="result-card"><div class="label">تعمل</div><div class="value">${d.fleet_overview.working}</div></div>
+    <div class="result-card"><div class="label">متوقفة</div><div class="value">${d.fleet_overview.idle}</div></div>
+    <div class="result-card"><div class="label">تحت الصيانة</div><div class="value">${d.fleet_overview.under_maintenance}</div></div>
+    <div class="result-card"><div class="label">محجوزة</div><div class="value">${d.fleet_overview.reserved}</div></div>
+    <div class="result-card"><div class="label">متاحة</div><div class="value">${d.fleet_overview.available}</div></div>
+    <div class="result-card"><div class="label">التكلفة الإجمالية</div><div class="value">${d.financials.total_cost}</div></div>
+    <div class="result-card"><div class="label">تكلفة الصيانة</div><div class="value">${d.financials.maintenance_cost}</div></div>
+    <div class="result-card"><div class="label">تكلفة الوقود</div><div class="value">${d.financials.fuel_cost}</div></div>
+    <div class="result-card"><div class="label">إجمالي الأعطال</div><div class="value">${d.reliability.total_faults}</div></div>
+    <div class="result-card"><div class="label">ساعات التوقف</div><div class="value">${d.reliability.total_downtime_hours}</div></div>
+    <div class="result-card"><div class="label">متوسط الكفاءة %</div><div class="value">${d.productivity.average_efficiency_percent}</div></div>
+    <div class="result-card"><div class="label">تنبيهات نشطة</div><div class="value">${d.active_alerts_count}</div></div>
+  `;
+}
+
+async function eqRunReport() {
+  const alertEl = document.getElementById('eq-rep-alert');
+  const titleEl = document.getElementById('eq-rep-result-title');
+  const cardsEl = document.getElementById('eq-rep-summary-cards');
+  const thead = document.getElementById('eq-rep-thead');
+  const tbody = document.getElementById('eq-rep-tbody');
+  alertEl.innerHTML = '';
   try {
-    const withinDays = document.getElementById('eq-alerts-within-days').value || 14;
-    const res = await eqFetch('/alerts/center', { query: { withinDays } });
+    const reportType = document.getElementById('eq-rep-type').value;
+    const filters = eqReportRequestFilters();
+    if (reportType === 'usage_by_project' && !filters.projectId) {
+      throw new Error('يرجى إدخال معرّف المشروع لتقرير الاستخدام حسب المشروع');
+    }
+    const endpoint = eqReportEndpointFor(reportType);
+    const res = await eqFetch(endpoint, { query: { ...filters, maintenanceType: null, category: null, type: null, status: null, severity: null } });
     const d = res.data;
-    cardsEl.innerHTML = `
-      <div class="result-card"><div class="label">إجمالي التنبيهات</div><div class="value">${d.count}</div></div>
-      <div class="result-card"><div class="label">حرجة</div><div class="value">${d.by_severity.critical || 0}</div></div>
-      <div class="result-card"><div class="label">تحذير</div><div class="value">${d.by_severity.warning || 0}</div></div>
-      <div class="result-card"><div class="label">معلومة</div><div class="value">${d.by_severity.info || 0}</div></div>
-    `;
-    if (!d.alerts.length) {
-      listEl.innerHTML = `<div class="pm-empty-state">لا توجد تنبيهات حالياً</div>`;
+    eqLastReport = { reportType, filters };
+
+    if (reportType === 'executive_summary') {
+      titleEl.textContent = 'التقرير التنفيذي';
+      cardsEl.innerHTML = eqExecutiveSummaryCardsHTML(d);
+      thead.innerHTML = `<tr><th>الرمز</th><th>الاسم</th><th>التكلفة</th></tr>`;
+      tbody.innerHTML = (d.financials.most_costly_equipment || []).map(e => `
+        <tr><td>${e.equipment_code}</td><td>${e.equipment_name}</td><td>${e.total_cost}</td></tr>
+      `).join('') || `<tr><td colspan="3" class="pm-empty-state">لا توجد بيانات</td></tr>`;
       return;
     }
-    listEl.innerHTML = d.alerts.map(a => `
-      <div class="pm-activity-item">
-        <span class="tag ${eqAlertSeverityTag(a.severity)}">${EQ_ALERT_SEVERITY_LABELS[a.severity] || a.severity}</span>
-        <span>${a.message}</span>
-        ${a.equipment_code ? `<span class="ts">(${a.equipment_code})</span>` : ''}
-        ${a.operator_name ? `<span class="ts">(${a.operator_name})</span>` : ''}
-      </div>
-    `).join('');
+
+    const cols = EQ_REPORT_COLUMNS[reportType];
+    titleEl.textContent = `نتيجة التقرير (${(d.rows || []).length} سجل)`;
+    cardsEl.innerHTML = '';
+    thead.innerHTML = `<tr>${cols.headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+    if (!d.rows || !d.rows.length) {
+      tbody.innerHTML = `<tr><td colspan="${cols.headers.length}" class="pm-empty-state">لا توجد بيانات مطابقة</td></tr>`;
+    } else {
+      tbody.innerHTML = d.rows.map(row => `
+        <tr>${cols.keys.map(k => `<td>${row[k] ?? '-'}</td>`).join('')}</tr>
+      `).join('');
+    }
   } catch (e) {
-    eqAlert(cardsEl, 'error', e.message);
+    eqAlert(alertEl, 'error', e.message);
   }
 }
+
+document.getElementById('eq-btn-run-report')?.addEventListener('click', eqRunReport);
+
+async function eqExportReport(exportPath) {
+  const alertEl = document.getElementById('eq-rep-alert');
+  try {
+    if (!eqLastReport) throw new Error('يرجى عرض التقرير أولاً قبل التصدير');
+    const projectName = document.getElementById('eq-rep-project-name').value || null;
+    const body = {
+      reportType: eqLastReport.reportType,
+      ...eqLastReport.filters,
+      meta: { projectName },
+    };
+    const res = await eqFetch(exportPath, { method: 'POST', body });
+    if (res.url) {
+      window.open(res.url, '_blank');
+      eqAlert(alertEl, 'success', 'تم إنشاء ملف التقرير — فُتح في نافذة جديدة');
+    }
+  } catch (e) {
+    eqAlert(alertEl, 'error', e.message);
+  }
+}
+
+document.getElementById('eq-btn-export-pdf')?.addEventListener('click', () => eqExportReport('/reports/export/pdf'));
+document.getElementById('eq-btn-export-excel')?.addEventListener('click', () => eqExportReport('/reports/export/excel'));
+document.getElementById('eq-btn-export-csv')?.addEventListener('click', () => eqExportReport('/reports/export/csv'));
+document.getElementById('eq-btn-export-print')?.addEventListener('click', () => eqExportReport('/reports/export/print'));
