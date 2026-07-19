@@ -2189,6 +2189,163 @@ const API_HANDLERS = {
       return EQ.getEquipmentTrackingHistory(query.equipmentId);
     },
   },
+
+  // ===================================================================
+  // ===== القسم السابع (الجزء 2/4) - إدارة المعدات: الوقود، الصيانة
+  // ===== (الدورية والطارئة)، قطع الغيار، إدارة المشغلين
+  // ===================================================================
+
+  '/api/equipment/reference-data-p2': {
+    GET: async () => ({
+      success: true,
+      data: {
+        maintenance_frequencies: EQ.MAINTENANCE_FREQUENCIES,
+        maintenance_frequency_labels: EQ.MAINTENANCE_FREQUENCY_LABELS,
+        maintenance_types: EQ.MAINTENANCE_TYPES,
+        maintenance_type_labels: EQ.MAINTENANCE_TYPE_LABELS,
+        maintenance_severities: EQ.MAINTENANCE_SEVERITIES,
+        maintenance_severity_labels: EQ.MAINTENANCE_SEVERITY_LABELS,
+        maintenance_statuses: EQ.MAINTENANCE_STATUSES,
+        maintenance_status_labels: EQ.MAINTENANCE_STATUS_LABELS,
+        license_types: EQ.LICENSE_TYPES,
+        license_type_labels: EQ.LICENSE_TYPE_LABELS,
+      },
+    }),
+  },
+
+  // ----- إدارة الوقود -----
+  '/api/equipment/fuel/log': {
+    POST: async (body) => EQ.logFuelEntry(body),
+  },
+  '/api/equipment/fuel/logs': {
+    GET: async (_body, query) => EQ.listFuelLogs({
+      equipmentId: query?.equipmentId, projectId: query?.projectId,
+      dateFrom: query?.dateFrom, dateTo: query?.dateTo,
+    }),
+  },
+  '/api/equipment/fuel/stats': {
+    GET: async (_body, query) => {
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQ.getFuelStats(query.equipmentId, { period: query.period || 'all' });
+    },
+  },
+
+  // ----- إدارة الصيانة: الجدولة الدورية -----
+  '/api/equipment/maintenance/schedules': {
+    GET: async (_body, query) => EQ.listMaintenanceSchedules({ equipmentId: query?.equipmentId }),
+    POST: async (body) => EQ.createMaintenanceSchedule(body),
+  },
+  '/api/equipment/maintenance/schedules/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف جدول الصيانة (id) مطلوب');
+      const { id, ...rest } = body;
+      return EQ.updateMaintenanceSchedule(id, rest);
+    },
+  },
+  '/api/equipment/maintenance/schedules/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف جدول الصيانة (id) مطلوب');
+      return EQ.deleteMaintenanceSchedule(body.id);
+    },
+  },
+  '/api/equipment/maintenance/alerts': {
+    GET: async (_body, query) => EQ.getUpcomingMaintenanceAlerts({ withinDays: query?.withinDays || 14 }),
+  },
+
+  // ----- إدارة الصيانة: السجلات (دورية منفذة / طارئة) -----
+  '/api/equipment/maintenance/records': {
+    GET: async (_body, query) => EQ.listMaintenanceRecords({
+      equipmentId: query?.equipmentId, projectId: query?.projectId,
+      maintenanceType: query?.maintenanceType, status: query?.status,
+    }),
+    POST: async (body) => EQ.createMaintenanceRecord(body),
+  },
+  '/api/equipment/maintenance/records/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف سجل الصيانة (id) مطلوب');
+      const { id, ...rest } = body;
+      return EQ.updateMaintenanceRecord(id, rest);
+    },
+  },
+  '/api/equipment/maintenance/stats': {
+    GET: async (_body, query) => {
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQ.getMaintenanceStats(query.equipmentId);
+    },
+  },
+
+  // ----- إدارة قطع الغيار -----
+  '/api/equipment/spare-parts': {
+    GET: async (_body, query) => EQ.listSpareParts({
+      equipmentType: query?.equipmentType, lowStockOnly: query?.lowStockOnly, search: query?.search,
+    }),
+    POST: async (body) => EQ.createSparePart(body),
+  },
+  '/api/equipment/spare-parts/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف قطعة الغيار (id) مطلوب');
+      const { id, ...rest } = body;
+      return EQ.updateSparePart(id, rest);
+    },
+  },
+  '/api/equipment/spare-parts/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف قطعة الغيار (id) مطلوب');
+      return EQ.deleteSparePart(body.id);
+    },
+  },
+  '/api/equipment/spare-parts/restock': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف قطعة الغيار (id) مطلوب');
+      return EQ.restockSparePart(body.id, body.quantity);
+    },
+  },
+  '/api/equipment/spare-parts/low-stock': {
+    GET: async () => EQ.getLowStockParts(),
+  },
+
+  // ----- إدارة المشغلين -----
+  '/api/equipment/operators': {
+    GET: async (_body, query) => EQ.listOperators({
+      equipmentType: query?.equipmentType, licenseExpiringWithinDays: query?.licenseExpiringWithinDays, search: query?.search,
+    }),
+    POST: async (body) => EQ.createOperator(body),
+  },
+  '/api/equipment/operators/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف المشغل (id) مطلوب');
+      return EQ.getOperator(query.id);
+    },
+  },
+  '/api/equipment/operators/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المشغل (id) مطلوب');
+      const { id, ...rest } = body;
+      return EQ.updateOperator(id, rest);
+    },
+  },
+  '/api/equipment/operators/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المشغل (id) مطلوب');
+      return EQ.deleteOperator(body.id);
+    },
+  },
+  '/api/equipment/operators/violations/add': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المشغل (id) مطلوب');
+      const { id, ...rest } = body;
+      return EQ.addOperatorViolation(id, rest);
+    },
+  },
+  '/api/equipment/operators/rate': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المشغل (id) مطلوب');
+      return EQ.rateOperatorPerformance(body.id, body.rating);
+    },
+  },
+  '/api/equipment/operators/license-alerts': {
+    GET: async (_body, query) => EQ.getOperatorLicenseAlerts({ withinDays: query?.withinDays || 30 }),
+  },
 };
 
 const server = http.createServer(async (req, res) => {
