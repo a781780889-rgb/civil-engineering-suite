@@ -33,6 +33,7 @@ const PriceLib = require('./utils/priceLibrary');
 const Reports = require('./utils/boqReports');
 const PM = require('./utils/projectManagement');
 const SCH = require('./utils/scheduling');
+const BIZ = require('./utils/businessManagement');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -1453,6 +1454,152 @@ const API_HANDLERS = {
       if (!body.question) throw new Error('يجب إرسال question');
       return SCH.aiAnswerScheduleQuestion(body.scheduleId, body.question);
     },
+  },
+
+  // ===================================================================
+  // القسم السادس - إدارة الأعمال - الجزء الأول: العملاء (CRM) والموردون
+  // ===================================================================
+  '/api/biz/clients/dashboard': {
+    GET: async () => BIZ.getClientsDashboard(),
+  },
+  '/api/biz/clients': {
+    GET: async (_body, query) => BIZ.listClients({
+      status: query?.status || null,
+      type: query?.type || null,
+      q: query?.q || null,
+      sortBy: query?.sortBy || 'created_at',
+      sortDir: query?.sortDir || 'desc',
+      page: query?.page ? Number(query.page) : 1,
+      pageSize: query?.pageSize ? Number(query.pageSize) : 50,
+    }),
+    POST: async (body) => BIZ.createClient(body),
+  },
+  '/api/biz/clients/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف العميل (id) مطلوب');
+      return BIZ.getClient(query.id);
+    },
+  },
+  '/api/biz/clients/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف العميل (id) مطلوب');
+      const { id, ...rest } = body;
+      return BIZ.updateClient(id, rest);
+    },
+  },
+  '/api/biz/clients/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف العميل (id) مطلوب');
+      return BIZ.deleteClient(body.id);
+    },
+  },
+  '/api/biz/clients/meetings': {
+    POST: async (body) => {
+      if (!body.clientId) throw new Error('معرّف العميل (clientId) مطلوب');
+      return BIZ.addClientMeeting(body.clientId, body);
+    },
+  },
+  '/api/biz/clients/communications': {
+    POST: async (body) => {
+      if (!body.clientId) throw new Error('معرّف العميل (clientId) مطلوب');
+      return BIZ.addClientCommunication(body.clientId, body);
+    },
+  },
+  '/api/biz/clients/notes': {
+    POST: async (body) => {
+      if (!body.clientId) throw new Error('معرّف العميل (clientId) مطلوب');
+      return BIZ.addClientNote(body.clientId, body);
+    },
+  },
+  '/api/biz/clients/attachments': {
+    POST: async (body) => {
+      if (!body.clientId) throw new Error('معرّف العميل (clientId) مطلوب');
+      return BIZ.addClientAttachment(body.clientId, body);
+    },
+  },
+  '/api/biz/clients/activity-log': {
+    GET: async (_body, query) => {
+      if (!query?.clientId) throw new Error('معرّف العميل (clientId) مطلوب');
+      return BIZ.getClientActivityLog(query.clientId);
+    },
+  },
+
+  '/api/biz/suppliers/dashboard': {
+    GET: async () => BIZ.getSuppliersDashboard(),
+  },
+  '/api/biz/suppliers': {
+    GET: async (_body, query) => BIZ.listSuppliers({
+      category: query?.category || null,
+      q: query?.q || null,
+      sortBy: query?.sortBy || 'created_at',
+      sortDir: query?.sortDir || 'desc',
+      page: query?.page ? Number(query.page) : 1,
+      pageSize: query?.pageSize ? Number(query.pageSize) : 50,
+    }),
+    POST: async (body) => BIZ.createSupplier(body),
+  },
+  '/api/biz/suppliers/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف المورد (id) مطلوب');
+      return BIZ.getSupplier(query.id);
+    },
+  },
+  '/api/biz/suppliers/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المورد (id) مطلوب');
+      const { id, ...rest } = body;
+      return BIZ.updateSupplier(id, rest);
+    },
+  },
+  '/api/biz/suppliers/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المورد (id) مطلوب');
+      return BIZ.deleteSupplier(body.id);
+    },
+  },
+  '/api/biz/suppliers/products': {
+    POST: async (body) => {
+      if (!body.supplierId) throw new Error('معرّف المورد (supplierId) مطلوب');
+      return BIZ.addSupplierProduct(body.supplierId, body);
+    },
+  },
+  '/api/biz/suppliers/products/price': {
+    POST: async (body) => {
+      if (!body.supplierId || !body.productId) throw new Error('معرّف المورد (supplierId) ومعرّف المنتج (productId) مطلوبان');
+      return BIZ.updateSupplierProductPrice(body.supplierId, body.productId, body.price);
+    },
+  },
+  '/api/biz/suppliers/payments': {
+    POST: async (body) => {
+      if (!body.supplierId) throw new Error('معرّف المورد (supplierId) مطلوب');
+      return BIZ.addSupplierPayment(body.supplierId, body);
+    },
+  },
+  '/api/biz/suppliers/deliveries': {
+    POST: async (body) => {
+      if (!body.supplierId) throw new Error('معرّف المورد (supplierId) مطلوب');
+      return BIZ.addSupplierDelivery(body.supplierId, body);
+    },
+  },
+  '/api/biz/suppliers/quality-score': {
+    POST: async (body) => {
+      if (!body.supplierId) throw new Error('معرّف المورد (supplierId) مطلوب');
+      return BIZ.setSupplierQualityScore(body.supplierId, body.score);
+    },
+  },
+  '/api/biz/suppliers/activity-log': {
+    GET: async (_body, query) => {
+      if (!query?.supplierId) throw new Error('معرّف المورد (supplierId) مطلوب');
+      return BIZ.getSupplierActivityLog(query.supplierId);
+    },
+  },
+
+  '/api/biz/audit-log': {
+    GET: async (_body, query) => BIZ.getAuditLog({
+      module: query?.module || null,
+      page: query?.page ? Number(query.page) : 1,
+      pageSize: query?.pageSize ? Number(query.pageSize) : 100,
+    }),
   },
 };
 
