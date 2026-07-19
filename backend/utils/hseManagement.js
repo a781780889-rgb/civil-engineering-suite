@@ -3,7 +3,8 @@
  * =====================================================================================
  * الجزء الأول (1/4): البنية الأساسية + لوحة التحكم + إدارة خطط السلامة +
  *                     إدارة المخاطر (Risk Assessment) + إدارة الحوادث والإصابات. [منجز]
- * الجزء الثاني (2/4): إدارة التفتيشات + تصاريح العمل + معدات الوقاية الشخصية (PPE).
+ * الجزء الثاني (2/4): إدارة التفتيشات + تصاريح العمل (Permit to Work) +
+ *                      معدات الوقاية الشخصية (PPE). [منجز]
  * الجزء الثالث (3/4): إدارة الطوارئ + التدريب + المواد الخطرة + المخالفات +
  *                      معدات مكافحة الحريق.
  * الجزء الرابع (4/4): التنبيهات الذكية + التقارير + الرسوم البيانية + الذكاء
@@ -47,6 +48,11 @@ function ensureStore() {
       risks: {},             // { id: riskRecord }               (سجل تقييم المخاطر)
       riskControlActions: {},// { id: controlActionRecord }      (متابعة تنفيذ إجراءات التحكم)
       incidents: {},         // { id: incidentRecord }           (الحوادث والإصابات)
+      inspections: {},       // { id: inspectionRecord }         (جولات التفتيش)
+      inspectionFindings: {},// { id: findingRecord }            (المخالفات/الملاحظات ضمن كل تفتيش)
+      permits: {},           // { id: permitRecord }             (تصاريح العمل - Permit to Work)
+      ppeItems: {},          // { id: ppeItemRecord }            (سجل معدات الوقاية الشخصية لكل موظف)
+      ppeStock: {},          // { id: ppeStockRecord }           (مخزون/كتالوج أنواع معدات الوقاية)
       auditLog: [],
       seq: 0,
     };
@@ -63,7 +69,10 @@ function loadStore() {
     throw new Error('تعذر قراءة قاعدة بيانات إدارة السلامة المهنية: ' + e.message);
   }
   let migrated = false;
-  for (const key of ['safetyPlans', 'safetyPlanVersions', 'risks', 'riskControlActions', 'incidents']) {
+  for (const key of [
+    'safetyPlans', 'safetyPlanVersions', 'risks', 'riskControlActions', 'incidents',
+    'inspections', 'inspectionFindings', 'permits', 'ppeItems', 'ppeStock',
+  ]) {
     if (!store[key]) { store[key] = {}; migrated = true; }
   }
   if (!store.auditLog) { store.auditLog = []; migrated = true; }
@@ -196,6 +205,106 @@ const HSE_ROLE_LABELS = {
   worker: 'العامل', client_viewer: 'العميل (عرض فقط)',
 };
 
+// ----- إدارة التفتيشات (Inspections) -----
+const INSPECTION_TYPES = [
+  'general_site', 'ppe_compliance', 'scaffolding', 'excavation', 'electrical',
+  'fire_safety', 'housekeeping', 'lifting_equipment', 'permit_to_work_audit', 'environmental', 'other',
+];
+const INSPECTION_TYPE_LABELS = {
+  general_site: 'تفتيش عام للموقع', ppe_compliance: 'الالتزام بمعدات الوقاية', scaffolding: 'السقالات',
+  excavation: 'أعمال الحفر', electrical: 'الأعمال الكهربائية', fire_safety: 'السلامة من الحريق',
+  housekeeping: 'نظافة وترتيب الموقع', lifting_equipment: 'معدات الرفع', permit_to_work_audit: 'تدقيق تصاريح العمل',
+  environmental: 'بيئي', other: 'أخرى',
+};
+
+const INSPECTION_STATUSES = ['scheduled', 'in_progress', 'completed', 'approved'];
+const INSPECTION_STATUS_LABELS = {
+  scheduled: 'مجدول', in_progress: 'قيد التنفيذ', completed: 'مكتمل', approved: 'معتمد',
+};
+
+// درجة تقييم كل بند بقائمة التحقق (Checklist)
+const CHECKLIST_ITEM_RESULTS = ['compliant', 'non_compliant', 'not_applicable'];
+const CHECKLIST_ITEM_RESULT_LABELS = {
+  compliant: 'مطابق', non_compliant: 'غير مطابق', not_applicable: 'لا ينطبق',
+};
+
+// درجة خطورة المخالفة المكتشفة أثناء التفتيش (تُستخدم أيضاً في سجل المخالفات المستقل بالجزء الثالث)
+const FINDING_SEVERITIES = ['minor', 'moderate', 'major', 'critical'];
+const FINDING_SEVERITY_LABELS = {
+  minor: 'بسيطة', moderate: 'متوسطة', major: 'كبيرة', critical: 'حرجة (توقف عمل)',
+};
+
+const FINDING_STATUSES = ['open', 'in_progress', 'closed', 'overdue', 'reinspection_required'];
+const FINDING_STATUS_LABELS = {
+  open: 'مفتوحة', in_progress: 'قيد المعالجة', closed: 'مغلقة',
+  overdue: 'متأخرة', reinspection_required: 'تتطلب إعادة تفتيش',
+};
+
+// ----- إدارة تصاريح العمل (Permit to Work) -----
+const PERMIT_TYPES = [
+  'working_at_height', 'confined_space', 'hot_work', 'electrical_work',
+  'excavation', 'lifting_operations', 'hazardous_materials', 'maintenance_work', 'general',
+];
+const PERMIT_TYPE_LABELS = {
+  working_at_height: 'العمل في الأماكن المرتفعة', confined_space: 'العمل في الأماكن المغلقة',
+  hot_work: 'أعمال اللحام والقطع (Hot Work)', electrical_work: 'الأعمال الكهربائية',
+  excavation: 'أعمال الحفر', lifting_operations: 'أعمال الرفع', hazardous_materials: 'العمل بالمواد الخطرة',
+  maintenance_work: 'أعمال الصيانة', general: 'تصريح عمل عام',
+};
+
+const PERMIT_STATUSES = ['draft', 'pending_approval', 'approved', 'active', 'suspended', 'closed', 'expired', 'rejected'];
+const PERMIT_STATUS_LABELS = {
+  draft: 'مسودة', pending_approval: 'بانتظار الموافقة', approved: 'معتمد (لم يبدأ)', active: 'ساري/نشط',
+  suspended: 'موقوف مؤقتاً', closed: 'مغلق', expired: 'منتهي الصلاحية', rejected: 'مرفوض',
+};
+
+// قائمة تحقق قياسية لمتطلبات السلامة قبل بدء العمل بموجب التصريح (تختلف حسب نوع التصريح)
+const PERMIT_STANDARD_PRECAUTIONS = {
+  working_at_height: ['فحص أحزمة/حبال السلامة', 'تأمين نقاط الربط (Anchor Points)', 'فحص السقالة والتصريح بسلامتها', 'وجود شبكة/حاجز وقاية من السقوط'],
+  confined_space: ['اختبار جودة الهواء (Gas Test)', 'توفير تهوية ميكانيكية', 'مراقب خارجي (Attendant) طوال مدة العمل', 'خطة إنقاذ جاهزة'],
+  hot_work: ['إزالة المواد القابلة للاشتعال ضمن نطاق 10 أمتار', 'توفير طفاية حريق مناسبة', 'مراقب حريق (Fire Watch)', 'ستارة لحام واقية'],
+  electrical_work: ['عزل مصدر الطاقة (Lockout/Tagout)', 'التحقق من انعدام الجهد', 'استخدام عدد ومعدات معزولة', 'وضع لافتات تحذيرية'],
+  excavation: ['فحص استقرار جدران الحفرة والدعم', 'تحديد مواقع الخدمات تحت الأرض', 'توفير سلالم خروج كل 8 أمتار', 'تسييج محيط الحفرة'],
+  lifting_operations: ['فحص شهادة سلامة الرافعة', 'التأكد من مؤهلات مشغل الرافعة', 'تحديد نطاق الرفع وإخلاء المنطقة', 'فحص معدات الرفع والسلاسل'],
+  hazardous_materials: ['توفر بطاقة بيانات السلامة (SDS)', 'معدات وقاية شخصية متخصصة', 'توفر معدات مكافحة الانسكاب', 'تهوية مناسبة لمكان العمل'],
+  maintenance_work: ['عزل وقفل المعدات (LOTO)', 'التأكد من إيقاف تشغيل الأجزاء المتحركة', 'وضع لافتات تحذيرية حول منطقة العمل'],
+  general: ['إحاطة السلامة (Toolbox Talk) قبل البدء', 'التأكد من ارتداء معدات الوقاية الأساسية'],
+};
+
+// ----- إدارة معدات الوقاية الشخصية (PPE) -----
+const PPE_TYPES = [
+  'helmet', 'safety_boots', 'gloves', 'safety_glasses', 'safety_harness',
+  'high_vis_vest', 'respirator', 'ear_protection', 'protective_clothing',
+];
+const PPE_TYPE_LABELS = {
+  helmet: 'خوذة', safety_boots: 'أحذية سلامة', gloves: 'قفازات', safety_glasses: 'نظارات واقية',
+  safety_harness: 'حزام أمان', high_vis_vest: 'سترة عاكسة', respirator: 'جهاز تنفس',
+  ear_protection: 'واقيات سمع', protective_clothing: 'ملابس حماية',
+};
+
+const PPE_CONDITIONS = ['new', 'good', 'worn', 'damaged', 'expired'];
+const PPE_CONDITION_LABELS = {
+  new: 'جديدة', good: 'جيدة', worn: 'مستهلكة (تحتاج متابعة)', damaged: 'تالفة', expired: 'منتهية الصلاحية',
+};
+
+const PPE_ITEM_STATUSES = ['issued', 'due_for_replacement', 'replaced', 'returned'];
+const PPE_ITEM_STATUS_LABELS = {
+  issued: 'مُسلَّمة وسارية', due_for_replacement: 'مستحقة الاستبدال', replaced: 'تم استبدالها', returned: 'تم إرجاعها',
+};
+
+// العمر الافتراضي القياسي لكل نوع معدة وقاية بالأيام (يُستخدم لحساب تاريخ الاستبدال المتوقع تلقائياً)
+const PPE_DEFAULT_LIFESPAN_DAYS = {
+  helmet: 1095,          // 3 سنوات
+  safety_boots: 365,     // سنة
+  gloves: 30,            // شهر (حسب الاستخدام)
+  safety_glasses: 365,
+  safety_harness: 730,   // سنتان
+  high_vis_vest: 180,
+  respirator: 180,
+  ear_protection: 180,
+  protective_clothing: 180,
+};
+
 // ===================== دوال مساعدة للتحقق =====================
 
 function validateSafetyPlanInput(body) {
@@ -227,6 +336,34 @@ function validateIncidentInput(body) {
   if (!body.occurred_at) throw new Error('تاريخ ووقت الحادث (occurred_at) مطلوب');
   if (!body.location || !String(body.location).trim()) throw new Error('موقع الحادث مطلوب');
   if (!body.description || !String(body.description).trim()) throw new Error('وصف الحادث مطلوب');
+}
+
+function validateInspectionInput(body) {
+  if (!body || typeof body !== 'object') throw new Error('بيانات جولة التفتيش مطلوبة');
+  if (!body.type || !INSPECTION_TYPES.includes(body.type)) throw new Error(`نوع التفتيش غير صحيح: ${body.type}`);
+  if (!body.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+  if (!body.scheduled_date) throw new Error('تاريخ جولة التفتيش (scheduled_date) مطلوب');
+  if (!body.inspector_name || !String(body.inspector_name).trim()) throw new Error('اسم المفتش (inspector_name) مطلوب');
+}
+
+function validatePermitInput(body) {
+  if (!body || typeof body !== 'object') throw new Error('بيانات تصريح العمل مطلوبة');
+  if (!body.type || !PERMIT_TYPES.includes(body.type)) throw new Error(`نوع التصريح غير صحيح: ${body.type}`);
+  if (!body.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+  if (!body.location || !String(body.location).trim()) throw new Error('موقع العمل مطلوب');
+  if (!body.work_description || !String(body.work_description).trim()) throw new Error('وصف العمل مطلوب');
+  if (!body.start_date) throw new Error('تاريخ بدء التصريح (start_date) مطلوب');
+  if (!body.end_date) throw new Error('تاريخ انتهاء التصريح (end_date) مطلوب');
+  if (new Date(body.end_date) < new Date(body.start_date)) throw new Error('تاريخ الانتهاء يجب أن يكون بعد تاريخ البدء');
+  if (!body.responsible_person || !String(body.responsible_person).trim()) throw new Error('المسؤول عن التصريح مطلوب');
+}
+
+function validatePpeItemInput(body) {
+  if (!body || typeof body !== 'object') throw new Error('بيانات معدة الوقاية مطلوبة');
+  if (!body.type || !PPE_TYPES.includes(body.type)) throw new Error(`نوع معدة الوقاية غير صحيح: ${body.type}`);
+  if (!body.employee_name || !String(body.employee_name).trim()) throw new Error('اسم الموظف المستلم مطلوب');
+  if (!body.issue_date) throw new Error('تاريخ التسليم (issue_date) مطلوب');
+  if (!body.quantity || Number(body.quantity) <= 0) throw new Error('الكمية (quantity) يجب أن تكون أكبر من صفر');
 }
 
 // ===================== إدارة خطط السلامة =====================
@@ -807,6 +944,593 @@ function deleteIncident(id) {
   return { success: true, data: { id, deleted: true } };
 }
 
+// ===================== إدارة التفتيشات (Inspections) =====================
+
+function createInspection(body) {
+  validateInspectionInput(body);
+  const store = loadStore();
+  const id = newId('INSP');
+  const code = generateCode(store, 'INS');
+
+  const checklist = Array.isArray(body.checklist) ? body.checklist.map((c, idx) => ({
+    id: newId('CHK'),
+    seq: idx + 1,
+    item: String(c.item || '').trim(),
+    result: c.result && CHECKLIST_ITEM_RESULTS.includes(c.result) ? c.result : 'not_applicable',
+    notes: c.notes || null,
+    photo_url: c.photo_url || null,
+  })) : [];
+
+  const record = {
+    id,
+    code,
+    type: body.type,
+    project_id: body.project_id,
+    location: body.location || null,
+    scheduled_date: body.scheduled_date,
+    completed_date: body.completed_date || null,
+    inspector_name: String(body.inspector_name).trim(),
+    checklist,
+    general_notes: body.general_notes || null,
+    photos: Array.isArray(body.photos) ? body.photos : [],
+    status: body.status && INSPECTION_STATUSES.includes(body.status) ? body.status : 'scheduled',
+    approved_by: null,
+    approved_at: null,
+    is_active: true,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  store.inspections[id] = record;
+  audit(store, { action: 'create', entity: 'inspection', entityId: id, projectId: body.project_id, details: { type: record.type, code } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listInspections(filters = {}) {
+  const store = loadStore();
+  let items = Object.values(store.inspections).filter(i => i.is_active !== false);
+  if (filters.projectId) items = items.filter(i => i.project_id === filters.projectId);
+  if (filters.type) items = items.filter(i => i.type === filters.type);
+  if (filters.status) items = items.filter(i => i.status === filters.status);
+  if (filters.dateFrom) items = items.filter(i => i.scheduled_date >= filters.dateFrom);
+  if (filters.dateTo) items = items.filter(i => i.scheduled_date <= filters.dateTo);
+  if (filters.search) {
+    const q = String(filters.search).trim().toLowerCase();
+    items = items.filter(i => (i.code || '').toLowerCase().includes(q) || (i.location || '').toLowerCase().includes(q));
+  }
+  items = items.sort((a, b) => (b.scheduled_date || '').localeCompare(a.scheduled_date || ''));
+
+  // إرفاق عدد المخالفات المرتبطة بكل جولة تفتيش (لعرض سريع في الجدول)
+  const findingsByInspection = {};
+  for (const f of Object.values(store.inspectionFindings)) {
+    if (f.is_active === false) continue;
+    findingsByInspection[f.inspection_id] = (findingsByInspection[f.inspection_id] || 0) + 1;
+  }
+  items = items.map(i => ({ ...i, findings_count: findingsByInspection[i.id] || 0 }));
+
+  return { success: true, data: items, count: items.length };
+}
+
+function getInspection(id) {
+  const store = loadStore();
+  const record = store.inspections[id];
+  if (!record) throw new Error('جولة التفتيش غير موجودة');
+  const findings = Object.values(store.inspectionFindings)
+    .filter(f => f.inspection_id === id && f.is_active !== false)
+    .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
+  return { success: true, data: { ...record, findings } };
+}
+
+function updateInspection(id, updates) {
+  const store = loadStore();
+  const record = store.inspections[id];
+  if (!record) throw new Error('جولة التفتيش غير موجودة');
+
+  if (updates.type && !INSPECTION_TYPES.includes(updates.type)) throw new Error(`نوع التفتيش غير صحيح: ${updates.type}`);
+  if (updates.status && !INSPECTION_STATUSES.includes(updates.status)) throw new Error(`حالة التفتيش غير صحيحة: ${updates.status}`);
+
+  if (Array.isArray(updates.checklist)) {
+    updates.checklist = updates.checklist.map((c, idx) => ({
+      id: c.id || newId('CHK'),
+      seq: idx + 1,
+      item: String(c.item || '').trim(),
+      result: c.result && CHECKLIST_ITEM_RESULTS.includes(c.result) ? c.result : 'not_applicable',
+      notes: c.notes || null,
+      photo_url: c.photo_url || null,
+    }));
+  }
+
+  const blocked = ['id', 'code', 'created_at'];
+  for (const [k, v] of Object.entries(updates)) {
+    if (blocked.includes(k)) continue;
+    record[k] = v;
+  }
+  record.updated_at = nowISO();
+
+  audit(store, { action: 'update', entity: 'inspection', entityId: id, projectId: record.project_id, details: { changedFields: Object.keys(updates) } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function deleteInspection(id) {
+  const store = loadStore();
+  const record = store.inspections[id];
+  if (!record) throw new Error('جولة التفتيش غير موجودة');
+  record.is_active = false;
+  record.updated_at = nowISO();
+  audit(store, { action: 'delete', entity: 'inspection', entityId: id, projectId: record.project_id, details: { code: record.code } });
+  saveStore(store);
+  return { success: true, data: { id, deleted: true } };
+}
+
+function approveInspection(id, { approved_by = null } = {}) {
+  const store = loadStore();
+  const record = store.inspections[id];
+  if (!record) throw new Error('جولة التفتيش غير موجودة');
+  const openFindings = Object.values(store.inspectionFindings)
+    .filter(f => f.inspection_id === id && f.is_active !== false && f.status !== 'closed');
+  if (openFindings.length > 0) {
+    throw new Error(`لا يمكن اعتماد التفتيش قبل إغلاق جميع المخالفات المفتوحة (${openFindings.length} مخالفة لا تزال مفتوحة)`);
+  }
+  record.status = 'approved';
+  record.approved_by = approved_by;
+  record.approved_at = nowISO();
+  record.updated_at = nowISO();
+  audit(store, { action: 'approve', entity: 'inspection', entityId: id, projectId: record.project_id, details: { approved_by } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// ----- مخالفات التفتيش (Inspection Findings) -----
+
+function addInspectionFinding(body) {
+  if (!body || typeof body !== 'object') throw new Error('بيانات المخالفة مطلوبة');
+  if (!body.inspection_id) throw new Error('معرّف جولة التفتيش (inspection_id) مطلوب');
+  if (!body.description || !String(body.description).trim()) throw new Error('وصف المخالفة مطلوب');
+  if (!body.severity || !FINDING_SEVERITIES.includes(body.severity)) throw new Error(`درجة خطورة المخالفة غير صحيحة: ${body.severity}`);
+
+  const store = loadStore();
+  const inspection = store.inspections[body.inspection_id];
+  if (!inspection) throw new Error('جولة التفتيش غير موجودة');
+
+  const id = newId('FIND');
+  const code = generateCode(store, 'FND');
+  const record = {
+    id,
+    code,
+    inspection_id: body.inspection_id,
+    project_id: inspection.project_id,
+    description: String(body.description).trim(),
+    severity: body.severity,
+    location: body.location || inspection.location || null,
+    responsible_person: body.responsible_person || null,
+    due_date: body.due_date || null,
+    photo_url: body.photo_url || null,
+    corrective_action: body.corrective_action || null,
+    status: 'open',
+    reinspection_date: null,
+    is_active: true,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+  store.inspectionFindings[id] = record;
+
+  // في حالة مخالفة حرجة، ترتفع حالة التفتيش تلقائياً لتوضح ضرورة المتابعة العاجلة
+  if (body.severity === 'critical' && inspection.status === 'completed') {
+    inspection.status = 'in_progress';
+    inspection.updated_at = nowISO();
+  }
+
+  audit(store, { action: 'create', entity: 'inspectionFinding', entityId: id, projectId: inspection.project_id, details: { severity: record.severity, inspection_id: body.inspection_id } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listInspectionFindings(filters = {}) {
+  const store = loadStore();
+  let items = Object.values(store.inspectionFindings).filter(f => f.is_active !== false);
+  if (filters.inspectionId) items = items.filter(f => f.inspection_id === filters.inspectionId);
+  if (filters.projectId) items = items.filter(f => f.project_id === filters.projectId);
+  if (filters.status) items = items.filter(f => f.status === filters.status);
+  if (filters.severity) items = items.filter(f => f.severity === filters.severity);
+  items = items.sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'));
+  return { success: true, data: items, count: items.length };
+}
+
+function updateInspectionFinding(id, updates) {
+  const store = loadStore();
+  const record = store.inspectionFindings[id];
+  if (!record) throw new Error('المخالفة غير موجودة');
+
+  if (updates.severity && !FINDING_SEVERITIES.includes(updates.severity)) throw new Error(`درجة الخطورة غير صحيحة: ${updates.severity}`);
+  if (updates.status && !FINDING_STATUSES.includes(updates.status)) throw new Error(`حالة المخالفة غير صحيحة: ${updates.status}`);
+
+  const blocked = ['id', 'code', 'created_at', 'inspection_id', 'project_id'];
+  for (const [k, v] of Object.entries(updates)) {
+    if (blocked.includes(k)) continue;
+    record[k] = v;
+  }
+  record.updated_at = nowISO();
+
+  audit(store, { action: 'update', entity: 'inspectionFinding', entityId: id, projectId: record.project_id, details: { changedFields: Object.keys(updates) } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// ===================== إدارة تصاريح العمل (Permit to Work) =====================
+
+function createPermit(body) {
+  validatePermitInput(body);
+  const store = loadStore();
+  const id = newId('PERMIT');
+  const code = generateCode(store, 'PTW');
+
+  const standardPrecautions = PERMIT_STANDARD_PRECAUTIONS[body.type] || [];
+  const precautions = Array.isArray(body.precautions) && body.precautions.length
+    ? body.precautions
+    : standardPrecautions;
+
+  const record = {
+    id,
+    code,
+    type: body.type,
+    project_id: body.project_id,
+    location: body.location.trim(),
+    work_description: String(body.work_description).trim(),
+    start_date: body.start_date,
+    end_date: body.end_date,
+    responsible_person: String(body.responsible_person).trim(),
+    work_team: Array.isArray(body.work_team) ? body.work_team : [],
+    // تقييم المخاطر المرتبط بالتصريح - إما نص حر أو ربط بمعرّف خطر مسجّل مسبقاً (risk_id)
+    risk_id: body.risk_id || null,
+    risk_assessment_summary: body.risk_assessment_summary || null,
+    precautions,
+    approvals: [],
+    status: 'draft',
+    is_active: true,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  store.permits[id] = record;
+  audit(store, { action: 'create', entity: 'permit', entityId: id, projectId: body.project_id, details: { type: record.type, code } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listPermits(filters = {}) {
+  const store = loadStore();
+  const now = nowISO();
+  let items = Object.values(store.permits).filter(p => p.is_active !== false);
+
+  // انتهاء الصلاحية التلقائي: أي تصريح نشط تجاوز end_date يُعتبر منتهياً عند القراءة
+  let mutated = false;
+  for (const p of items) {
+    if (['active', 'approved'].includes(p.status) && p.end_date && p.end_date < now) {
+      p.status = 'expired';
+      p.updated_at = nowISO();
+      mutated = true;
+    }
+  }
+  if (mutated) saveStore(store);
+
+  if (filters.projectId) items = items.filter(p => p.project_id === filters.projectId);
+  if (filters.type) items = items.filter(p => p.type === filters.type);
+  if (filters.status) items = items.filter(p => p.status === filters.status);
+  if (filters.search) {
+    const q = String(filters.search).trim().toLowerCase();
+    items = items.filter(p => (p.code || '').toLowerCase().includes(q) || (p.location || '').toLowerCase().includes(q));
+  }
+  items = items.sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
+  return { success: true, data: items, count: items.length };
+}
+
+function getPermit(id) {
+  const store = loadStore();
+  const record = store.permits[id];
+  if (!record) throw new Error('تصريح العمل غير موجود');
+  if (['active', 'approved'].includes(record.status) && record.end_date && record.end_date < nowISO()) {
+    record.status = 'expired';
+    record.updated_at = nowISO();
+    saveStore(store);
+  }
+  return { success: true, data: record };
+}
+
+function updatePermit(id, updates) {
+  const store = loadStore();
+  const record = store.permits[id];
+  if (!record) throw new Error('تصريح العمل غير موجود');
+
+  if (updates.type && !PERMIT_TYPES.includes(updates.type)) throw new Error(`نوع التصريح غير صحيح: ${updates.type}`);
+  if (updates.status && !PERMIT_STATUSES.includes(updates.status)) throw new Error(`حالة التصريح غير صحيحة: ${updates.status}`);
+  if (updates.start_date && updates.end_date && new Date(updates.end_date) < new Date(updates.start_date)) {
+    throw new Error('تاريخ الانتهاء يجب أن يكون بعد تاريخ البدء');
+  }
+
+  const blocked = ['id', 'code', 'created_at', 'approvals'];
+  for (const [k, v] of Object.entries(updates)) {
+    if (blocked.includes(k)) continue;
+    record[k] = v;
+  }
+  record.updated_at = nowISO();
+
+  audit(store, { action: 'update', entity: 'permit', entityId: id, projectId: record.project_id, details: { changedFields: Object.keys(updates) } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function deletePermit(id) {
+  const store = loadStore();
+  const record = store.permits[id];
+  if (!record) throw new Error('تصريح العمل غير موجود');
+  record.is_active = false;
+  record.status = 'closed';
+  record.updated_at = nowISO();
+  audit(store, { action: 'delete', entity: 'permit', entityId: id, projectId: record.project_id, details: { code: record.code } });
+  saveStore(store);
+  return { success: true, data: { id, deleted: true } };
+}
+
+// إضافة موافقة على التصريح (يمكن أن يتطلب التصريح أكثر من موافقة حسب نوعه - مثال: مسؤول السلامة + مدير المشروع)
+function approvePermit(id, { approver_name, approver_role = null, notes = null } = {}) {
+  if (!approver_name || !String(approver_name).trim()) throw new Error('اسم المعتمِد (approver_name) مطلوب');
+  const store = loadStore();
+  const record = store.permits[id];
+  if (!record) throw new Error('تصريح العمل غير موجود');
+  if (!['draft', 'pending_approval'].includes(record.status)) {
+    throw new Error('لا يمكن اعتماد تصريح ليس في حالة مسودة أو بانتظار الموافقة');
+  }
+
+  record.approvals.push({
+    approver_name: String(approver_name).trim(),
+    approver_role,
+    notes,
+    approved_at: nowISO(),
+  });
+  record.status = 'approved';
+  record.updated_at = nowISO();
+
+  audit(store, { action: 'approve', entity: 'permit', entityId: id, projectId: record.project_id, details: { approver_name } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// تفعيل التصريح فعلياً عند بدء تنفيذ العمل ميدانياً
+function activatePermit(id) {
+  const store = loadStore();
+  const record = store.permits[id];
+  if (!record) throw new Error('تصريح العمل غير موجود');
+  if (record.status !== 'approved') throw new Error('يجب اعتماد التصريح أولاً قبل تفعيله');
+  record.status = 'active';
+  record.updated_at = nowISO();
+  audit(store, { action: 'activate', entity: 'permit', entityId: id, projectId: record.project_id, details: {} });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// إغلاق التصريح عند انتهاء العمل ميدانياً (يمكن إغلاقه قبل تاريخ end_date إن انتهى العمل مبكراً)
+function closePermit(id, { closed_by = null, closing_notes = null } = {}) {
+  const store = loadStore();
+  const record = store.permits[id];
+  if (!record) throw new Error('تصريح العمل غير موجود');
+  record.status = 'closed';
+  record.closed_by = closed_by;
+  record.closing_notes = closing_notes;
+  record.closed_at = nowISO();
+  record.updated_at = nowISO();
+  audit(store, { action: 'close', entity: 'permit', entityId: id, projectId: record.project_id, details: { closed_by } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// تصاريح على وشك الانتهاء خلال عدد أيام معين (لأغراض التنبيهات لاحقاً في الجزء الرابع)
+function getExpiringPermits({ projectId = null, withinDays = 3 } = {}) {
+  const store = loadStore();
+  const now = new Date();
+  const horizon = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+  let items = Object.values(store.permits).filter(p => p.is_active !== false && ['active', 'approved'].includes(p.status));
+  if (projectId) items = items.filter(p => p.project_id === projectId);
+  items = items.filter(p => p.end_date && new Date(p.end_date) >= now && new Date(p.end_date) <= horizon);
+  items = items.sort((a, b) => (a.end_date || '').localeCompare(b.end_date || ''));
+  return { success: true, data: items, count: items.length };
+}
+
+// ===================== إدارة معدات الوقاية الشخصية (PPE) =====================
+
+function createPpeItem(body) {
+  validatePpeItemInput(body);
+  const store = loadStore();
+  const id = newId('PPE');
+  const code = generateCode(store, 'PPE');
+
+  const issueDate = body.issue_date;
+  const lifespanDays = Number(body.lifespan_days) || PPE_DEFAULT_LIFESPAN_DAYS[body.type] || 365;
+  const replacementDate = new Date(new Date(issueDate).getTime() + lifespanDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const record = {
+    id,
+    code,
+    type: body.type,
+    project_id: body.project_id || null,
+    employee_name: String(body.employee_name).trim(),
+    employee_role: body.employee_role || null,
+    quantity: Number(body.quantity),
+    condition: body.condition && PPE_CONDITIONS.includes(body.condition) ? body.condition : 'new',
+    issue_date: issueDate,
+    lifespan_days: lifespanDays,
+    replacement_due_date: body.replacement_due_date || replacementDate,
+    replaced_date: null,
+    replaced_from_id: body.replaced_from_id || null, // في حال كان هذا السجل استبدالاً لسجل سابق
+    status: 'issued',
+    notes: body.notes || null,
+    is_active: true,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  store.ppeItems[id] = record;
+  audit(store, { action: 'create', entity: 'ppeItem', entityId: id, projectId: record.project_id, details: { type: record.type, employee_name: record.employee_name } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listPpeItems(filters = {}) {
+  const store = loadStore();
+  const now = nowISO();
+  let items = Object.values(store.ppeItems).filter(p => p.is_active !== false);
+
+  // تحديث تلقائي لحالة "مستحقة الاستبدال" عند القراءة إن تجاوز العنصر تاريخ انتهاء صلاحيته
+  let mutated = false;
+  for (const p of items) {
+    if (p.status === 'issued' && p.replacement_due_date && p.replacement_due_date < now) {
+      p.status = 'due_for_replacement';
+      p.updated_at = nowISO();
+      mutated = true;
+    }
+  }
+  if (mutated) saveStore(store);
+
+  if (filters.projectId) items = items.filter(p => p.project_id === filters.projectId);
+  if (filters.type) items = items.filter(p => p.type === filters.type);
+  if (filters.status) items = items.filter(p => p.status === filters.status);
+  if (filters.employeeName) {
+    const q = String(filters.employeeName).trim().toLowerCase();
+    items = items.filter(p => (p.employee_name || '').toLowerCase().includes(q));
+  }
+  if (filters.search) {
+    const q = String(filters.search).trim().toLowerCase();
+    items = items.filter(p => (p.code || '').toLowerCase().includes(q) || (p.employee_name || '').toLowerCase().includes(q));
+  }
+  items = items.sort((a, b) => (a.replacement_due_date || '').localeCompare(b.replacement_due_date || ''));
+  return { success: true, data: items, count: items.length };
+}
+
+function getPpeItem(id) {
+  const store = loadStore();
+  const record = store.ppeItems[id];
+  if (!record) throw new Error('سجل معدة الوقاية غير موجود');
+  return { success: true, data: record };
+}
+
+function updatePpeItem(id, updates) {
+  const store = loadStore();
+  const record = store.ppeItems[id];
+  if (!record) throw new Error('سجل معدة الوقاية غير موجود');
+
+  if (updates.type && !PPE_TYPES.includes(updates.type)) throw new Error(`نوع معدة الوقاية غير صحيح: ${updates.type}`);
+  if (updates.condition && !PPE_CONDITIONS.includes(updates.condition)) throw new Error(`حالة المعدة غير صحيحة: ${updates.condition}`);
+  if (updates.status && !PPE_ITEM_STATUSES.includes(updates.status)) throw new Error(`حالة السجل غير صحيحة: ${updates.status}`);
+
+  const blocked = ['id', 'code', 'created_at'];
+  for (const [k, v] of Object.entries(updates)) {
+    if (blocked.includes(k)) continue;
+    record[k] = v;
+  }
+  record.updated_at = nowISO();
+
+  audit(store, { action: 'update', entity: 'ppeItem', entityId: id, projectId: record.project_id, details: { changedFields: Object.keys(updates) } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function deletePpeItem(id) {
+  const store = loadStore();
+  const record = store.ppeItems[id];
+  if (!record) throw new Error('سجل معدة الوقاية غير موجود');
+  record.is_active = false;
+  record.updated_at = nowISO();
+  audit(store, { action: 'delete', entity: 'ppeItem', entityId: id, projectId: record.project_id, details: { code: record.code } });
+  saveStore(store);
+  return { success: true, data: { id, deleted: true } };
+}
+
+// استبدال معدة وقاية: يُغلق السجل القديم (status=replaced) وينشئ سجلاً جديداً مرتبطاً به
+function replacePpeItem(id, { condition_note = null, issue_date = null } = {}) {
+  const store = loadStore();
+  const oldRecord = store.ppeItems[id];
+  if (!oldRecord) throw new Error('سجل معدة الوقاية غير موجود');
+
+  oldRecord.status = 'replaced';
+  oldRecord.replaced_date = nowISO();
+  oldRecord.updated_at = nowISO();
+
+  const newIssueDate = issue_date || nowISO();
+  const lifespanDays = oldRecord.lifespan_days || PPE_DEFAULT_LIFESPAN_DAYS[oldRecord.type] || 365;
+  const replacementDate = new Date(new Date(newIssueDate).getTime() + lifespanDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const newId_ = newId('PPE');
+  const code = generateCode(store, 'PPE');
+  const newRecord = {
+    id: newId_,
+    code,
+    type: oldRecord.type,
+    project_id: oldRecord.project_id,
+    employee_name: oldRecord.employee_name,
+    employee_role: oldRecord.employee_role,
+    quantity: oldRecord.quantity,
+    condition: 'new',
+    issue_date: newIssueDate,
+    lifespan_days: lifespanDays,
+    replacement_due_date: replacementDate,
+    replaced_date: null,
+    replaced_from_id: id,
+    status: 'issued',
+    notes: condition_note || `استبدال للسجل ${oldRecord.code}`,
+    is_active: true,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+  store.ppeItems[newId_] = newRecord;
+
+  audit(store, { action: 'replace', entity: 'ppeItem', entityId: newId_, projectId: newRecord.project_id, details: { replaced_from: id } });
+  saveStore(store);
+  return { success: true, data: newRecord };
+}
+
+// عناصر PPE المستحقة للاستبدال خلال عدد أيام معين (لأغراض التنبيهات لاحقاً في الجزء الرابع)
+function getPpeDueForReplacement({ projectId = null, withinDays = 14 } = {}) {
+  const store = loadStore();
+  const now = new Date();
+  const horizon = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+  let items = Object.values(store.ppeItems).filter(p => p.is_active !== false && ['issued', 'due_for_replacement'].includes(p.status));
+  if (projectId) items = items.filter(p => p.project_id === projectId);
+  items = items.filter(p => p.replacement_due_date && new Date(p.replacement_due_date) <= horizon);
+  items = items.sort((a, b) => (a.replacement_due_date || '').localeCompare(b.replacement_due_date || ''));
+  return { success: true, data: items, count: items.length };
+}
+
+// حساب نسبة الالتزام بمعدات الوقاية لمشروع أو للنظام ككل (مقارنة بعدد العمال المسجّلين إن توفر)
+function getPpeComplianceSummary({ projectId = null } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.ppeItems).filter(p => p.is_active !== false);
+  if (projectId) items = items.filter(p => p.project_id === projectId);
+
+  const byType = {};
+  for (const t of PPE_TYPES) byType[t] = { total: 0, issued: 0, due_for_replacement: 0, expired_condition: 0 };
+  for (const p of items) {
+    byType[p.type].total += 1;
+    if (p.status === 'issued') byType[p.type].issued += 1;
+    if (p.status === 'due_for_replacement') byType[p.type].due_for_replacement += 1;
+    if (p.condition === 'expired' || p.condition === 'damaged') byType[p.type].expired_condition += 1;
+  }
+
+  const totalItems = items.length;
+  const dueCount = items.filter(p => p.status === 'due_for_replacement').length;
+  const complianceRate = totalItems > 0 ? r2(((totalItems - dueCount) / totalItems) * 100) : 100;
+
+  return {
+    success: true,
+    data: {
+      total_ppe_items: totalItems,
+      due_for_replacement: dueCount,
+      compliance_rate: complianceRate,
+      by_type: byType,
+    },
+  };
+}
+
 // حساب مؤشرات السلامة القياسية (OSHA/ISO 45001):
 // - معدل تكرار الحوادث (Incident Frequency Rate) = (عدد الحوادث المسجّلة × 200000) / إجمالي ساعات العمل
 // - معدل شدة الإصابات (Severity Rate) = (إجمالي أيام العمل الضائعة × 200000) / إجمالي ساعات العمل
@@ -853,11 +1577,17 @@ function getDashboard(projectId = null) {
   let plans = Object.values(store.safetyPlans).filter(p => p.is_active !== false);
   let risks = Object.values(store.risks).filter(r => r.is_active !== false);
   let incidents = Object.values(store.incidents).filter(i => i.is_active !== false);
+  let inspections = Object.values(store.inspections).filter(i => i.is_active !== false);
+  let permits = Object.values(store.permits).filter(p => p.is_active !== false);
+  let ppeItems = Object.values(store.ppeItems).filter(p => p.is_active !== false);
 
   if (projectId) {
     plans = plans.filter(p => p.project_id === projectId);
     risks = risks.filter(r => r.project_id === projectId);
     incidents = incidents.filter(i => i.project_id === projectId);
+    inspections = inspections.filter(i => i.project_id === projectId);
+    permits = permits.filter(p => p.project_id === projectId);
+    ppeItems = ppeItems.filter(p => p.project_id === projectId);
   }
 
   const projectsWithPlans = new Set(plans.filter(p => p.status === 'approved').map(p => p.project_id));
@@ -921,6 +1651,20 @@ function getDashboard(projectId = null) {
       // أحدث البيانات
       recent_incidents: recentIncidents,
       top_risks: topRisks,
+
+      // التفتيشات (الجزء الثاني)
+      total_inspections: inspections.length,
+      completed_inspections: inspections.filter(i => ['completed', 'approved'].includes(i.status)).length,
+      scheduled_inspections: inspections.filter(i => i.status === 'scheduled').length,
+
+      // تصاريح العمل (الجزء الثاني)
+      active_permits: permits.filter(p => p.status === 'active').length,
+      pending_approval_permits: permits.filter(p => p.status === 'pending_approval').length,
+      expiring_permits_soon: getExpiringPermits({ projectId, withinDays: 3 }).count,
+
+      // معدات الوقاية الشخصية (الجزء الثاني)
+      total_ppe_items: ppeItems.length,
+      ppe_due_for_replacement: ppeItems.filter(p => p.status === 'due_for_replacement').length,
     },
   };
 }
@@ -984,6 +1728,66 @@ module.exports = {
   updateIncident,
   deleteIncident,
   calculateSafetyKPIs,
+
+  // ثوابت - إدارة التفتيشات
+  INSPECTION_TYPES,
+  INSPECTION_TYPE_LABELS,
+  INSPECTION_STATUSES,
+  INSPECTION_STATUS_LABELS,
+  CHECKLIST_ITEM_RESULTS,
+  CHECKLIST_ITEM_RESULT_LABELS,
+  FINDING_SEVERITIES,
+  FINDING_SEVERITY_LABELS,
+  FINDING_STATUSES,
+  FINDING_STATUS_LABELS,
+
+  // ثوابت - تصاريح العمل
+  PERMIT_TYPES,
+  PERMIT_TYPE_LABELS,
+  PERMIT_STATUSES,
+  PERMIT_STATUS_LABELS,
+  PERMIT_STANDARD_PRECAUTIONS,
+
+  // ثوابت - معدات الوقاية الشخصية
+  PPE_TYPES,
+  PPE_TYPE_LABELS,
+  PPE_CONDITIONS,
+  PPE_CONDITION_LABELS,
+  PPE_ITEM_STATUSES,
+  PPE_ITEM_STATUS_LABELS,
+  PPE_DEFAULT_LIFESPAN_DAYS,
+
+  // إدارة التفتيشات
+  createInspection,
+  listInspections,
+  getInspection,
+  updateInspection,
+  deleteInspection,
+  approveInspection,
+  addInspectionFinding,
+  listInspectionFindings,
+  updateInspectionFinding,
+
+  // تصاريح العمل
+  createPermit,
+  listPermits,
+  getPermit,
+  updatePermit,
+  deletePermit,
+  approvePermit,
+  activatePermit,
+  closePermit,
+  getExpiringPermits,
+
+  // معدات الوقاية الشخصية
+  createPpeItem,
+  listPpeItems,
+  getPpeItem,
+  updatePpeItem,
+  deletePpeItem,
+  replacePpeItem,
+  getPpeDueForReplacement,
+  getPpeComplianceSummary,
 
   // لوحة التحكم
   getDashboard,
