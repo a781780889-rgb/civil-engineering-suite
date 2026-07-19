@@ -1,13 +1,14 @@
 /**
  * القسم السابع - نظام إدارة المعدات (Equipment & Assets Management System)
  * =========================================================================
- * الجزء الأول من أربعة: البنية الأساسية + سجل المعدات + إدارة التشغيل +
- * إدارة الحجز + تتبع المعدات.
+ * الجزء الأول: البنية الأساسية + سجل المعدات + إدارة التشغيل +
+ * إدارة الحجز + تتبع المعدات.                                        [منجز]
+ * الجزء الثاني: إدارة الوقود + الصيانة (الدورية والطارئة) + قطع الغيار
+ *               + إدارة المشغلين.                                     [منجز]
  * التخزين: ملف JSON على القرص (backend/data/equipment.json) بنفس نمط
  * scheduling.js / projectManagement.js - بدون تبعيات خارجية.
  *
- * الأجزاء اللاحقة (ستُبنى في ملفات/تحديثات منفصلة على نفس هذا الملف):
- *  - الجزء الثاني: الوقود + الصيانة (الدورية والطارئة) + قطع الغيار + المشغلون
+ * الأجزاء اللاحقة (ستُبنى في تحديثات لاحقة على نفس هذا الملف):
  *  - الجزء الثالث: التكاليف + الإنتاجية + التنبيهات
  *  - الجزء الرابع: التقارير + الذكاء الاصطناعي + التكامل + الصلاحيات المتقدمة
  */
@@ -32,6 +33,11 @@ function ensureStore() {
       operationLogs: {},    // { id: operationLog }  (بداية/نهاية تشغيل)
       reservations: {},     // { id: reservation }
       movementLogs: {},     // { id: movementLog }   (سجل تنقل/تتبع)
+      fuelLogs: {},              // { id: fuelLog }              (الجزء الثاني)
+      maintenanceSchedules: {},  // { id: maintenanceSchedule }  (الجزء الثاني)
+      maintenanceRecords: {},    // { id: maintenanceRecord }    (الجزء الثاني)
+      spareParts: {},            // { id: sparePart }            (الجزء الثاني)
+      operators: {},             // { id: operator }             (الجزء الثاني)
       auditLog: [],
       seq: 0,
     };
@@ -41,11 +47,20 @@ function ensureStore() {
 
 function loadStore() {
   ensureStore();
+  let store;
   try {
-    return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+    store = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
   } catch (e) {
     throw new Error('تعذر قراءة قاعدة بيانات إدارة المعدات: ' + e.message);
   }
+  // ترحيل تلقائي: إضافة الكيانات الجديدة (الجزء الثاني) لأي قاعدة بيانات
+  // أُنشئت قبل إضافتها، دون فقدان أي بيانات موجودة.
+  let migrated = false;
+  for (const key of ['fuelLogs', 'maintenanceSchedules', 'maintenanceRecords', 'spareParts', 'operators']) {
+    if (!store[key]) { store[key] = {}; migrated = true; }
+  }
+  if (migrated) saveStore(store);
+  return store;
 }
 
 function saveStore(store) {
@@ -121,6 +136,31 @@ const EQUIPMENT_ROLES = [
   'system_admin', 'project_manager', 'equipment_manager', 'site_engineer',
   'maintenance_officer', 'warehouse_keeper', 'operator', 'accountant', 'client_viewer',
 ];
+
+// ----- ثوابت الجزء الثاني: الوقود / الصيانة / قطع الغيار / المشغلون -----
+
+const MAINTENANCE_FREQUENCIES = ['daily', 'weekly', 'monthly', 'yearly', 'by_operating_hours'];
+const MAINTENANCE_FREQUENCY_LABELS = {
+  daily: 'يومية', weekly: 'أسبوعية', monthly: 'شهرية', yearly: 'سنوية',
+  by_operating_hours: 'حسب ساعات التشغيل',
+};
+
+const MAINTENANCE_TYPES = ['preventive', 'emergency'];
+const MAINTENANCE_TYPE_LABELS = { preventive: 'صيانة دورية', emergency: 'صيانة طارئة' };
+
+const MAINTENANCE_SEVERITIES = ['low', 'medium', 'high', 'critical'];
+const MAINTENANCE_SEVERITY_LABELS = { low: 'منخفضة', medium: 'متوسطة', high: 'عالية', critical: 'حرجة' };
+
+const MAINTENANCE_STATUSES = ['scheduled', 'in_progress', 'completed', 'cancelled'];
+const MAINTENANCE_STATUS_LABELS = {
+  scheduled: 'مجدولة', in_progress: 'قيد التنفيذ', completed: 'مكتملة', cancelled: 'ملغاة',
+};
+
+const LICENSE_TYPES = ['light_vehicle', 'heavy_vehicle', 'heavy_equipment', 'crane_operator', 'special'];
+const LICENSE_TYPE_LABELS = {
+  light_vehicle: 'مركبات خفيفة', heavy_vehicle: 'مركبات ثقيلة', heavy_equipment: 'معدات ثقيلة',
+  crane_operator: 'مشغل رافعة', special: 'رخصة خاصة',
+};
 
 // ===================== دوال مساعدة للتحقق =====================
 
@@ -625,6 +665,680 @@ function getEquipmentTrackingHistory(equipmentId) {
   };
 }
 
+// =====================================================================
+// ===== الجزء الثاني: إدارة الوقود + الصيانة + قطع الغيار + المشغلون =====
+// =====================================================================
+
+// ----------------------- إدارة الوقود -----------------------
+
+function logFuelEntry(body) {
+  const store = loadStore();
+  const {
+    equipment_id, quantity, fuel_type = null, unit_price = 0,
+    odometer_or_hours = null, filled_at = null, station = null, note = null,
+  } = body || {};
+
+  if (!equipment_id) throw new Error('معرّف المعدة مطلوب');
+  const equipment = store.equipment[equipment_id];
+  if (!equipment) throw new Error('المعدة غير موجودة');
+  if (!quantity || Number(quantity) <= 0) throw new Error('كمية الوقود يجب أن تكون أكبر من صفر');
+
+  const qty = r2(quantity);
+  const price = r2(unit_price);
+  const cost = r2(qty * price);
+
+  const id = newId('FUEL');
+  const record = {
+    id,
+    equipment_id,
+    project_id: equipment.current_project_id || null,
+    fuel_type: fuel_type || equipment.fuel_type || 'diesel',
+    quantity: qty,
+    unit_price: price,
+    cost,
+    odometer_or_hours: odometer_or_hours != null ? r2(odometer_or_hours) : null,
+    filled_at: filled_at || nowISO(),
+    station,
+    note,
+    created_at: nowISO(),
+  };
+
+  store.fuelLogs[id] = record;
+  audit(store, { action: 'create', entity: 'fuel_log', entityId: id, projectId: record.project_id, details: { equipment_id, quantity: qty } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listFuelLogs(filters = {}) {
+  const store = loadStore();
+  let items = Object.values(store.fuelLogs);
+  if (filters.equipmentId) items = items.filter(f => f.equipment_id === filters.equipmentId);
+  if (filters.projectId) items = items.filter(f => f.project_id === filters.projectId);
+  if (filters.dateFrom) items = items.filter(f => (f.filled_at || '') >= filters.dateFrom);
+  if (filters.dateTo) items = items.filter(f => (f.filled_at || '') <= filters.dateTo);
+  items = items.sort((a, b) => (b.filled_at || '').localeCompare(a.filled_at || ''));
+  return { success: true, data: items, count: items.length };
+}
+
+function getFuelStats(equipmentId, { period = 'all' } = {}) {
+  const store = loadStore();
+  const equipment = store.equipment[equipmentId];
+  if (!equipment) throw new Error('المعدة غير موجودة');
+
+  let from = null;
+  const now = new Date();
+  if (period === 'month') { const d = new Date(now); d.setDate(d.getDate() - 30); from = d.toISOString(); }
+  else if (period === 'week') { const d = new Date(now); d.setDate(d.getDate() - 7); from = d.toISOString(); }
+  else if (period === 'year') { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); from = d.toISOString(); }
+
+  let logs = Object.values(store.fuelLogs).filter(f => f.equipment_id === equipmentId);
+  if (from) logs = logs.filter(f => (f.filled_at || '') >= from);
+  logs = logs.sort((a, b) => (a.filled_at || '').localeCompare(b.filled_at || ''));
+
+  const totalQuantity = r2(logs.reduce((s, f) => s + (f.quantity || 0), 0));
+  const totalCost = r2(logs.reduce((s, f) => s + (f.cost || 0), 0));
+  const avgPrice = logs.length ? r2(totalCost / totalQuantity) : 0;
+
+  // متوسط الاستهلاك: نقارن بين القراءات المتتالية لـ odometer_or_hours عند توفرها
+  const readingsPairs = logs.filter(f => f.odometer_or_hours != null);
+  let avgConsumptionPerUnit = null;
+  if (readingsPairs.length >= 2) {
+    const first = readingsPairs[0];
+    const last = readingsPairs[readingsPairs.length - 1];
+    const usageSpan = r2(last.odometer_or_hours - first.odometer_or_hours);
+    const quantityExcludingFirst = r2(readingsPairs.slice(1).reduce((s, f) => s + (f.quantity || 0), 0));
+    if (usageSpan > 0) avgConsumptionPerUnit = r2(quantityExcludingFirst / usageSpan);
+  }
+
+  // اكتشاف استهلاك غير طبيعي: أي عملية تعبئة تتجاوز 40% من متوسط الكمية بالعمليات السابقة
+  const anomalies = [];
+  if (logs.length >= 3) {
+    const avgQty = r2(totalQuantity / logs.length);
+    for (const f of logs) {
+      if (avgQty > 0 && f.quantity > avgQty * 1.4) {
+        anomalies.push({ fuel_log_id: f.id, filled_at: f.filled_at, quantity: f.quantity, average_quantity: avgQty });
+      }
+    }
+  }
+
+  return {
+    success: true,
+    data: {
+      equipment_id: equipmentId,
+      period,
+      entries_count: logs.length,
+      total_quantity: totalQuantity,
+      total_cost: totalCost,
+      average_unit_price: avgPrice,
+      average_consumption_per_hour_or_km: avgConsumptionPerUnit,
+      abnormal_consumption_entries: anomalies,
+    },
+  };
+}
+
+// ----------------------- إدارة الصيانة: الجدولة الدورية -----------------------
+
+function createMaintenanceSchedule(body) {
+  const store = loadStore();
+  const {
+    equipment_id, frequency, interval_hours = null, description = null,
+    next_due_date = null, next_due_hours = null, assigned_to = null,
+  } = body || {};
+
+  if (!equipment_id) throw new Error('معرّف المعدة مطلوب');
+  const equipment = store.equipment[equipment_id];
+  if (!equipment) throw new Error('المعدة غير موجودة');
+  if (!frequency || !MAINTENANCE_FREQUENCIES.includes(frequency)) {
+    throw new Error(`دورية الصيانة غير صحيحة. القيم المسموحة: ${MAINTENANCE_FREQUENCIES.join(', ')}`);
+  }
+  if (frequency === 'by_operating_hours' && !interval_hours) {
+    throw new Error('عدد ساعات التشغيل بين كل صيانة (interval_hours) مطلوب لهذه الدورية');
+  }
+
+  const id = newId('MSCH');
+  const record = {
+    id,
+    equipment_id,
+    frequency,
+    interval_hours: interval_hours != null ? r2(interval_hours) : null,
+    description,
+    next_due_date,
+    next_due_hours: next_due_hours != null ? r2(next_due_hours) : null,
+    assigned_to,
+    is_active: true,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  store.maintenanceSchedules[id] = record;
+  audit(store, { action: 'create', entity: 'maintenance_schedule', entityId: id, details: { equipment_id, frequency } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listMaintenanceSchedules(filters = {}) {
+  const store = loadStore();
+  let items = Object.values(store.maintenanceSchedules).filter(s => s.is_active !== false);
+  if (filters.equipmentId) items = items.filter(s => s.equipment_id === filters.equipmentId);
+  items = items.sort((a, b) => (a.next_due_date || '').localeCompare(b.next_due_date || ''));
+  return { success: true, data: items, count: items.length };
+}
+
+function updateMaintenanceSchedule(id, updates) {
+  const store = loadStore();
+  const record = store.maintenanceSchedules[id];
+  if (!record) throw new Error('جدول الصيانة غير موجود');
+  if (updates.frequency && !MAINTENANCE_FREQUENCIES.includes(updates.frequency)) {
+    throw new Error(`دورية الصيانة غير صحيحة: ${updates.frequency}`);
+  }
+  const blocked = ['id', 'equipment_id', 'created_at'];
+  for (const [k, v] of Object.entries(updates)) {
+    if (blocked.includes(k)) continue;
+    record[k] = v;
+  }
+  record.updated_at = nowISO();
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function deleteMaintenanceSchedule(id) {
+  const store = loadStore();
+  const record = store.maintenanceSchedules[id];
+  if (!record) throw new Error('جدول الصيانة غير موجود');
+  record.is_active = false;
+  record.updated_at = nowISO();
+  audit(store, { action: 'delete', entity: 'maintenance_schedule', entityId: id });
+  saveStore(store);
+  return { success: true, data: { id } };
+}
+
+// تنبيهات الصيانة الدورية القادمة: خلال آفاق الأيام المحددة، أو عند اقتراب
+// ساعات التشغيل الفعلية من next_due_hours
+function getUpcomingMaintenanceAlerts({ withinDays = 14 } = {}) {
+  const store = loadStore();
+  const today = new Date();
+  const horizon = new Date(today); horizon.setDate(horizon.getDate() + Number(withinDays || 14));
+  const todayStr = today.toISOString().slice(0, 10);
+  const horizonStr = horizon.toISOString().slice(0, 10);
+
+  const schedules = Object.values(store.maintenanceSchedules).filter(s => s.is_active !== false);
+  const alerts = [];
+
+  for (const s of schedules) {
+    const equipment = store.equipment[s.equipment_id];
+    if (!equipment) continue;
+
+    if (s.next_due_date && s.next_due_date >= todayStr && s.next_due_date <= horizonStr) {
+      alerts.push({
+        type: 'date_due', schedule_id: s.id, equipment_id: s.equipment_id,
+        equipment_name: equipment.name, equipment_code: equipment.code,
+        due_date: s.next_due_date, description: s.description,
+      });
+    }
+    if (s.next_due_date && s.next_due_date < todayStr) {
+      alerts.push({
+        type: 'date_overdue', schedule_id: s.id, equipment_id: s.equipment_id,
+        equipment_name: equipment.name, equipment_code: equipment.code,
+        due_date: s.next_due_date, description: s.description,
+      });
+    }
+    if (s.next_due_hours != null) {
+      const remaining = r2(s.next_due_hours - (equipment.total_operating_hours || 0));
+      if (remaining <= 20) {
+        alerts.push({
+          type: remaining <= 0 ? 'hours_overdue' : 'hours_due',
+          schedule_id: s.id, equipment_id: s.equipment_id,
+          equipment_name: equipment.name, equipment_code: equipment.code,
+          remaining_hours: remaining, description: s.description,
+        });
+      }
+    }
+  }
+
+  return { success: true, data: alerts, count: alerts.length };
+}
+
+// ----------------------- إدارة الصيانة: السجلات (دورية منفذة / طارئة) -----------------------
+
+function createMaintenanceRecord(body) {
+  const store = loadStore();
+  const {
+    equipment_id, maintenance_type, schedule_id = null,
+    fault_description = null, fault_cause = null, severity = null,
+    repair_cost = 0, spare_parts_used = [], technician = null,
+    started_at = null, completed_at = null, status = 'scheduled', notes = null,
+  } = body || {};
+
+  if (!equipment_id) throw new Error('معرّف المعدة مطلوب');
+  const equipment = store.equipment[equipment_id];
+  if (!equipment) throw new Error('المعدة غير موجودة');
+  if (!maintenance_type || !MAINTENANCE_TYPES.includes(maintenance_type)) {
+    throw new Error(`نوع الصيانة غير صحيح. القيم المسموحة: ${MAINTENANCE_TYPES.join(', ')}`);
+  }
+  if (maintenance_type === 'emergency' && !fault_description) {
+    throw new Error('وصف العطل (fault_description) مطلوب للصيانة الطارئة');
+  }
+  if (severity && !MAINTENANCE_SEVERITIES.includes(severity)) {
+    throw new Error(`درجة الخطورة غير صحيحة: ${severity}`);
+  }
+  if (!MAINTENANCE_STATUSES.includes(status)) {
+    throw new Error(`حالة الصيانة غير صحيحة: ${status}`);
+  }
+
+  // خصم قطع الغيار المستخدمة من المخزون والتحقق من توفرها
+  let partsCost = 0;
+  const resolvedParts = [];
+  for (const use of spare_parts_used) {
+    const part = store.spareParts[use.part_id];
+    if (!part) throw new Error(`قطعة الغيار غير موجودة: ${use.part_id}`);
+    const qty = Number(use.quantity) || 0;
+    if (qty <= 0) throw new Error('كمية قطعة الغيار المستخدمة يجب أن تكون أكبر من صفر');
+    if (part.stock_quantity < qty) {
+      throw new Error(`المخزون غير كافٍ من قطعة الغيار (${part.name}): المتاح ${part.stock_quantity}`);
+    }
+    part.stock_quantity = r2(part.stock_quantity - qty);
+    part.updated_at = nowISO();
+    partsCost += (part.unit_price || 0) * qty;
+    resolvedParts.push({ part_id: part.id, part_name: part.name, quantity: qty, unit_price: part.unit_price, subtotal: r2((part.unit_price || 0) * qty) });
+  }
+  partsCost = r2(partsCost);
+
+  const id = newId('MREC');
+  const startTs = started_at || nowISO();
+  const isCompleted = status === 'completed';
+  const endTs = isCompleted ? (completed_at || nowISO()) : (completed_at || null);
+  const downtimeHours = endTs ? r2((new Date(endTs) - new Date(startTs)) / 3600000) : null;
+
+  const record = {
+    id,
+    equipment_id,
+    project_id: equipment.current_project_id || null,
+    maintenance_type,
+    schedule_id,
+    fault_description,
+    fault_cause,
+    severity,
+    repair_cost: r2(repair_cost || 0),
+    spare_parts_used: resolvedParts,
+    spare_parts_cost: partsCost,
+    total_cost: r2((Number(repair_cost) || 0) + partsCost),
+    technician,
+    started_at: startTs,
+    completed_at: endTs,
+    downtime_hours: downtimeHours,
+    status,
+    notes,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  store.maintenanceRecords[id] = record;
+
+  // تحديث حالة المعدة تبعاً لحالة الصيانة
+  if (status === 'scheduled' || status === 'in_progress') {
+    equipment.status = 'under_maintenance';
+    equipment.updated_at = nowISO();
+  } else if (status === 'completed') {
+    equipment.status = 'available';
+    equipment.updated_at = nowISO();
+    // تحديث موعد الصيانة الدورية القادمة إذا كان السجل مرتبطاً بجدول
+    if (schedule_id && store.maintenanceSchedules[schedule_id]) {
+      const sch = store.maintenanceSchedules[schedule_id];
+      if (sch.frequency === 'by_operating_hours' && sch.interval_hours) {
+        sch.next_due_hours = r2((equipment.total_operating_hours || 0) + sch.interval_hours);
+      } else if (sch.next_due_date) {
+        const daysMap = { daily: 1, weekly: 7, monthly: 30, yearly: 365 };
+        const addDays = daysMap[sch.frequency] || 30;
+        const d = new Date(sch.next_due_date);
+        d.setDate(d.getDate() + addDays);
+        sch.next_due_date = d.toISOString().slice(0, 10);
+      }
+      sch.updated_at = nowISO();
+    }
+  }
+
+  audit(store, {
+    action: 'create', entity: 'maintenance_record', entityId: id, projectId: record.project_id,
+    details: { equipment_id, maintenance_type, status },
+  });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function updateMaintenanceRecord(id, updates) {
+  const store = loadStore();
+  const record = store.maintenanceRecords[id];
+  if (!record) throw new Error('سجل الصيانة غير موجود');
+  if (updates.status && !MAINTENANCE_STATUSES.includes(updates.status)) {
+    throw new Error(`حالة الصيانة غير صحيحة: ${updates.status}`);
+  }
+
+  const wasCompleted = record.status === 'completed';
+  const blocked = ['id', 'equipment_id', 'created_at', 'spare_parts_used', 'spare_parts_cost'];
+  for (const [k, v] of Object.entries(updates)) {
+    if (blocked.includes(k)) continue;
+    record[k] = v;
+  }
+  record.total_cost = r2((Number(record.repair_cost) || 0) + (record.spare_parts_cost || 0));
+  record.updated_at = nowISO();
+
+  if (record.started_at && record.completed_at) {
+    record.downtime_hours = r2((new Date(record.completed_at) - new Date(record.started_at)) / 3600000);
+  }
+
+  const equipment = store.equipment[record.equipment_id];
+  if (equipment) {
+    if (!wasCompleted && record.status === 'completed') {
+      equipment.status = 'available';
+      equipment.updated_at = nowISO();
+    } else if (record.status === 'scheduled' || record.status === 'in_progress') {
+      equipment.status = 'under_maintenance';
+      equipment.updated_at = nowISO();
+    }
+  }
+
+  audit(store, { action: 'update', entity: 'maintenance_record', entityId: id, details: { status: record.status } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listMaintenanceRecords(filters = {}) {
+  const store = loadStore();
+  let items = Object.values(store.maintenanceRecords);
+  if (filters.equipmentId) items = items.filter(m => m.equipment_id === filters.equipmentId);
+  if (filters.projectId) items = items.filter(m => m.project_id === filters.projectId);
+  if (filters.maintenanceType) items = items.filter(m => m.maintenance_type === filters.maintenanceType);
+  if (filters.status) items = items.filter(m => m.status === filters.status);
+  items = items.sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
+  return { success: true, data: items, count: items.length };
+}
+
+function getMaintenanceStats(equipmentId) {
+  const store = loadStore();
+  const equipment = store.equipment[equipmentId];
+  if (!equipment) throw new Error('المعدة غير موجودة');
+
+  const records = Object.values(store.maintenanceRecords).filter(m => m.equipment_id === equipmentId);
+  const completed = records.filter(m => m.status === 'completed');
+  const emergency = records.filter(m => m.maintenance_type === 'emergency');
+
+  const totalCost = r2(records.reduce((s, m) => s + (m.total_cost || 0), 0));
+  const totalDowntime = r2(completed.reduce((s, m) => s + (m.downtime_hours || 0), 0));
+  const avgRepairTime = completed.length ? r2(totalDowntime / completed.length) : 0;
+  const faultsCount = emergency.length;
+  const avgTimeBetweenFaults = faultsCount > 1
+    ? (() => {
+        const sorted = emergency.slice().sort((a, b) => (a.started_at || '').localeCompare(b.started_at || ''));
+        const first = new Date(sorted[0].started_at);
+        const last = new Date(sorted[sorted.length - 1].started_at);
+        const days = (last - first) / 86400000;
+        return r2(days / (faultsCount - 1));
+      })()
+    : null;
+
+  return {
+    success: true,
+    data: {
+      equipment_id: equipmentId,
+      total_records: records.length,
+      completed_count: completed.length,
+      emergency_faults_count: faultsCount,
+      preventive_count: records.length - faultsCount,
+      total_maintenance_cost: totalCost,
+      total_downtime_hours: totalDowntime,
+      average_repair_time_hours: avgRepairTime,
+      average_days_between_faults: avgTimeBetweenFaults,
+    },
+  };
+}
+
+// ----------------------- إدارة قطع الغيار -----------------------
+
+function createSparePart(body) {
+  const store = loadStore();
+  const {
+    name, part_number = null, manufacturer = null, supplier = null,
+    stock_quantity = 0, unit_price = 0, min_stock_level = 0,
+    expected_lifespan = null, compatible_equipment_types = [],
+  } = body || {};
+
+  if (!name || !String(name).trim()) throw new Error('اسم قطعة الغيار مطلوب');
+  if (part_number) {
+    const dup = Object.values(store.spareParts).find(p => p.part_number === part_number);
+    if (dup) throw new Error(`رقم القطعة (${part_number}) مستخدم مسبقاً`);
+  }
+
+  const id = newId('PART');
+  const record = {
+    id,
+    name,
+    part_number,
+    manufacturer,
+    supplier,
+    stock_quantity: r2(stock_quantity),
+    unit_price: r2(unit_price),
+    min_stock_level: r2(min_stock_level),
+    expected_lifespan,
+    compatible_equipment_types,
+    is_active: true,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  store.spareParts[id] = record;
+  audit(store, { action: 'create', entity: 'spare_part', entityId: id, details: { name } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listSpareParts(filters = {}) {
+  const store = loadStore();
+  let items = Object.values(store.spareParts).filter(p => p.is_active !== false);
+  if (filters.equipmentType) items = items.filter(p => (p.compatible_equipment_types || []).includes(filters.equipmentType));
+  if (filters.lowStockOnly === true || filters.lowStockOnly === 'true') {
+    items = items.filter(p => p.stock_quantity <= p.min_stock_level);
+  }
+  if (filters.search) {
+    const q = String(filters.search).trim().toLowerCase();
+    items = items.filter(p => (p.name || '').toLowerCase().includes(q) || (p.part_number || '').toLowerCase().includes(q));
+  }
+  items = items.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+  return { success: true, data: items, count: items.length };
+}
+
+function updateSparePart(id, updates) {
+  const store = loadStore();
+  const record = store.spareParts[id];
+  if (!record) throw new Error('قطعة الغيار غير موجودة');
+  const blocked = ['id', 'created_at'];
+  for (const [k, v] of Object.entries(updates)) {
+    if (blocked.includes(k)) continue;
+    record[k] = v;
+  }
+  record.updated_at = nowISO();
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function deleteSparePart(id) {
+  const store = loadStore();
+  const record = store.spareParts[id];
+  if (!record) throw new Error('قطعة الغيار غير موجودة');
+  record.is_active = false;
+  record.updated_at = nowISO();
+  audit(store, { action: 'delete', entity: 'spare_part', entityId: id });
+  saveStore(store);
+  return { success: true, data: { id } };
+}
+
+function restockSparePart(id, quantity) {
+  const store = loadStore();
+  const record = store.spareParts[id];
+  if (!record) throw new Error('قطعة الغيار غير موجودة');
+  const qty = Number(quantity) || 0;
+  if (qty <= 0) throw new Error('كمية التزويد يجب أن تكون أكبر من صفر');
+  record.stock_quantity = r2(record.stock_quantity + qty);
+  record.updated_at = nowISO();
+  audit(store, { action: 'restock', entity: 'spare_part', entityId: id, details: { quantity: qty } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function getLowStockParts() {
+  const store = loadStore();
+  const items = Object.values(store.spareParts)
+    .filter(p => p.is_active !== false && p.stock_quantity <= p.min_stock_level)
+    .sort((a, b) => (a.stock_quantity - a.min_stock_level) - (b.stock_quantity - b.min_stock_level));
+  return { success: true, data: items, count: items.length };
+}
+
+// ----------------------- إدارة المشغلين -----------------------
+
+function createOperator(body) {
+  const store = loadStore();
+  const {
+    name, national_id = null, license_number = null, license_type = null,
+    license_expiry = null, training_courses = [], experience_years = 0,
+    authorized_equipment_types = [],
+  } = body || {};
+
+  if (!name || !String(name).trim()) throw new Error('اسم المشغل مطلوب');
+  if (license_type && !LICENSE_TYPES.includes(license_type)) {
+    throw new Error(`نوع الرخصة غير صحيح. القيم المسموحة: ${LICENSE_TYPES.join(', ')}`);
+  }
+  if (national_id) {
+    const dup = Object.values(store.operators).find(o => o.national_id === national_id);
+    if (dup) throw new Error('رقم الهوية مستخدم مسبقاً لمشغل آخر');
+  }
+
+  const id = newId('OPR');
+  const record = {
+    id,
+    name,
+    national_id,
+    license_number,
+    license_type,
+    license_expiry,
+    training_courses,
+    experience_years: r2(experience_years),
+    authorized_equipment_types,
+    performance_rating: null,
+    violations: [],
+    is_active: true,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  store.operators[id] = record;
+  audit(store, { action: 'create', entity: 'operator', entityId: id, details: { name } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listOperators(filters = {}) {
+  const store = loadStore();
+  let items = Object.values(store.operators).filter(o => o.is_active !== false);
+  if (filters.equipmentType) items = items.filter(o => (o.authorized_equipment_types || []).includes(filters.equipmentType));
+  if (filters.licenseExpiringWithinDays) {
+    const horizon = new Date(); horizon.setDate(horizon.getDate() + Number(filters.licenseExpiringWithinDays));
+    const horizonStr = horizon.toISOString().slice(0, 10);
+    const todayStr = nowISO().slice(0, 10);
+    items = items.filter(o => o.license_expiry && o.license_expiry >= todayStr && o.license_expiry <= horizonStr);
+  }
+  if (filters.search) {
+    const q = String(filters.search).trim().toLowerCase();
+    items = items.filter(o => (o.name || '').toLowerCase().includes(q) || (o.license_number || '').toLowerCase().includes(q));
+  }
+  items = items.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+  return { success: true, data: items, count: items.length };
+}
+
+function getOperator(id) {
+  const store = loadStore();
+  const record = store.operators[id];
+  if (!record) throw new Error('المشغل غير موجود');
+  const operations = Object.values(store.operationLogs)
+    .filter(o => o.operator_id === id)
+    .sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''))
+    .slice(0, 30);
+  return { success: true, data: { ...record, operation_history: operations } };
+}
+
+function updateOperator(id, updates) {
+  const store = loadStore();
+  const record = store.operators[id];
+  if (!record) throw new Error('المشغل غير موجود');
+  if (updates.license_type && !LICENSE_TYPES.includes(updates.license_type)) {
+    throw new Error(`نوع الرخصة غير صحيح: ${updates.license_type}`);
+  }
+  const blocked = ['id', 'created_at', 'violations'];
+  for (const [k, v] of Object.entries(updates)) {
+    if (blocked.includes(k)) continue;
+    record[k] = v;
+  }
+  record.updated_at = nowISO();
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function deleteOperator(id) {
+  const store = loadStore();
+  const record = store.operators[id];
+  if (!record) throw new Error('المشغل غير موجود');
+  record.is_active = false;
+  record.updated_at = nowISO();
+  audit(store, { action: 'delete', entity: 'operator', entityId: id });
+  saveStore(store);
+  return { success: true, data: { id } };
+}
+
+function addOperatorViolation(id, body) {
+  const store = loadStore();
+  const record = store.operators[id];
+  if (!record) throw new Error('المشغل غير موجود');
+  const { description, date = null, severity = null } = body || {};
+  if (!description) throw new Error('وصف المخالفة مطلوب');
+  if (!record.violations) record.violations = [];
+  record.violations.push({ id: newId('VIO'), description, date: date || nowISO().slice(0, 10), severity });
+  record.updated_at = nowISO();
+  audit(store, { action: 'add_violation', entity: 'operator', entityId: id, details: { description } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function rateOperatorPerformance(id, rating) {
+  const store = loadStore();
+  const record = store.operators[id];
+  if (!record) throw new Error('المشغل غير موجود');
+  const r = Number(rating);
+  if (!(r >= 1 && r <= 5)) throw new Error('التقييم يجب أن يكون رقماً بين 1 و 5');
+  record.performance_rating = r;
+  record.updated_at = nowISO();
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function getOperatorLicenseAlerts({ withinDays = 30 } = {}) {
+  const store = loadStore();
+  const horizon = new Date(); horizon.setDate(horizon.getDate() + Number(withinDays || 30));
+  const horizonStr = horizon.toISOString().slice(0, 10);
+  const todayStr = nowISO().slice(0, 10);
+
+  const items = Object.values(store.operators)
+    .filter(o => o.is_active !== false && o.license_expiry)
+    .filter(o => o.license_expiry <= horizonStr)
+    .map(o => ({
+      operator_id: o.id,
+      name: o.name,
+      license_number: o.license_number,
+      license_expiry: o.license_expiry,
+      status: o.license_expiry < todayStr ? 'expired' : 'expiring_soon',
+    }))
+    .sort((a, b) => (a.license_expiry || '').localeCompare(b.license_expiry || ''));
+
+  return { success: true, data: items, count: items.length };
+}
+
 // ===================== لوحة معلومات موجزة (أساسية - سيتم توسيعها بالجزء الثالث) =====================
 
 function getBasicDashboard(projectId = null) {
@@ -668,6 +1382,16 @@ module.exports = {
   OWNERSHIP_TYPES,
   FUEL_TYPES,
   EQUIPMENT_ROLES,
+  MAINTENANCE_FREQUENCIES,
+  MAINTENANCE_FREQUENCY_LABELS,
+  MAINTENANCE_TYPES,
+  MAINTENANCE_TYPE_LABELS,
+  MAINTENANCE_SEVERITIES,
+  MAINTENANCE_SEVERITY_LABELS,
+  MAINTENANCE_STATUSES,
+  MAINTENANCE_STATUS_LABELS,
+  LICENSE_TYPES,
+  LICENSE_TYPE_LABELS,
 
   // سجل المعدات
   createEquipment,
@@ -691,6 +1415,43 @@ module.exports = {
   // تتبع المعدات
   logMovement,
   getEquipmentTrackingHistory,
+
+  // ----- الجزء الثاني -----
+  // إدارة الوقود
+  logFuelEntry,
+  listFuelLogs,
+  getFuelStats,
+
+  // إدارة الصيانة - الجدولة الدورية
+  createMaintenanceSchedule,
+  listMaintenanceSchedules,
+  updateMaintenanceSchedule,
+  deleteMaintenanceSchedule,
+  getUpcomingMaintenanceAlerts,
+
+  // إدارة الصيانة - السجلات (دورية/طارئة)
+  createMaintenanceRecord,
+  updateMaintenanceRecord,
+  listMaintenanceRecords,
+  getMaintenanceStats,
+
+  // إدارة قطع الغيار
+  createSparePart,
+  listSpareParts,
+  updateSparePart,
+  deleteSparePart,
+  restockSparePart,
+  getLowStockParts,
+
+  // إدارة المشغلين
+  createOperator,
+  listOperators,
+  getOperator,
+  updateOperator,
+  deleteOperator,
+  addOperatorViolation,
+  rateOperatorPerformance,
+  getOperatorLicenseAlerts,
 
   // لوحة معلومات أساسية
   getBasicDashboard,
