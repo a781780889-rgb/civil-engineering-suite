@@ -141,6 +141,18 @@
     <div class="nav-item" data-panel="hse-emg-activations">
       <span class="nav-icon">☎️</span> سجلات الطوارئ الفعلية
     </div>
+    <div class="nav-item" data-panel="hse-trn-dashboard">
+      <span class="nav-icon">🎓</span> لوحة معلومات التدريب
+    </div>
+    <div class="nav-item" data-panel="hse-trn-courses">
+      <span class="nav-icon">📚</span> الدورات التدريبية
+    </div>
+    <div class="nav-item" data-panel="hse-trn-sessions">
+      <span class="nav-icon">🗓️</span> الجلسات التدريبية
+    </div>
+    <div class="nav-item" data-panel="hse-trn-certificates">
+      <span class="nav-icon">📜</span> الشهادات وصلاحيتها
+    </div>
   </nav>
 
   <main class="main-content">
@@ -2002,6 +2014,163 @@
       </div>
     </section>
 
+    <!-- ============ القسم الثامن — إدارة التدريب (HSE Training) ============ -->
+
+    <section class="calc-panel" id="panel-hse-trn-dashboard">
+      <div class="calc-card">
+        <h2>القسم الثامن — لوحة معلومات التدريب</h2>
+        <div class="toolbar">
+          <input type="text" id="hse-trn-dash-project" placeholder="معرّف المشروع (اختياري - اتركه فارغاً لعرض كل المشاريع)">
+          <button class="btn btn-outline" id="hse-trn-btn-load-dashboard">تحميل</button>
+        </div>
+        <div class="result-cards" id="hse-trn-dash-cards"></div>
+        <div class="pm-grid">
+          <div>
+            <h3>توزيع الدورات حسب الفئة</h3>
+            <div id="hse-trn-chart-categories" class="pm-bars"></div>
+          </div>
+          <div>
+            <h3>أقرب الشهادات على وشك الانتهاء</h3>
+            <div id="hse-trn-upcoming-expiry" class="pm-activity-log"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="calc-panel" id="panel-hse-trn-courses">
+      <div class="calc-card">
+        <h2>القسم الثامن — الدورات التدريبية</h2>
+
+        <div id="hse-trn-course-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-trn-course-search" placeholder="بحث بالعنوان / الرمز...">
+            <select id="hse-trn-course-filter-category"><option value="">كل الفئات</option></select>
+            <select id="hse-trn-course-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-trn-course-btn-new">+ دورة تدريبية جديدة</button>
+          </div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-trn-course-table">
+              <thead><tr><th>الرمز</th><th>العنوان</th><th>الفئة</th><th>مدة الصلاحية (يوم)</th><th>الحد الأدنى للنجاح</th><th>إلزامية</th><th>الجلسات</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="hse-trn-course-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-trn-course-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-trn-course-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-trn-course-form">
+            <div class="field"><label>عنوان الدورة *</label><input type="text" id="hse-trn-course-f-title"></div>
+            <div class="field"><label>الفئة *</label><select id="hse-trn-course-f-category"></select></div>
+            <div class="field"><label>طريقة التنفيذ</label><select id="hse-trn-course-f-delivery"></select></div>
+            <div class="field"><label>عدد الساعات</label><input type="number" id="hse-trn-course-f-duration" min="0" step="0.5"></div>
+            <div class="field"><label>مدة صلاحية الشهادة (يوم)</label><input type="number" id="hse-trn-course-f-validity" min="0" value="365"></div>
+            <div class="field"><label>الحد الأدنى للنجاح (%)</label><input type="number" id="hse-trn-course-f-passscore" min="0" max="100" value="70"></div>
+            <div class="field"><label>إلزامية؟</label>
+              <select id="hse-trn-course-f-mandatory"><option value="false">اختيارية</option><option value="true">إلزامية</option></select>
+            </div>
+            <div class="field"><label>الحالة</label><select id="hse-trn-course-f-status"></select></div>
+            <div class="field field-full"><label>الوصف</label><textarea id="hse-trn-course-f-description" rows="2"></textarea></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-trn-course-btn-save">حفظ الدورة</button></div>
+          <div id="hse-trn-course-form-alert"></div>
+        </div>
+
+        <div id="hse-trn-course-detail-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-trn-course-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-trn-course-detail-content"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="calc-panel" id="panel-hse-trn-sessions">
+      <div class="calc-card">
+        <h2>القسم الثامن — الجلسات التدريبية والمتدربون</h2>
+
+        <div id="hse-trn-session-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-trn-session-project" placeholder="معرّف المشروع (اختياري)">
+            <select id="hse-trn-session-filter-course"><option value="">كل الدورات</option></select>
+            <select id="hse-trn-session-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-trn-session-btn-new">+ جدولة جلسة تدريبية</button>
+          </div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-trn-session-table">
+              <thead><tr><th>الرمز</th><th>الدورة</th><th>التاريخ</th><th>المدرّب</th><th>المسجَّلون</th><th>ناجح</th><th>راسب</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="hse-trn-session-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-trn-session-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-trn-session-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-trn-session-form">
+            <div class="field"><label>الدورة *</label><select id="hse-trn-session-f-course"></select></div>
+            <div class="field"><label>معرّف المشروع *</label><input type="text" id="hse-trn-session-f-project"></div>
+            <div class="field"><label>تاريخ الجلسة *</label><input type="date" id="hse-trn-session-f-date"></div>
+            <div class="field"><label>الموقع</label><input type="text" id="hse-trn-session-f-location"></div>
+            <div class="field"><label>اسم المدرّب</label><input type="text" id="hse-trn-session-f-trainer"></div>
+            <div class="field"><label>الجهة المدرِّبة</label><input type="text" id="hse-trn-session-f-trainer-org"></div>
+            <div class="field field-full"><label>ملاحظات</label><textarea id="hse-trn-session-f-notes" rows="2"></textarea></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-trn-session-btn-save">حفظ الجلسة</button></div>
+          <div id="hse-trn-session-form-alert"></div>
+        </div>
+
+        <div id="hse-trn-session-detail-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-trn-session-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-trn-session-detail-content"></div>
+
+          <h3>إضافة متدرب للجلسة</h3>
+          <div class="form-grid" id="hse-trn-enroll-form">
+            <div class="field"><label>اسم المتدرب *</label><input type="text" id="hse-trn-enr-f-name"></div>
+            <div class="field"><label>معرّف الموظف (اختياري)</label><input type="text" id="hse-trn-enr-f-employee"></div>
+            <div class="field"><label>المسمى الوظيفي</label><input type="text" id="hse-trn-enr-f-role"></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-outline" id="hse-trn-enr-btn-add">+ إضافة متدرب</button></div>
+          <div id="hse-trn-enroll-form-alert"></div>
+
+          <h3>قائمة المتدربين ونتائجهم</h3>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-trn-enroll-table">
+              <thead><tr><th>الاسم</th><th>الحضور</th><th>الدرجة</th><th>النتيجة</th><th>الشهادة</th><th>تنتهي في</th><th></th></tr></thead>
+              <tbody id="hse-trn-enroll-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="calc-panel" id="panel-hse-trn-certificates">
+      <div class="calc-card">
+        <h2>القسم الثامن — الشهادات التدريبية وصلاحيتها</h2>
+        <div class="toolbar">
+          <input type="text" id="hse-trn-cert-project" placeholder="معرّف المشروع (اختياري)">
+          <select id="hse-trn-cert-within">
+            <option value="30">خلال 30 يوم</option>
+            <option value="60">خلال 60 يوم</option>
+            <option value="90">خلال 90 يوم</option>
+            <option value="365">خلال سنة</option>
+          </select>
+          <button class="btn btn-outline" id="hse-trn-cert-btn-load">تحميل</button>
+        </div>
+        <div class="result-cards" id="hse-trn-cert-cards"></div>
+        <div class="table-wrap">
+          <table class="detail-table" id="hse-trn-cert-table">
+            <thead><tr><th>المتدرب</th><th>رقم الشهادة</th><th>الدورة</th><th>تاريخ الإتمام</th><th>تنتهي في</th><th>الأيام المتبقية</th><th>الحالة</th></tr></thead>
+            <tbody id="hse-trn-cert-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -2089,5 +2258,6 @@
 <script src="js/equipment.js"></script>
 <script src="js/hse.js"></script>
 <script src="js/hseEmergency.js"></script>
+<script src="js/hseTraining.js"></script>
 </body>
 </html>
