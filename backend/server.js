@@ -32,6 +32,7 @@ const IMPORT = require('./calculators/import');
 const PriceLib = require('./utils/priceLibrary');
 const Reports = require('./utils/boqReports');
 const PM = require('./utils/projectManagement');
+const SCH = require('./utils/scheduling');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -1111,6 +1112,346 @@ const API_HANDLERS = {
       if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
       if (!body.question) throw new Error('يجب إرسال question');
       return PM.aiAnswerProjectQuestion(body.projectId, body.question);
+    },
+  },
+
+  // ================================================================
+  // القسم الخامس - نظام الجدول الزمني الاحترافي (Scheduling System)
+  // ================================================================
+
+  // ----- لوحة المعلومات -----
+  '/api/schedule/dashboard': {
+    GET: async (_body, query) => SCH.getDashboard(query?.projectId || null),
+  },
+
+  // ----- الجداول الزمنية (CRUD) -----
+  '/api/schedule/schedules': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return SCH.listSchedules(query.projectId);
+    },
+    POST: async (body) => SCH.createSchedule(body),
+  },
+  '/api/schedule/schedules/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الجدول (id) مطلوب');
+      return SCH.getSchedule(query.id);
+    },
+  },
+  '/api/schedule/schedules/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الجدول (id) مطلوب');
+      const { id, ...rest } = body;
+      return SCH.updateSchedule(id, rest);
+    },
+  },
+  '/api/schedule/schedules/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الجدول (id) مطلوب');
+      return SCH.deleteSchedule(body.id);
+    },
+  },
+
+  // ----- الأنشطة / هيكل تقسيم العمل (WBS) -----
+  '/api/schedule/activities': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.listActivities(query.scheduleId, { status: query.status, assignee: query.assignee, wbsLevel: query.wbsLevel, parentId: query.parentId });
+    },
+    POST: async (body) => SCH.createActivity(body),
+  },
+  '/api/schedule/activities/tree': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.buildWbsTree(query.scheduleId);
+    },
+  },
+  '/api/schedule/activities/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف النشاط (id) مطلوب');
+      return SCH.getActivity(query.id);
+    },
+  },
+  '/api/schedule/activities/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف النشاط (id) مطلوب');
+      const { id, ...rest } = body;
+      return SCH.updateActivity(id, rest);
+    },
+  },
+  '/api/schedule/activities/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف النشاط (id) مطلوب');
+      return SCH.deleteActivity(body.id);
+    },
+  },
+  '/api/schedule/activities/reorder': {
+    POST: async (body) => {
+      if (!body.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.reorderActivities(body.scheduleId, body.orderedIds || []);
+    },
+  },
+
+  // ----- العلاقات بين الأنشطة -----
+  '/api/schedule/relations': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.listRelations(query.scheduleId);
+    },
+    POST: async (body) => SCH.createRelation(body),
+  },
+  '/api/schedule/relations/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف العلاقة (id) مطلوب');
+      const { id, ...rest } = body;
+      return SCH.updateRelation(id, rest);
+    },
+  },
+  '/api/schedule/relations/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف العلاقة (id) مطلوب');
+      return SCH.deleteRelation(body.id);
+    },
+  },
+
+  // ----- المسار الحرج (CPM) -----
+  '/api/schedule/cpm': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.computeCPM(query.scheduleId);
+    },
+  },
+  '/api/schedule/recalculate': {
+    POST: async (body) => {
+      if (!body.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.recalculateSchedule(body.scheduleId);
+    },
+  },
+
+  // ----- إعادة الجدولة والإصدارات (Baselines) -----
+  '/api/schedule/baselines': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.listBaselines(query.scheduleId);
+    },
+    POST: async (body) => {
+      if (!body.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.saveBaseline(body.scheduleId, { name: body.name, note: body.note });
+    },
+  },
+  '/api/schedule/reschedule': {
+    POST: async (body) => {
+      if (!body.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.rescheduleActivities(body.scheduleId, {
+        shiftDays: Number(body.shiftDays) || 0,
+        fromDate: body.fromDate || null,
+        activityIds: body.activityIds || null,
+      });
+    },
+  },
+
+  // ----- متابعة التنفيذ (المخطط مقابل الفعلي) -----
+  '/api/schedule/comparison': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.compareScheduleVsActual(query.scheduleId);
+    },
+  },
+
+  // ----- الموارد -----
+  '/api/schedule/resources': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.listResourceAssignments(query.scheduleId, { resourceType: query.resourceType, activityId: query.activityId });
+    },
+    POST: async (body) => SCH.assignResourceToActivity(body),
+  },
+  '/api/schedule/resources/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف تخصيص المورد (id) مطلوب');
+      const { id, ...rest } = body;
+      return SCH.updateResourceAssignment(id, rest);
+    },
+  },
+  '/api/schedule/resources/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف تخصيص المورد (id) مطلوب');
+      return SCH.deleteResourceAssignment(body.id);
+    },
+  },
+  '/api/schedule/resources/histogram': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.computeResourceHistogram(query.scheduleId);
+    },
+  },
+
+  // ----- منحنى S-Curve / Burndown -----
+  '/api/schedule/scurve': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.computeSCurve(query.scheduleId);
+    },
+  },
+
+  // ----- التقويمات -----
+  '/api/schedule/calendars': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return SCH.listCalendars(query.projectId);
+    },
+    POST: async (body) => SCH.createCalendar(body),
+  },
+  '/api/schedule/calendars/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف التقويم (id) مطلوب');
+      const { id, ...rest } = body;
+      return SCH.updateCalendar(id, rest);
+    },
+  },
+
+  // ----- الإشعارات -----
+  '/api/schedule/notifications': {
+    GET: async (_body, query) => SCH.listNotifications(query?.projectId || null, { unreadOnly: query?.unreadOnly === 'true' }),
+  },
+  '/api/schedule/notifications/read': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الإشعار (id) مطلوب');
+      return SCH.markNotificationRead(body.id);
+    },
+  },
+  '/api/schedule/notifications/scan': {
+    POST: async (body) => {
+      if (!body.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.scanAndPushAutomaticNotifications(body.scheduleId);
+    },
+  },
+
+  // ----- سجل التدقيق -----
+  '/api/schedule/audit-log': {
+    GET: async (_body, query) => SCH.getAuditLog(query?.projectId || null, { limit: query?.limit ? Number(query.limit) : 200 }),
+  },
+
+  // ----- التكامل مع بقية الأقسام -----
+  '/api/schedule/integration/snapshot': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return SCH.getIntegrationSnapshot(query.projectId);
+    },
+  },
+
+  // ----- التقارير -----
+  '/api/schedule/reports/schedule': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.buildScheduleReport(query.scheduleId);
+    },
+  },
+  '/api/schedule/reports/progress': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.buildProgressReport(query.scheduleId);
+    },
+  },
+  '/api/schedule/reports/delay': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.buildDelayReport(query.scheduleId);
+    },
+  },
+  '/api/schedule/reports/critical-path': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.buildCriticalPathReport(query.scheduleId);
+    },
+  },
+  '/api/schedule/reports/resources': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.buildResourceReport(query.scheduleId);
+    },
+  },
+  '/api/schedule/reports/executive': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.buildExecutiveReport(query.scheduleId);
+    },
+  },
+  '/api/schedule/reports/export/pdf': {
+    POST: async (body) => {
+      if (!body.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      const reportBuilders = {
+        schedule: SCH.buildScheduleReport, progress: SCH.buildProgressReport, delay: SCH.buildDelayReport,
+        critical_path: SCH.buildCriticalPathReport, resources: SCH.buildResourceReport, executive: SCH.buildExecutiveReport,
+      };
+      const builder = reportBuilders[body.reportType] || SCH.buildExecutiveReport;
+      const report = builder(body.scheduleId);
+      const schedule = SCH.getSchedule(body.scheduleId);
+      const result = SCH.exportReportToPDF(report, { title: body.title || 'Schedule Report', projectName: schedule.name });
+      return { success: true, ...result };
+    },
+  },
+  '/api/schedule/reports/export/excel': {
+    POST: async (body) => {
+      if (!body.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      const reportBuilders = {
+        schedule: SCH.buildScheduleReport, progress: SCH.buildProgressReport, delay: SCH.buildDelayReport,
+        critical_path: SCH.buildCriticalPathReport, resources: SCH.buildResourceReport, executive: SCH.buildExecutiveReport,
+      };
+      const builder = reportBuilders[body.reportType] || SCH.buildExecutiveReport;
+      const report = builder(body.scheduleId);
+      const result = SCH.exportReportToExcel(report, { title: body.title || 'Schedule Report' });
+      return { success: true, ...result };
+    },
+  },
+  '/api/schedule/reports/export/csv': {
+    POST: async (body) => {
+      if (!body.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      const reportBuilders = {
+        schedule: SCH.buildScheduleReport, progress: SCH.buildProgressReport, delay: SCH.buildDelayReport,
+        critical_path: SCH.buildCriticalPathReport, resources: SCH.buildResourceReport, executive: SCH.buildExecutiveReport,
+      };
+      const builder = reportBuilders[body.reportType] || SCH.buildExecutiveReport;
+      const report = builder(body.scheduleId);
+      const result = SCH.exportReportToCSV(report);
+      return { success: true, ...result };
+    },
+  },
+
+  // ----- الذكاء الاصطناعي -----
+  '/api/schedule/ai/analyze': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.aiAnalyzeSchedule(query.scheduleId);
+    },
+    POST: async (body) => {
+      if (!body.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.aiAnalyzeSchedule(body.scheduleId);
+    },
+  },
+  '/api/schedule/ai/suggest-reschedule': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.aiSuggestRescheduling(query.scheduleId);
+    },
+  },
+  '/api/schedule/ai/optimize-resources': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.aiOptimizeResourceDistribution(query.scheduleId);
+    },
+  },
+  '/api/schedule/ai/predict-finish': {
+    GET: async (_body, query) => {
+      if (!query?.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      return SCH.aiPredictFinishDate(query.scheduleId);
+    },
+  },
+  '/api/schedule/ai/ask': {
+    POST: async (body) => {
+      if (!body.scheduleId) throw new Error('معرّف الجدول (scheduleId) مطلوب');
+      if (!body.question) throw new Error('يجب إرسال question');
+      return SCH.aiAnswerScheduleQuestion(body.scheduleId, body.question);
     },
   },
 };
