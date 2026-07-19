@@ -42,6 +42,7 @@ const EQ = require('./utils/equipmentManagement');
 const EQR = require('./utils/equipmentReports');
 const EQI = require('./utils/equipmentIntelligence');
 const HSE = require('./utils/hseManagement');
+const HSE_EMG = require('./utils/hseEmergency');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -2914,6 +2915,134 @@ const API_HANDLERS = {
   },
   '/api/hse/ppe/compliance-summary': {
     GET: async (_body, query) => HSE.getPpeComplianceSummary({ projectId: query?.projectId || null }),
+  },
+
+  // ===================================================================
+  // ===== القسم الثامن (الجزء 3/4) - إدارة السلامة المهنية (HSE):
+  // ===== إدارة الطوارئ (خطط، فرق، نقاط تجمع، معدات إطفاء، تمارين إخلاء،
+  // ===== سجلات تفعيل الطوارئ الفعلية)
+  // ===================================================================
+
+  '/api/hse/emergency/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        scenario_types: HSE_EMG.EMERGENCY_SCENARIO_TYPES,
+        scenario_type_labels: HSE_EMG.EMERGENCY_SCENARIO_TYPE_LABELS,
+        plan_statuses: HSE_EMG.EMERGENCY_PLAN_STATUSES,
+        plan_status_labels: HSE_EMG.EMERGENCY_PLAN_STATUS_LABELS,
+        team_roles: HSE_EMG.EMERGENCY_TEAM_ROLES,
+        team_role_labels: HSE_EMG.EMERGENCY_TEAM_ROLE_LABELS,
+        fire_equipment_types: HSE_EMG.FIRE_EQUIPMENT_TYPES,
+        fire_equipment_type_labels: HSE_EMG.FIRE_EQUIPMENT_TYPE_LABELS,
+        fire_equipment_statuses: HSE_EMG.FIRE_EQUIPMENT_STATUSES,
+        fire_equipment_status_labels: HSE_EMG.FIRE_EQUIPMENT_STATUS_LABELS,
+        drill_types: HSE_EMG.DRILL_TYPES,
+        drill_type_labels: HSE_EMG.DRILL_TYPE_LABELS,
+        drill_statuses: HSE_EMG.DRILL_STATUSES,
+        drill_status_labels: HSE_EMG.DRILL_STATUS_LABELS,
+        activation_statuses: HSE_EMG.ACTIVATION_STATUSES,
+        activation_status_labels: HSE_EMG.ACTIVATION_STATUS_LABELS,
+        response_evaluation_ratings: HSE_EMG.RESPONSE_EVALUATION_RATINGS,
+        response_evaluation_rating_labels: HSE_EMG.RESPONSE_EVALUATION_RATING_LABELS,
+      },
+    }),
+  },
+
+  '/api/hse/emergency/dashboard': {
+    GET: async (_body, query) => HSE_EMG.getEmergencyDashboard(query?.projectId || null),
+  },
+
+  // ----- خطط الطوارئ -----
+  '/api/hse/emergency/plans': {
+    GET: async (_body, query) => HSE_EMG.listEmergencyPlans({
+      projectId: query?.projectId, status: query?.status, scenarioType: query?.scenarioType, search: query?.search,
+    }),
+    POST: async (body) => HSE_EMG.createEmergencyPlan(body),
+  },
+  '/api/hse/emergency/plans/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف خطة الطوارئ (id) مطلوب');
+      return HSE_EMG.getEmergencyPlan(query.id);
+    },
+  },
+  '/api/hse/emergency/plans/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف خطة الطوارئ (id) مطلوب');
+      return HSE_EMG.updateEmergencyPlan(body.id, body.updates || {});
+    },
+  },
+  '/api/hse/emergency/plans/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف خطة الطوارئ (id) مطلوب');
+      return HSE_EMG.deleteEmergencyPlan(body.id);
+    },
+  },
+  '/api/hse/emergency/plans/approve': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف خطة الطوارئ (id) مطلوب');
+      return HSE_EMG.approveEmergencyPlan(body.id, { approved_by: body.approved_by || null });
+    },
+  },
+
+  // ----- تمارين وتدريبات الإخلاء -----
+  '/api/hse/emergency/drills': {
+    GET: async (_body, query) => HSE_EMG.listDrills({
+      projectId: query?.projectId, drillType: query?.drillType, status: query?.status,
+      dateFrom: query?.dateFrom, dateTo: query?.dateTo,
+    }),
+    POST: async (body) => HSE_EMG.createDrill(body),
+  },
+  '/api/hse/emergency/drills/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف التمرين (id) مطلوب');
+      return HSE_EMG.getDrill(query.id);
+    },
+  },
+  '/api/hse/emergency/drills/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف التمرين (id) مطلوب');
+      return HSE_EMG.updateDrill(body.id, body.updates || {});
+    },
+  },
+  '/api/hse/emergency/drills/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف التمرين (id) مطلوب');
+      return HSE_EMG.deleteDrill(body.id);
+    },
+  },
+  '/api/hse/emergency/drills/complete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف التمرين (id) مطلوب');
+      return HSE_EMG.completeDrill(body.id, body);
+    },
+  },
+
+  // ----- سجلات الطوارئ الفعلية (Activation Log) -----
+  '/api/hse/emergency/activations': {
+    GET: async (_body, query) => HSE_EMG.listActivations({
+      projectId: query?.projectId, scenarioType: query?.scenarioType, status: query?.status,
+      dateFrom: query?.dateFrom, dateTo: query?.dateTo,
+    }),
+    POST: async (body) => HSE_EMG.createActivation(body),
+  },
+  '/api/hse/emergency/activations/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف سجل الطوارئ (id) مطلوب');
+      return HSE_EMG.getActivation(query.id);
+    },
+  },
+  '/api/hse/emergency/activations/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف سجل الطوارئ (id) مطلوب');
+      return HSE_EMG.updateActivation(body.id, body.updates || {});
+    },
+  },
+  '/api/hse/emergency/activations/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف سجل الطوارئ (id) مطلوب');
+      return HSE_EMG.deleteActivation(body.id);
+    },
   },
 };
 
