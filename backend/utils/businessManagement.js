@@ -233,6 +233,31 @@ function _touchClient(db, id) {
   return client;
 }
 
+// يُستخدم من وحدة العقود (الجزء الثاني) لربط عقد بعميل فعلياً وتحديث سجل تعاملاته
+function linkContractToClient(clientId, contractRef) {
+  const db = readJSON(CLIENTS_FILE, defaultClientsDB());
+  const client = _touchClient(db, clientId);
+  if (!client.linked_contracts.includes(contractRef.id)) {
+    client.linked_contracts.push(contractRef.id);
+  }
+  client.activity_log.push({
+    id: newId('ACT'), at: nowISO(), type: 'contract_linked',
+    summary: `عقد مرتبط: ${contractRef.title || contractRef.id}`,
+  });
+  client.updated_at = nowISO();
+  writeJSON(CLIENTS_FILE, db);
+  return client;
+}
+
+function unlinkContractFromClient(clientId, contractId) {
+  const db = readJSON(CLIENTS_FILE, defaultClientsDB());
+  const client = db.clients.find(c => c.id === clientId);
+  if (!client) return; // العميل قد يكون محذوفاً؛ لا نُفشل عملية حذف العقد بسبب ذلك
+  client.linked_contracts = client.linked_contracts.filter(id => id !== contractId);
+  client.updated_at = nowISO();
+  writeJSON(CLIENTS_FILE, db);
+}
+
 function addClientMeeting(clientId, meeting) {
   if (!meeting || !meeting.title) throw new Error('عنوان الاجتماع (title) مطلوب');
   const db = readJSON(CLIENTS_FILE, defaultClientsDB());
@@ -490,6 +515,70 @@ function _touchSupplier(db, id) {
   return supplier;
 }
 
+// يُستخدم من وحدة العقود (الجزء الثاني) لربط عقد بمورد فعلياً
+function linkContractToSupplier(supplierId, contractRef) {
+  const db = readJSON(SUPPLIERS_FILE, defaultSuppliersDB());
+  const supplier = _touchSupplier(db, supplierId);
+  if (!supplier.linked_contracts.includes(contractRef.id)) {
+    supplier.linked_contracts.push(contractRef.id);
+  }
+  supplier.activity_log.push({
+    id: newId('ACT'), at: nowISO(), type: 'contract_linked',
+    summary: `عقد مرتبط: ${contractRef.title || contractRef.id}`,
+  });
+  supplier.updated_at = nowISO();
+  writeJSON(SUPPLIERS_FILE, db);
+  return supplier;
+}
+
+function unlinkContractFromSupplier(supplierId, contractId) {
+  const db = readJSON(SUPPLIERS_FILE, defaultSuppliersDB());
+  const supplier = db.suppliers.find(s => s.id === supplierId);
+  if (!supplier) return;
+  supplier.linked_contracts = supplier.linked_contracts.filter(id => id !== contractId);
+  supplier.updated_at = nowISO();
+  writeJSON(SUPPLIERS_FILE, db);
+}
+
+// يُستخدم من وحدة المشتريات (الجزء الثاني) لإضافة مرجع أمر شراء فعلي على المورد
+function linkPurchaseOrderToSupplier(supplierId, poRef) {
+  const db = readJSON(SUPPLIERS_FILE, defaultSuppliersDB());
+  const supplier = _touchSupplier(db, supplierId);
+  supplier.purchase_orders.push({ id: poRef.id, status: poRef.status || 'pending', value: poRef.value || 0, created_at: nowISO() });
+  supplier.activity_log.push({
+    id: newId('ACT'), at: nowISO(), type: 'purchase_order',
+    summary: `أمر شراء: ${poRef.id} (${poRef.value || 0})`,
+  });
+  supplier.updated_at = nowISO();
+  writeJSON(SUPPLIERS_FILE, db);
+  return supplier;
+}
+
+// يقرأ سعر منتج مورد معيّن (تُستخدمه وحدة المشتريات لمقارنة الأسعار الفعلية)
+function getSupplierProductPrice(supplierId, productId) {
+  const db = readJSON(SUPPLIERS_FILE, defaultSuppliersDB());
+  const supplier = _touchSupplier(db, supplierId);
+  const product = supplier.products.find(p => p.id === productId);
+  if (!product) throw new Error('المنتج غير موجود لدى هذا المورد');
+  return { supplier_id: supplier.id, supplier_name: supplier.name, ...product };
+}
+
+// يقارن سعر نفس اسم الصنف بين كل الموردين (بحث نصي على اسم المنتج)
+function compareSupplierPricesByProductName(productName) {
+  const db = readJSON(SUPPLIERS_FILE, defaultSuppliersDB());
+  const needle = String(productName).trim().toLowerCase();
+  const results = [];
+  db.suppliers.forEach(s => {
+    s.products.forEach(p => {
+      if (p.name.toLowerCase().includes(needle)) {
+        results.push({ supplier_id: s.id, supplier_name: s.name, ...p });
+      }
+    });
+  });
+  results.sort((a, b) => a.price - b.price);
+  return results;
+}
+
 function addSupplierProduct(supplierId, product) {
   if (!product || !product.name) throw new Error('اسم المنتج/الخدمة (name) مطلوب');
   const db = readJSON(SUPPLIERS_FILE, defaultSuppliersDB());
@@ -659,6 +748,8 @@ module.exports = {
   addClientAttachment,
   getClientActivityLog,
   getClientsDashboard,
+  linkContractToClient,
+  unlinkContractFromClient,
   // الموردون
   createSupplier,
   listSuppliers,
@@ -672,6 +763,11 @@ module.exports = {
   setSupplierQualityScore,
   getSupplierActivityLog,
   getSuppliersDashboard,
+  linkContractToSupplier,
+  unlinkContractFromSupplier,
+  linkPurchaseOrderToSupplier,
+  getSupplierProductPrice,
+  compareSupplierPricesByProductName,
   // مشترك
   getAuditLog,
 };
