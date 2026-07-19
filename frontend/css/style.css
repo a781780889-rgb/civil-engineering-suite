@@ -282,6 +282,23 @@ body {
   margin-top: 10px;
 }
 
+.field-full { grid-column: 1 / -1; }
+.field textarea {
+  padding: 10px 12px;
+  border: 1px solid #c9bd9c;
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 14px;
+  background: #fff;
+  color: var(--ink);
+  resize: vertical;
+}
+.field textarea:focus {
+  outline: 2px solid var(--accent-copper);
+  outline-offset: 1px;
+  border-color: var(--accent-copper);
+}
+
 /* Dynamic rows (rebar groups, columns, openings) */
 .dynamic-rows { grid-column: 1/-1; display: flex; flex-direction: column; gap: 10px; }
 .dynamic-row {
@@ -427,6 +444,14 @@ body {
 .alert-danger { background: #fbe9e7; border: 1px solid var(--danger); color: #7d2a22; }
 .alert-warn { background: #fdf3e0; border: 1px solid var(--warn); color: #7a5613; }
 .alert-error { background: #fbe9e7; border: 1px solid var(--danger); color: #7d2a22; font-family: var(--mono); font-size: 13px; }
+.alert-info { background: #eef2f7; border: 1px solid #b9c8d8; color: #35506b; font-family: var(--mono); font-size: 13px; }
+
+/* القسم الثامن: مصفوفة المخاطر (Risk Matrix) */
+.hse-matrix-table th, .hse-matrix-table td { text-align: center; font-family: var(--mono); font-size: 12px; }
+.hse-cell-low { background: #e7f4ec; color: #245c3d; font-weight: 600; }
+.hse-cell-medium { background: #fff6dd; color: #8a6d00; font-weight: 600; }
+.hse-cell-high { background: #ffe9d6; color: #93430c; font-weight: 600; }
+.hse-cell-critical { background: #fbe0de; color: #7d2a22; font-weight: 700; }
 
 .tag {
   display: inline-block;
