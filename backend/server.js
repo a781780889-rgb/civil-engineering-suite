@@ -39,6 +39,7 @@ const BIZO = require('./utils/businessOperations');
 const SEC = require('./utils/businessSecurity');
 const GOV = require('./utils/businessGovernance');
 const EQ = require('./utils/equipmentManagement');
+const EQR = require('./utils/equipmentReports');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -135,6 +136,34 @@ function requirePermission(req, mod, action) {
   if (!token) throw new Error('يجب تسجيل الدخول للوصول إلى هذا المورد');
   if (!SEC.can(token, mod, action)) throw new Error('لا تملك صلاحية تنفيذ هذا الإجراء');
   return token;
+}
+
+// القسم السابع - إدارة المعدات - الجزء الرابع (4-أ): يعيد بناء التقرير المطلوب
+// حسب reportType قبل تمريره لدوال التصدير (PDF/Excel/CSV/طباعة) في equipmentReports.js
+function buildEquipmentReportFromRequest(body) {
+  const { reportType } = body || {};
+  if (!reportType) throw new Error('نوع التقرير (reportType) مطلوب');
+  const f = {
+    equipmentId: body.equipmentId || null, projectId: body.projectId || null,
+    category: body.category || null, type: body.type || null, status: body.status || null,
+    maintenanceType: body.maintenanceType || null, severity: body.severity || null,
+    dateFrom: body.dateFrom || null, dateTo: body.dateTo || null,
+  };
+  switch (reportType) {
+    case 'fleet_register': return EQR.buildFleetRegisterReport(f);
+    case 'operations': return EQR.buildOperationsReport(f);
+    case 'maintenance': return EQR.buildMaintenanceReport(f);
+    case 'fuel': return EQR.buildFuelReport(f);
+    case 'faults': return EQR.buildFaultsReport(f);
+    case 'productivity': return EQR.buildProductivityReport(f);
+    case 'costs': return EQR.buildCostsReport(f);
+    case 'depreciation': return EQR.buildDepreciationReport(f);
+    case 'usage_by_project':
+      if (!f.projectId) throw new Error('معرّف المشروع (projectId) مطلوب لتقرير الاستخدام حسب المشروع');
+      return EQR.buildUsageByProjectReport(f);
+    case 'executive_summary': return EQR.buildExecutiveSummaryReport(f);
+    default: throw new Error(`نوع تقرير غير معروف: ${reportType}`);
+  }
 }
 
 const API_HANDLERS = {
@@ -2381,6 +2410,102 @@ const API_HANDLERS = {
       withinDays: query?.withinDays ? Number(query.withinDays) : 14,
       fuelLowThresholdPercent: query?.fuelLowThresholdPercent ? Number(query.fuelLowThresholdPercent) : 15,
     }),
+  },
+
+  // ===================================================================
+  // القسم السابع - إدارة المعدات - الجزء الرابع (4-أ من 4-ب): التقارير
+  // ===================================================================
+
+  '/api/equipment/reports/fleet-register': {
+    GET: async (_body, query) => ({ success: true, data: EQR.buildFleetRegisterReport({
+      category: query?.category || null, type: query?.type || null,
+      status: query?.status || null, projectId: query?.projectId || null,
+    }) }),
+  },
+  '/api/equipment/reports/operations': {
+    GET: async (_body, query) => ({ success: true, data: EQR.buildOperationsReport({
+      equipmentId: query?.equipmentId || null, projectId: query?.projectId || null,
+      dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+    }) }),
+  },
+  '/api/equipment/reports/maintenance': {
+    GET: async (_body, query) => ({ success: true, data: EQR.buildMaintenanceReport({
+      equipmentId: query?.equipmentId || null, projectId: query?.projectId || null,
+      maintenanceType: query?.maintenanceType || null, status: query?.status || null,
+      dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+    }) }),
+  },
+  '/api/equipment/reports/fuel': {
+    GET: async (_body, query) => ({ success: true, data: EQR.buildFuelReport({
+      equipmentId: query?.equipmentId || null, projectId: query?.projectId || null,
+      dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+    }) }),
+  },
+  '/api/equipment/reports/faults': {
+    GET: async (_body, query) => ({ success: true, data: EQR.buildFaultsReport({
+      equipmentId: query?.equipmentId || null, projectId: query?.projectId || null,
+      severity: query?.severity || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+    }) }),
+  },
+  '/api/equipment/reports/productivity': {
+    GET: async (_body, query) => ({ success: true, data: EQR.buildProductivityReport({
+      type: query?.type || null, category: query?.category || null,
+      dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+    }) }),
+  },
+  '/api/equipment/reports/costs': {
+    GET: async (_body, query) => ({ success: true, data: EQR.buildCostsReport({
+      projectId: query?.projectId || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+    }) }),
+  },
+  '/api/equipment/reports/depreciation': {
+    GET: async (_body, query) => ({ success: true, data: EQR.buildDepreciationReport({
+      category: query?.category || null, type: query?.type || null,
+    }) }),
+  },
+  '/api/equipment/reports/usage-by-project': {
+    GET: async (_body, query) => {
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: EQR.buildUsageByProjectReport({
+        projectId: query.projectId, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+      }) };
+    },
+  },
+  '/api/equipment/reports/executive-summary': {
+    GET: async (_body, query) => ({ success: true, data: EQR.buildExecutiveSummaryReport({
+      projectId: query?.projectId || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+    }) }),
+  },
+
+  // ----- تصدير تقارير المعدات (PDF / Excel / CSV / طباعة) -----
+  // كل مسار يستقبل: { reportType, ...filters, meta: { projectName } } ويبني التقرير من جديد ثم يصدّره
+  '/api/equipment/reports/export/pdf': {
+    POST: async (body) => {
+      const report = buildEquipmentReportFromRequest(body);
+      const result = EQR.exportReportToPDF(report, body.meta || {});
+      return { success: true, ...result };
+    },
+  },
+  '/api/equipment/reports/export/excel': {
+    POST: async (body) => {
+      const report = buildEquipmentReportFromRequest(body);
+      const result = EQR.exportReportToExcel(report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/equipment/reports/export/csv': {
+    POST: async (body) => {
+      const report = buildEquipmentReportFromRequest(body);
+      const result = EQR.exportReportToCSV(report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/equipment/reports/export/print': {
+    POST: async (body) => {
+      const report = buildEquipmentReportFromRequest(body);
+      const result = EQR.exportReportToPrintableHTML(report, body.meta || {});
+      return { success: true, ...result };
+    },
   },
 };
 
