@@ -35,6 +35,7 @@ const PM = require('./utils/projectManagement');
 const SCH = require('./utils/scheduling');
 const BIZ = require('./utils/businessManagement');
 const BIZC = require('./utils/businessContracts');
+const BIZO = require('./utils/businessOperations');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -1724,6 +1725,183 @@ const API_HANDLERS = {
       if (!body.poId) throw new Error('معرّف أمر الشراء (poId) مطلوب');
       return BIZC.receivePurchaseOrder(body.poId, body);
     },
+  },
+
+  // ===================================================================
+  // القسم السادس - إدارة الأعمال - الجزء الثالث: المخازن + الموارد
+  // البشرية + الاجتماعات + المهام + المراسلات + الأصول
+  // ===================================================================
+
+  // ----- المخازن -----
+  '/api/biz/warehouse/dashboard': { GET: async () => BIZO.getWarehouseDashboard() },
+  '/api/biz/warehouse/items': {
+    GET: async (_body, query) => BIZO.listStockItems({
+      category: query?.category || null, q: query?.q || null,
+      lowStockOnly: query?.lowStockOnly === 'true', page: query?.page, pageSize: query?.pageSize,
+    }),
+    POST: async (body) => BIZO.addStockItem(body),
+  },
+  '/api/biz/warehouse/items/get': {
+    GET: async (_body, query) => { if (!query?.id) throw new Error('معرّف الصنف (id) مطلوب'); return BIZO.getStockItem(query.id); },
+  },
+  '/api/biz/warehouse/items/update': {
+    POST: async (body) => { const { id, ...rest } = body; if (!id) throw new Error('معرّف الصنف (id) مطلوب'); return BIZO.updateStockItem(id, rest); },
+  },
+  '/api/biz/warehouse/items/delete': {
+    POST: async (body) => BIZO.deleteStockItem(body.id),
+  },
+  '/api/biz/warehouse/movements': {
+    POST: async (body) => {
+      if (!body.itemId) throw new Error('معرّف الصنف (itemId) مطلوب');
+      return BIZO.recordMovement(body.itemId, body);
+    },
+  },
+  '/api/biz/warehouse/receive-po': {
+    POST: async (body) => {
+      if (!body.poId) throw new Error('معرّف أمر الشراء (poId) مطلوب');
+      return BIZO.receiveStockFromPurchaseOrder(body.poId, body.lines || []);
+    },
+  },
+
+  // ----- الموارد البشرية -----
+  '/api/biz/hr/dashboard': { GET: async () => BIZO.getHrDashboard() },
+  '/api/biz/hr/employees': {
+    GET: async (_body, query) => BIZO.listEmployees({
+      status: query?.status || null, department: query?.department || null, q: query?.q || null,
+      page: query?.page, pageSize: query?.pageSize,
+    }),
+    POST: async (body) => BIZO.createEmployee(body),
+  },
+  '/api/biz/hr/employees/get': {
+    GET: async (_body, query) => { if (!query?.id) throw new Error('معرّف الموظف (id) مطلوب'); return BIZO.getEmployee(query.id); },
+  },
+  '/api/biz/hr/employees/update': {
+    POST: async (body) => { const { id, ...rest } = body; if (!id) throw new Error('معرّف الموظف (id) مطلوب'); return BIZO.updateEmployee(id, rest); },
+  },
+  '/api/biz/hr/employees/delete': {
+    POST: async (body) => BIZO.deleteEmployee(body.id),
+  },
+  '/api/biz/hr/attendance/clock-in': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.clockIn(body.employeeId, body); },
+  },
+  '/api/biz/hr/attendance/clock-out': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.clockOut(body.employeeId, body); },
+  },
+  '/api/biz/hr/leaves/request': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.requestLeave(body.employeeId, body); },
+  },
+  '/api/biz/hr/leaves/decide': {
+    POST: async (body) => {
+      if (!body.employeeId || !body.leaveId) throw new Error('employeeId و leaveId مطلوبان');
+      return BIZO.decideLeave(body.employeeId, body.leaveId, body);
+    },
+  },
+  '/api/biz/hr/allowances': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.addAllowance(body.employeeId, body); },
+  },
+  '/api/biz/hr/bonuses': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.addBonus(body.employeeId, body); },
+  },
+  '/api/biz/hr/deductions': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.addDeduction(body.employeeId, body); },
+  },
+  '/api/biz/hr/advances': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.addAdvance(body.employeeId, body); },
+  },
+  '/api/biz/hr/annual-reviews': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.addAnnualReview(body.employeeId, body); },
+  },
+  '/api/biz/hr/trainings': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.addTraining(body.employeeId, body); },
+  },
+  '/api/biz/hr/documents': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.addEmployeeDocument(body.employeeId, body); },
+  },
+  '/api/biz/hr/payroll/compute': {
+    POST: async (body) => { if (!body.employeeId) throw new Error('معرّف الموظف (employeeId) مطلوب'); return BIZO.computePayroll(body.employeeId, body); },
+  },
+
+  // ----- الاجتماعات -----
+  '/api/biz/meetings': {
+    GET: async (_body, query) => BIZO.listMeetings({
+      project_id: query?.project_id || null, status: query?.status || null, page: query?.page, pageSize: query?.pageSize,
+    }),
+    POST: async (body) => BIZO.createMeeting(body),
+  },
+  '/api/biz/meetings/get': {
+    GET: async (_body, query) => { if (!query?.id) throw new Error('معرّف الاجتماع (id) مطلوب'); return BIZO.getMeeting(query.id); },
+  },
+  '/api/biz/meetings/attendance': {
+    POST: async (body) => { if (!body.meetingId) throw new Error('معرّف الاجتماع (meetingId) مطلوب'); return BIZO.recordAttendance(body.meetingId, body); },
+  },
+  '/api/biz/meetings/minutes': {
+    POST: async (body) => { if (!body.meetingId) throw new Error('معرّف الاجتماع (meetingId) مطلوب'); return BIZO.recordMinutes(body.meetingId, body); },
+  },
+  '/api/biz/meetings/decisions': {
+    POST: async (body) => { if (!body.meetingId) throw new Error('معرّف الاجتماع (meetingId) مطلوب'); return BIZO.addDecision(body.meetingId, body); },
+  },
+  '/api/biz/meetings/attachments': {
+    POST: async (body) => { if (!body.meetingId) throw new Error('معرّف الاجتماع (meetingId) مطلوب'); return BIZO.addMeetingAttachment(body.meetingId, body); },
+  },
+
+  // ----- المهام -----
+  '/api/biz/tasks/dashboard': { GET: async () => BIZO.getTasksDashboard() },
+  '/api/biz/tasks': {
+    GET: async (_body, query) => BIZO.listTasks({
+      project_id: query?.project_id || null, assignee_id: query?.assignee_id || null,
+      status: query?.status || null, priority: query?.priority || null, page: query?.page, pageSize: query?.pageSize,
+    }),
+    POST: async (body) => BIZO.createTask(body),
+  },
+  '/api/biz/tasks/get': {
+    GET: async (_body, query) => { if (!query?.id) throw new Error('معرّف المهمة (id) مطلوب'); return BIZO.getTask(query.id); },
+  },
+  '/api/biz/tasks/update': {
+    POST: async (body) => { const { id, ...rest } = body; if (!id) throw new Error('معرّف المهمة (id) مطلوب'); return BIZO.updateTask(id, rest); },
+  },
+  '/api/biz/tasks/delete': {
+    POST: async (body) => BIZO.deleteTask(body.id),
+  },
+  '/api/biz/tasks/comments': {
+    POST: async (body) => { if (!body.taskId) throw new Error('معرّف المهمة (taskId) مطلوب'); return BIZO.addTaskComment(body.taskId, body); },
+  },
+  '/api/biz/tasks/attachments': {
+    POST: async (body) => { if (!body.taskId) throw new Error('معرّف المهمة (taskId) مطلوب'); return BIZO.addTaskAttachment(body.taskId, body); },
+  },
+
+  // ----- المراسلات -----
+  '/api/biz/correspondence': {
+    GET: async (_body, query) => BIZO.listCorrespondence({
+      type: query?.type || null, archived: query?.archived, q: query?.q || null, page: query?.page, pageSize: query?.pageSize,
+    }),
+    POST: async (body) => BIZO.createCorrespondence(body),
+  },
+  '/api/biz/correspondence/archive': {
+    POST: async (body) => { if (!body.id) throw new Error('معرّف المراسلة (id) مطلوب'); return BIZO.archiveCorrespondence(body.id, body); },
+  },
+  '/api/biz/correspondence/read': {
+    POST: async (body) => { if (!body.id) throw new Error('معرّف المراسلة (id) مطلوب'); return BIZO.markCorrespondenceRead(body.id, body); },
+  },
+
+  // ----- الأصول -----
+  '/api/biz/assets/dashboard': { GET: async () => BIZO.getAssetsDashboard() },
+  '/api/biz/assets': {
+    GET: async (_body, query) => BIZO.listAssets({
+      category: query?.category || null, status: query?.status || null, q: query?.q || null, page: query?.page, pageSize: query?.pageSize,
+    }),
+    POST: async (body) => BIZO.createAsset(body),
+  },
+  '/api/biz/assets/get': {
+    GET: async (_body, query) => { if (!query?.id) throw new Error('معرّف الأصل (id) مطلوب'); return BIZO.getAsset(query.id); },
+  },
+  '/api/biz/assets/update': {
+    POST: async (body) => { const { id, ...rest } = body; if (!id) throw new Error('معرّف الأصل (id) مطلوب'); return BIZO.updateAsset(id, rest); },
+  },
+  '/api/biz/assets/delete': {
+    POST: async (body) => BIZO.deleteAsset(body.id),
+  },
+  '/api/biz/assets/maintenance': {
+    POST: async (body) => { if (!body.assetId) throw new Error('معرّف الأصل (assetId) مطلوب'); return BIZO.addMaintenanceRecord(body.assetId, body); },
   },
 };
 
