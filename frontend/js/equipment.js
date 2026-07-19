@@ -1641,3 +1641,137 @@ document.getElementById('eq-btn-export-pdf')?.addEventListener('click', () => eq
 document.getElementById('eq-btn-export-excel')?.addEventListener('click', () => eqExportReport('/reports/export/excel'));
 document.getElementById('eq-btn-export-csv')?.addEventListener('click', () => eqExportReport('/reports/export/csv'));
 document.getElementById('eq-btn-export-print')?.addEventListener('click', () => eqExportReport('/reports/export/print'));
+
+// ============================================================
+// الجزء 4-ب/4: الذكاء الاصطناعي + التكامل + الصلاحيات المتقدمة
+// ============================================================
+
+function eqAiShowResult(title, text) {
+  document.getElementById('eq-ai-result-title').textContent = title;
+  document.getElementById('eq-ai-result').textContent = text || '—';
+}
+
+async function eqAiRun(title, fn) {
+  const alertEl = document.getElementById('eq-ai-alert');
+  alertEl.innerHTML = '';
+  eqAiShowResult(title, 'جارٍ التحليل عبر الذكاء الاصطناعي...');
+  try {
+    const res = await fn();
+    const text = res.prediction || res.analysis || res.suggested_schedule || res.comparison_analysis
+      || res.allocation_suggestion || res.cost_estimate || res.executive_summary || res.answer
+      || JSON.stringify(res.data || res, null, 2);
+    eqAiShowResult(title, text);
+  } catch (e) {
+    eqAiShowResult(title, '');
+    eqAlert(alertEl, 'error', e.message);
+  }
+}
+
+document.querySelector('[data-panel="eq-ai"]')?.addEventListener('click', async () => {
+  try {
+    const status = await eqFetch('/ai/status');
+    const el = document.getElementById('eq-ai-status');
+    if (status.data.available) {
+      el.innerHTML = `<span class="tag tag-ok">مفعّلة</span> — متصلة بواجهة Claude API`;
+    } else {
+      el.innerHTML = `<span class="tag tag-info">غير مفعّلة</span> — يجب ضبط متغير البيئة ANTHROPIC_API_KEY على الخادم لتفعيل ميزات الذكاء الاصطناعي (باقي أقسام المعدات تعمل بشكل طبيعي وكامل بدونها)`;
+    }
+  } catch (e) {
+    document.getElementById('eq-ai-status').innerHTML = `<span class="tag tag-bad">تعذّر التحقق</span>`;
+  }
+  await eqPopulateEquipmentSelect(document.getElementById('eq-ai-equipment'));
+});
+
+document.getElementById('eq-btn-ai-predict-failures')?.addEventListener('click', () => {
+  const id = document.getElementById('eq-ai-equipment').value;
+  if (!id) return eqAlert(document.getElementById('eq-ai-alert'), 'error', 'يرجى اختيار المعدة أولاً');
+  eqAiRun('التنبؤ بالأعطال', () => eqFetch('/ai/predict-failures', { query: { equipmentId: id } }));
+});
+
+document.getElementById('eq-btn-ai-fuel-analysis')?.addEventListener('click', () => {
+  const id = document.getElementById('eq-ai-equipment').value;
+  if (!id) return eqAlert(document.getElementById('eq-ai-alert'), 'error', 'يرجى اختيار المعدة أولاً');
+  eqAiRun('تحليل استهلاك الوقود', () => eqFetch('/ai/fuel-analysis', { query: { equipmentId: id } }));
+});
+
+document.getElementById('eq-btn-ai-maint-schedule')?.addEventListener('click', () => {
+  const id = document.getElementById('eq-ai-equipment').value;
+  if (!id) return eqAlert(document.getElementById('eq-ai-alert'), 'error', 'يرجى اختيار المعدة أولاً');
+  eqAiRun('اقتراح جدول الصيانة الوقائية', () => eqFetch('/ai/suggest-maintenance-schedule', { query: { equipmentId: id } }));
+});
+
+document.getElementById('eq-btn-ai-efficiency-peers')?.addEventListener('click', () => {
+  const id = document.getElementById('eq-ai-equipment').value;
+  if (!id) return eqAlert(document.getElementById('eq-ai-alert'), 'error', 'يرجى اختيار المعدة أولاً');
+  eqAiRun('الكفاءة مقابل المعدات المماثلة', () => eqFetch('/ai/efficiency-vs-peers', { query: { equipmentId: id } }));
+});
+
+document.getElementById('eq-btn-ai-future-cost')?.addEventListener('click', () => {
+  const id = document.getElementById('eq-ai-equipment').value;
+  if (!id) return eqAlert(document.getElementById('eq-ai-alert'), 'error', 'يرجى اختيار المعدة أولاً');
+  eqAiRun('تقدير تكلفة التشغيل المستقبلية', () => eqFetch('/ai/estimate-future-cost', { query: { equipmentId: id, horizonMonths: 3 } }));
+});
+
+document.getElementById('eq-btn-ai-fleet-risk')?.addEventListener('click', () => {
+  const projectId = document.getElementById('eq-ai-project').value || null;
+  eqAiRun('مخاطر الأعطال على مستوى الأسطول', () => eqFetch('/ai/predict-fleet-risk', { query: { projectId } }));
+});
+
+document.getElementById('eq-btn-ai-suggest-allocation')?.addEventListener('click', () => {
+  eqAiRun('اقتراح توزيع المعدات على المشاريع', () => eqFetch('/ai/suggest-allocation'));
+});
+
+document.getElementById('eq-btn-ai-proactive-alerts')?.addEventListener('click', () => {
+  eqAiRun('تنبيهات استباقية للكفاءة', () => eqFetch('/ai/proactive-alerts', { query: { threshold: 60 } })
+    .then(res => ({ ...res, analysis: res.data?.note || res.data?.analysis })));
+});
+
+document.getElementById('eq-btn-ai-fleet-summary')?.addEventListener('click', () => {
+  const projectId = document.getElementById('eq-ai-project').value || null;
+  eqAiRun('ملخص تنفيذي تلقائي للأسطول', () => eqFetch('/ai/fleet-summary', { query: { projectId } }));
+});
+
+document.getElementById('eq-btn-ai-ask')?.addEventListener('click', () => {
+  const question = document.getElementById('eq-ai-question').value.trim();
+  if (!question) return eqAlert(document.getElementById('eq-ai-alert'), 'error', 'يرجى كتابة سؤال');
+  const equipmentId = document.getElementById('eq-ai-equipment').value || null;
+  const projectId = document.getElementById('eq-ai-project').value || null;
+  eqAiRun('إجابة المساعد الهندسي', () => eqFetch('/ai/ask', { method: 'POST', body: { question, equipmentId, projectId } }));
+});
+
+// ---------- لقطة التكامل الحيّة ----------
+async function eqLoadIntegrationSnapshot() {
+  const container = document.getElementById('eq-integration-content');
+  container.innerHTML = '<p>جارٍ التحميل...</p>';
+  try {
+    const projectId = document.getElementById('eq-integ-project').value || null;
+    const res = await eqFetch('/integration/snapshot', { query: { projectId } });
+    const d = res.data;
+    const projectsRows = (d.projects_with_equipment || []).map(p => `
+      <tr>
+        <td>${p.project_name || p.project_id}</td>
+        <td>${p.equipment_count}</td>
+        <td>${(p.equipment || []).map(e => `${e.name} <span class="tag ${eqStatusTag(e.status)}">${e.status}</span>`).join('، ')}</td>
+      </tr>
+    `).join('');
+    container.innerHTML = `
+      <div class="result-cards">
+        <div class="result-card"><div class="label">إجمالي المعدات</div><div class="value">${d.dashboard?.total_equipment ?? '—'}</div></div>
+        <div class="result-card"><div class="label">إجمالي ساعات التشغيل</div><div class="value">${d.dashboard?.total_operating_hours ?? '—'}</div></div>
+        <div class="result-card"><div class="label">التكلفة الإجمالية للأسطول</div><div class="value">${d.fleet_costs?.totals?.total_cost ?? '—'}</div></div>
+        <div class="result-card"><div class="label">متوسط الكفاءة</div><div class="value">${d.productivity_summary?.average_efficiency_percent ?? '—'}<span class="unit">%</span></div></div>
+        <div class="result-card"><div class="label">تنبيهات نشطة</div><div class="value">${d.alerts_summary?.count ?? 0}</div></div>
+      </div>
+      <div class="pm-table-wrap" style="margin-top:12px">
+        <table class="detail-table">
+          <thead><tr><th>المشروع</th><th>عدد المعدات</th><th>المعدات</th></tr></thead>
+          <tbody>${projectsRows || '<tr><td colspan="3">لا توجد معدات مرتبطة بمشاريع حالياً</td></tr>'}</tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    container.innerHTML = `<p class="alert alert-error">${e.message}</p>`;
+  }
+}
+
+document.getElementById('eq-btn-load-integration')?.addEventListener('click', eqLoadIntegrationSnapshot);
