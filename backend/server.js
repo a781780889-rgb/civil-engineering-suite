@@ -36,6 +36,8 @@ const SCH = require('./utils/scheduling');
 const BIZ = require('./utils/businessManagement');
 const BIZC = require('./utils/businessContracts');
 const BIZO = require('./utils/businessOperations');
+const SEC = require('./utils/businessSecurity');
+const GOV = require('./utils/businessGovernance');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -119,6 +121,19 @@ function readRequestBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+function getAuthToken(req) {
+  const header = req?.headers?.authorization || '';
+  if (header.startsWith('Bearer ')) return header.slice(7).trim();
+  return null;
+}
+
+function requirePermission(req, mod, action) {
+  const token = getAuthToken(req);
+  if (!token) throw new Error('يجب تسجيل الدخول للوصول إلى هذا المورد');
+  if (!SEC.can(token, mod, action)) throw new Error('لا تملك صلاحية تنفيذ هذا الإجراء');
+  return token;
 }
 
 const API_HANDLERS = {
@@ -1903,6 +1918,175 @@ const API_HANDLERS = {
   '/api/biz/assets/maintenance': {
     POST: async (body) => { if (!body.assetId) throw new Error('معرّف الأصل (assetId) مطلوب'); return BIZO.addMaintenanceRecord(body.assetId, body); },
   },
+
+  // ===================================================================
+  // ===== الجزء الرابع (4/4) - الوحدة الأولى: الصلاحيات والأمان ======
+  // ===================================================================
+
+  '/api/biz/security/login': {
+    POST: async (body, _query, req) => SEC.login({ ...body, ip: req?.socket?.remoteAddress || null }),
+  },
+  '/api/biz/security/logout': {
+    POST: async (_body, _query, req) => SEC.logout(getAuthToken(req)),
+  },
+  '/api/biz/security/me': {
+    GET: async (_body, _query, req) => {
+      const token = getAuthToken(req);
+      const session = SEC.getSessionUser(token);
+      if (!session) throw new Error('الجلسة غير صالحة أو منتهية');
+      return { success: true, data: session };
+    },
+  },
+
+  '/api/biz/security/roles': {
+    GET: async () => SEC.listRoles(),
+    POST: async (body, _query, req) => { requirePermission(req, 'security', 'manage'); return SEC.upsertRole(body.key, body); },
+  },
+  '/api/biz/security/roles/delete': {
+    POST: async (body, _query, req) => { requirePermission(req, 'security', 'manage'); return SEC.deleteRole(body.key); },
+  },
+
+  '/api/biz/security/users': {
+    GET: async (_body, _query, req) => { requirePermission(req, 'security', 'view'); return SEC.listUsers(); },
+    POST: async (body, _query, req) => { requirePermission(req, 'security', 'manage'); return SEC.createUser(body); },
+  },
+  '/api/biz/security/users/get': {
+    GET: async (_body, query, req) => { requirePermission(req, 'security', 'view'); if (!query?.id) throw new Error('معرّف المستخدم (id) مطلوب'); return SEC.getUserSafe(query.id); },
+  },
+  '/api/biz/security/users/update': {
+    POST: async (body, _query, req) => { requirePermission(req, 'security', 'manage'); const { id, ...rest } = body; if (!id) throw new Error('معرّف المستخدم (id) مطلوب'); return SEC.updateUser(id, rest); },
+  },
+  '/api/biz/security/users/delete': {
+    POST: async (body, _query, req) => { requirePermission(req, 'security', 'manage'); return SEC.deleteUser(body.id); },
+  },
+
+  '/api/biz/security/2fa/start': {
+    POST: async (body) => { if (!body.userId) throw new Error('معرّف المستخدم (userId) مطلوب'); return SEC.start2FAEnrollment(body.userId); },
+  },
+  '/api/biz/security/2fa/confirm': {
+    POST: async (body) => { if (!body.userId || !body.code) throw new Error('userId وcode مطلوبان'); return SEC.confirm2FAEnrollment(body.userId, body.code); },
+  },
+  '/api/biz/security/2fa/disable': {
+    POST: async (body) => { if (!body.userId) throw new Error('معرّف المستخدم (userId) مطلوب'); return SEC.disable2FA(body.userId); },
+  },
+
+  '/api/biz/security/audit-log': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'security', 'view');
+      return SEC.getGlobalAuditLog({
+        module: query?.module || null, userId: query?.userId || null, action: query?.action || null,
+        from: query?.from || null, to: query?.to || null, page: query?.page, pageSize: query?.pageSize,
+      });
+    },
+  },
+
+  '/api/biz/security/backup': {
+    GET: async (_body, _query, req) => { requirePermission(req, 'security', 'manage'); return SEC.listBackups(); },
+    POST: async (body, _query, req) => { requirePermission(req, 'security', 'manage'); return SEC.createBackup(body || {}); },
+  },
+  '/api/biz/security/backup/restore': {
+    POST: async (body, _query, req) => { requirePermission(req, 'security', 'manage'); if (!body.fileName) throw new Error('اسم ملف النسخة الاحتياطية (fileName) مطلوب'); return SEC.restoreBackup(body.fileName); },
+  },
+
+  // ===================================================================
+  // ============ الجزء الرابع (4/4) - الوحدة الثانية: الجودة =========
+  // ===================================================================
+
+  '/api/biz/quality/dashboard': { GET: async () => GOV.getQualityDashboard() },
+  '/api/biz/quality/plans': {
+    GET: async (_body, query) => GOV.listQualityPlans({ project_id: query?.project_id || null }),
+    POST: async (body) => GOV.createQualityPlan(body),
+  },
+  '/api/biz/quality/audits': {
+    GET: async (_body, query) => GOV.listQualityAudits({ project_id: query?.project_id || null, result: query?.result || null }),
+    POST: async (body) => GOV.createQualityAudit(body),
+  },
+  '/api/biz/quality/audits/approve': {
+    POST: async (body) => { if (!body.auditId) throw new Error('معرّف الفحص (auditId) مطلوب'); return GOV.approveQualityAudit(body.auditId, body); },
+  },
+
+  // ===================================================================
+  // ============ الجزء الرابع (4/4) - الوحدة الثانية: السلامة ========
+  // ===================================================================
+
+  '/api/biz/safety/dashboard': { GET: async () => GOV.getSafetyDashboard() },
+  '/api/biz/safety/incidents': {
+    GET: async (_body, query) => GOV.listSafetyIncidents({ project_id: query?.project_id || null, severity: query?.severity || null, status: query?.status || null }),
+    POST: async (body) => GOV.createSafetyIncident(body),
+  },
+  '/api/biz/safety/incidents/close': {
+    POST: async (body) => { if (!body.id) throw new Error('معرّف الحادثة (id) مطلوب'); return GOV.closeSafetyIncident(body.id, body); },
+  },
+  '/api/biz/safety/risks': {
+    GET: async (_body, query) => GOV.listSafetyRisks({ project_id: query?.project_id || null }),
+    POST: async (body) => GOV.createSafetyRisk(body),
+  },
+  '/api/biz/safety/inspections': {
+    GET: async (_body, query) => GOV.listSafetyInspections({ project_id: query?.project_id || null, type: query?.type || null }),
+    POST: async (body) => GOV.createSafetyInspection(body),
+  },
+
+  // ===================================================================
+  // ============ الجزء الرابع (4/4) - الوحدة الثانية: الوثائق ========
+  // ===================================================================
+
+  '/api/biz/documents': {
+    GET: async (_body, query) => GOV.listDocuments({
+      entity_type: query?.entity_type || null, entity_id: query?.entity_id || null,
+      type: query?.type || null, code: query?.code || null,
+      latestOnly: query?.latestOnly !== 'false',
+    }),
+    POST: async (body) => GOV.uploadDocument(body),
+  },
+  '/api/biz/documents/versions': {
+    GET: async (_body, query) => { if (!query?.code) throw new Error('رمز الوثيقة (code) مطلوب'); return GOV.getDocumentVersionHistory(query.code); },
+  },
+  '/api/biz/documents/delete': {
+    POST: async (body) => GOV.deleteDocument(body.id),
+  },
+
+  // ===================================================================
+  // ======== الجزء الرابع (4/4) - الوحدة الثانية: التقارير والتصدير ==
+  // ===================================================================
+
+  '/api/biz/reports/list': { GET: async () => GOV.listAvailableReports() },
+  '/api/biz/reports/export': {
+    GET: async (_body, query) => {
+      if (!query?.report) throw new Error('نوع التقرير (report) مطلوب');
+      return GOV.exportReport(query.report, { format: query.format || 'pdf' });
+    },
+    POST: async (body) => {
+      if (!body.report) throw new Error('نوع التقرير (report) مطلوب');
+      return GOV.exportReport(body.report, { format: body.format || 'pdf' });
+    },
+  },
+
+  // ===================================================================
+  // ======== الجزء الرابع (4/4) - الوحدة الثانية: التكامل الموحّد ====
+  // ===================================================================
+
+  '/api/biz/integration/snapshot': { GET: async () => ({ success: true, data: GOV.integrationSnapshot() }) },
+  '/api/biz/dashboard/executive': { GET: async () => GOV.getExecutiveDashboard() },
+
+  // ===================================================================
+  // ===== الجزء الرابع (4/4) - الوحدة الثانية: الذكاء الاصطناعي ======
+  // ===================================================================
+
+  '/api/biz/ai/status': { GET: async () => ({ success: true, data: { available: GOV.isAIAvailable() } }) },
+  '/api/biz/ai/financial-analysis': { GET: async () => ({ success: true, data: await GOV.analyzeFinancialPerformance() }) },
+  '/api/biz/ai/abnormal-expenses': { GET: async () => ({ success: true, data: await GOV.detectAbnormalExpenses() }) },
+  '/api/biz/ai/employee-performance': { GET: async () => ({ success: true, data: await GOV.analyzeEmployeePerformance() }) },
+  '/api/biz/ai/supplier-performance': { GET: async () => ({ success: true, data: await GOV.analyzeSupplierPerformance() }) },
+  '/api/biz/ai/process-improvements': { GET: async () => ({ success: true, data: await GOV.suggestProcessImprovements() }) },
+  '/api/biz/ai/cash-flow-forecast': {
+    GET: async (_body, query) => ({ success: true, data: await GOV.forecastCashFlow({ months: Number(query?.months) || 3 }) }),
+  },
+  '/api/biz/ai/summarize-meeting': {
+    POST: async (body) => { if (!body.meetingId) throw new Error('معرّف الاجتماع (meetingId) مطلوب'); return { success: true, data: await GOV.summarizeMeetingMinutes(body.meetingId) }; },
+  },
+  '/api/biz/ai/ask': {
+    POST: async (body) => { if (!body.question) throw new Error('السؤال (question) مطلوب'); return { success: true, data: await GOV.answerManagementQuestion(body.question) }; },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -1927,7 +2111,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = req.method === 'POST' ? await readRequestBody(req) : {};
       const query = Object.fromEntries(parsedUrl.searchParams.entries());
-      const result = await handlerSet[req.method](body, query);
+      const result = await handlerSet[req.method](body, query, req);
       return sendJSON(res, 200, result);
     } catch (err) {
       return sendJSON(res, 400, { success: false, error: err.message });
@@ -1958,4 +2142,12 @@ server.listen(PORT, () => {
   console.log(`✅ خادم منصة الهندسة المدنية يعمل على المنفذ ${PORT}`);
   console.log(`📁 مجلد الواجهة الأمامية: ${FRONTEND_DIR} (index.html موجود: ${fs.existsSync(path.join(FRONTEND_DIR, 'index.html'))})`);
   console.log(`   افتح المتصفح على: http://localhost:${PORT}`);
+
+  // الجزء الرابع (4/4) من القسم السادس: تهيئة مدير نظام افتراضي عند أول تشغيل + جدولة نسخ احتياطي تلقائي
+  try {
+    SEC.ensureDefaultAdmin();
+    SEC.scheduleAutoBackup({ intervalHours: 24 });
+  } catch (e) {
+    console.error('⚠️  تعذّرت تهيئة وحدة الأمان (المستخدم الافتراضي/النسخ الاحتياطي التلقائي):', e.message);
+  }
 });
