@@ -34,6 +34,7 @@ const Reports = require('./utils/boqReports');
 const PM = require('./utils/projectManagement');
 const SCH = require('./utils/scheduling');
 const BIZ = require('./utils/businessManagement');
+const BIZC = require('./utils/businessContracts');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -1600,6 +1601,129 @@ const API_HANDLERS = {
       page: query?.page ? Number(query.page) : 1,
       pageSize: query?.pageSize ? Number(query.pageSize) : 100,
     }),
+  },
+
+  // ===================================================================
+  // القسم السادس - إدارة الأعمال - الجزء الثاني: العقود + الفواتير + المشتريات
+  // ===================================================================
+
+  // ----- العقود -----
+  '/api/biz/contracts/dashboard': {
+    GET: async () => BIZC.getContractsDashboard(),
+  },
+  '/api/biz/contracts': {
+    GET: async (_body, query) => BIZC.listContracts({
+      status: query?.status || null,
+      party_type: query?.party_type || null,
+      party_id: query?.party_id || null,
+      project_id: query?.project_id || null,
+      q: query?.q || null,
+      page: query?.page ? Number(query.page) : 1,
+      pageSize: query?.pageSize ? Number(query.pageSize) : 50,
+    }),
+    POST: async (body) => BIZC.createContract(body),
+  },
+  '/api/biz/contracts/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف العقد (id) مطلوب');
+      return BIZC.getContract(query.id);
+    },
+  },
+  '/api/biz/contracts/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف العقد (id) مطلوب');
+      const { id, ...rest } = body;
+      return BIZC.updateContract(id, rest);
+    },
+  },
+  '/api/biz/contracts/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف العقد (id) مطلوب');
+      return BIZC.deleteContract(body.id);
+    },
+  },
+  '/api/biz/contracts/attachments': {
+    POST: async (body) => {
+      if (!body.contractId) throw new Error('معرّف العقد (contractId) مطلوب');
+      return BIZC.addContractAttachment(body.contractId, body);
+    },
+  },
+
+  // ----- الفواتير -----
+  '/api/biz/invoices/dashboard': {
+    GET: async () => BIZC.getInvoicesDashboard(),
+  },
+  '/api/biz/invoices': {
+    GET: async (_body, query) => BIZC.listInvoices({
+      type: query?.type || null,
+      party_id: query?.party_id || null,
+      payment_status: query?.payment_status || null,
+      contract_id: query?.contract_id || null,
+      page: query?.page ? Number(query.page) : 1,
+      pageSize: query?.pageSize ? Number(query.pageSize) : 50,
+    }),
+    POST: async (body) => BIZC.createInvoice(body),
+  },
+  '/api/biz/invoices/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الفاتورة (id) مطلوب');
+      return BIZC.getInvoice(query.id);
+    },
+  },
+  '/api/biz/invoices/payments': {
+    POST: async (body) => {
+      if (!body.invoiceId) throw new Error('معرّف الفاتورة (invoiceId) مطلوب');
+      return BIZC.recordInvoicePayment(body.invoiceId, body);
+    },
+  },
+  '/api/biz/invoices/pdf': {
+    POST: async (body) => {
+      if (!body.invoiceId) throw new Error('معرّف الفاتورة (invoiceId) مطلوب');
+      return BIZC.generateInvoicePDF(body.invoiceId);
+    },
+  },
+
+  // ----- المشتريات: طلبات الشراء -----
+  '/api/biz/purchasing/dashboard': {
+    GET: async () => BIZC.getPurchasingDashboard(),
+  },
+  '/api/biz/purchasing/requests': {
+    GET: async (_body, query) => BIZC.listPurchaseRequests({ status: query?.status || null, project_id: query?.project_id || null }),
+    POST: async (body) => BIZC.createPurchaseRequest(body),
+  },
+  '/api/biz/purchasing/requests/decide': {
+    POST: async (body) => {
+      if (!body.requestId) throw new Error('معرّف طلب الشراء (requestId) مطلوب');
+      return BIZC.decidePurchaseRequest(body.requestId, body);
+    },
+  },
+  '/api/biz/purchasing/requests/compare-quotes': {
+    GET: async (_body, query) => {
+      if (!query?.requestId) throw new Error('معرّف طلب الشراء (requestId) مطلوب');
+      return BIZC.compareQuotesForRequest(query.requestId);
+    },
+  },
+
+  // ----- المشتريات: أوامر الشراء -----
+  '/api/biz/purchasing/orders': {
+    GET: async (_body, query) => BIZC.listPurchaseOrders({
+      status: query?.status || null,
+      supplier_id: query?.supplier_id || null,
+      project_id: query?.project_id || null,
+    }),
+    POST: async (body) => BIZC.createPurchaseOrder(body),
+  },
+  '/api/biz/purchasing/orders/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف أمر الشراء (id) مطلوب');
+      return BIZC.getPurchaseOrder(query.id);
+    },
+  },
+  '/api/biz/purchasing/orders/receive': {
+    POST: async (body) => {
+      if (!body.poId) throw new Error('معرّف أمر الشراء (poId) مطلوب');
+      return BIZC.receivePurchaseOrder(body.poId, body);
+    },
   },
 };
 
