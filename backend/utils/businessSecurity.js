@@ -330,6 +330,27 @@ const DEFAULT_ROLES = {
     label: 'المشغل',
     permissions: { equipment: ['view', 'operate'] },
   },
+
+  // ----- أدوار القسم الثامن: إدارة السلامة المهنية (Occupational Health & Safety) -----
+  hse_manager: {
+    label: 'مدير السلامة (HSE Manager)',
+    permissions: {
+      safety: ['view', 'create', 'update', 'delete', 'approve', 'manage'],
+      dashboard: ['view'], reports: ['view', 'export'], ai: ['use'],
+    },
+  },
+  safety_officer: {
+    label: 'مسؤول السلامة',
+    permissions: { safety: ['view', 'create', 'update'], dashboard: ['view'], reports: ['view'] },
+  },
+  field_supervisor: {
+    label: 'المشرف الميداني',
+    permissions: { safety: ['view', 'create'], dashboard: ['view'] },
+  },
+  hse_worker: {
+    label: 'العامل (صلاحيات محدودة - السلامة)',
+    permissions: { safety: ['view'] },
+  },
 };
 
 function ensureRolesSeeded() {
