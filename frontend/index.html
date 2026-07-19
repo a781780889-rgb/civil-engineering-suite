@@ -120,6 +120,15 @@
     <div class="nav-item" data-panel="hse-incidents">
       <span class="nav-icon">🚑</span> الحوادث والإصابات
     </div>
+    <div class="nav-item" data-panel="hse-inspections">
+      <span class="nav-icon">🔍</span> إدارة التفتيشات
+    </div>
+    <div class="nav-item" data-panel="hse-permits">
+      <span class="nav-icon">📝</span> تصاريح العمل
+    </div>
+    <div class="nav-item" data-panel="hse-ppe">
+      <span class="nav-icon">🦺</span> معدات الوقاية الشخصية
+    </div>
   </nav>
 
   <main class="main-content">
@@ -1596,6 +1605,205 @@
           </div>
         </div>
 
+      </div>
+    </section>
+
+    <!-- ===== إدارة التفتيشات ===== -->
+    <section class="calc-panel" id="panel-hse-inspections">
+      <div class="calc-card">
+        <h2>القسم الثامن — إدارة التفتيشات (Inspections)</h2>
+
+        <div id="hse-insp-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-insp-search" placeholder="بحث بالرمز / الموقع...">
+            <select id="hse-insp-filter-type"><option value="">كل الأنواع</option></select>
+            <select id="hse-insp-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-insp-btn-new">+ جولة تفتيش جديدة</button>
+          </div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-insp-table">
+              <thead><tr><th>الرمز</th><th>النوع</th><th>المشروع</th><th>الموقع</th><th>التاريخ المجدول</th><th>المفتش</th><th>المخالفات</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="hse-insp-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-insp-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-insp-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-insp-form">
+            <div class="field"><label>نوع التفتيش *</label>
+              <select id="hse-insp-f-type"></select>
+            </div>
+            <div class="field"><label>معرّف المشروع *</label><input type="text" id="hse-insp-f-project"></div>
+            <div class="field"><label>الموقع</label><input type="text" id="hse-insp-f-location"></div>
+            <div class="field"><label>تاريخ الجولة *</label><input type="datetime-local" id="hse-insp-f-scheduled"></div>
+            <div class="field"><label>اسم المفتش *</label><input type="text" id="hse-insp-f-inspector"></div>
+            <div class="field"><label>الحالة</label>
+              <select id="hse-insp-f-status"></select>
+            </div>
+            <div class="field field-full">
+              <label>بنود قائمة التحقق (Checklist) — كل سطر بصيغة: البند | النتيجة (مطابق/غير مطابق/لا ينطبق) | ملاحظة</label>
+              <textarea id="hse-insp-f-checklist" rows="5" placeholder="مثال: توفر طفايات الحريق | مطابق | تم الفحص بتاريخ اليوم"></textarea>
+            </div>
+            <div class="field field-full"><label>ملاحظات عامة</label><textarea id="hse-insp-f-notes" rows="2"></textarea></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-insp-btn-save">حفظ جولة التفتيش</button></div>
+          <div id="hse-insp-form-alert"></div>
+        </div>
+
+        <div id="hse-insp-detail-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-insp-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-insp-detail-content"></div>
+
+          <div class="pm-card" style="margin-top:16px">
+            <div class="pm-card-title">تسجيل مخالفة جديدة</div>
+            <div class="form-grid">
+              <div class="field field-full"><label>وصف المخالفة *</label><input type="text" id="hse-find-f-description"></div>
+              <div class="field"><label>درجة الخطورة *</label>
+                <select id="hse-find-f-severity"></select>
+              </div>
+              <div class="field"><label>المسؤول عن المعالجة</label><input type="text" id="hse-find-f-responsible"></div>
+              <div class="field"><label>موعد المعالجة</label><input type="date" id="hse-find-f-due-date"></div>
+              <div class="field field-full"><label>الإجراء التصحيحي المقترح</label><input type="text" id="hse-find-f-corrective"></div>
+            </div>
+            <div class="btn-row"><button class="btn btn-primary" id="hse-find-btn-add">إضافة المخالفة</button></div>
+            <div id="hse-find-form-alert"></div>
+          </div>
+
+          <div class="pm-card" style="margin-top:16px">
+            <div class="pm-card-title">مخالفات هذا التفتيش</div>
+            <div class="table-wrap">
+              <table class="detail-table" id="hse-find-table">
+                <thead><tr><th>الرمز</th><th>الوصف</th><th>الخطورة</th><th>الموعد</th><th>الحالة</th><th></th></tr></thead>
+                <tbody id="hse-find-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="btn-row" style="margin-top:16px"><button class="btn btn-primary" id="hse-insp-btn-approve">اعتماد نتائج التفتيش</button></div>
+          <div id="hse-insp-approve-alert"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== تصاريح العمل (Permit to Work) ===== -->
+    <section class="calc-panel" id="panel-hse-permits">
+      <div class="calc-card">
+        <h2>القسم الثامن — إدارة تصاريح العمل (Permit to Work)</h2>
+
+        <div id="hse-permit-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-permit-search" placeholder="بحث بالرمز / الموقع...">
+            <select id="hse-permit-filter-type"><option value="">كل الأنواع</option></select>
+            <select id="hse-permit-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-permit-btn-new">+ تصريح عمل جديد</button>
+          </div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-permit-table">
+              <thead><tr><th>الرمز</th><th>النوع</th><th>المشروع</th><th>الموقع</th><th>من</th><th>إلى</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="hse-permit-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-permit-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-permit-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-permit-form">
+            <div class="field"><label>نوع التصريح *</label>
+              <select id="hse-permit-f-type"></select>
+            </div>
+            <div class="field"><label>معرّف المشروع *</label><input type="text" id="hse-permit-f-project"></div>
+            <div class="field field-full"><label>موقع العمل *</label><input type="text" id="hse-permit-f-location"></div>
+            <div class="field field-full"><label>وصف العمل *</label><textarea id="hse-permit-f-description" rows="2"></textarea></div>
+            <div class="field"><label>تاريخ البدء *</label><input type="datetime-local" id="hse-permit-f-start"></div>
+            <div class="field"><label>تاريخ الانتهاء *</label><input type="datetime-local" id="hse-permit-f-end"></div>
+            <div class="field"><label>المسؤول عن التصريح *</label><input type="text" id="hse-permit-f-responsible"></div>
+            <div class="field field-full"><label>فريق التنفيذ (اسم في كل سطر)</label><textarea id="hse-permit-f-team" rows="2"></textarea></div>
+            <div class="field field-full"><label>ملخص تقييم المخاطر</label><textarea id="hse-permit-f-risk-summary" rows="2"></textarea></div>
+            <div class="field field-full"><label>إجراءات الاحتياط (بند في كل سطر — اتركه فارغاً لاستخدام القائمة القياسية حسب نوع التصريح)</label><textarea id="hse-permit-f-precautions" rows="3"></textarea></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-permit-btn-save">حفظ التصريح</button></div>
+          <div id="hse-permit-form-alert"></div>
+        </div>
+
+        <div id="hse-permit-detail-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-permit-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-permit-detail-content"></div>
+
+          <div class="pm-card" style="margin-top:16px">
+            <div class="pm-card-title">الموافقة على التصريح</div>
+            <div class="form-grid">
+              <div class="field"><label>اسم المعتمِد</label><input type="text" id="hse-permit-f-approver-name"></div>
+              <div class="field"><label>صفة المعتمِد</label><input type="text" id="hse-permit-f-approver-role"></div>
+              <div class="field field-full"><label>ملاحظات</label><input type="text" id="hse-permit-f-approver-notes"></div>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="hse-permit-btn-approve">اعتماد التصريح</button>
+              <button class="btn btn-outline" id="hse-permit-btn-activate">تفعيل التصريح</button>
+              <button class="btn btn-outline" id="hse-permit-btn-close">إغلاق التصريح</button>
+            </div>
+            <div id="hse-permit-action-alert"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== معدات الوقاية الشخصية (PPE) ===== -->
+    <section class="calc-panel" id="panel-hse-ppe">
+      <div class="calc-card">
+        <h2>القسم الثامن — إدارة معدات الوقاية الشخصية (PPE)</h2>
+
+        <div class="toolbar">
+          <input type="text" id="hse-ppe-compliance-project" placeholder="معرّف المشروع (اختياري)">
+          <button class="btn btn-outline" id="hse-ppe-btn-load-compliance">تحميل ملخص الالتزام</button>
+        </div>
+        <div class="result-cards" id="hse-ppe-compliance-cards"></div>
+
+        <div id="hse-ppe-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-ppe-search" placeholder="بحث بالرمز / اسم الموظف...">
+            <select id="hse-ppe-filter-type"><option value="">كل الأنواع</option></select>
+            <select id="hse-ppe-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-ppe-btn-new">+ تسليم معدة وقاية</button>
+          </div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-ppe-table">
+              <thead><tr><th>الرمز</th><th>النوع</th><th>الموظف</th><th>الكمية</th><th>الحالة الفنية</th><th>تاريخ الاستحقاق</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="hse-ppe-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-ppe-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-ppe-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-ppe-form">
+            <div class="field"><label>نوع المعدة *</label>
+              <select id="hse-ppe-f-type"></select>
+            </div>
+            <div class="field"><label>معرّف المشروع</label><input type="text" id="hse-ppe-f-project"></div>
+            <div class="field"><label>اسم الموظف *</label><input type="text" id="hse-ppe-f-employee"></div>
+            <div class="field"><label>الوظيفة/الدور</label><input type="text" id="hse-ppe-f-role"></div>
+            <div class="field"><label>الكمية *</label><input type="number" id="hse-ppe-f-quantity" value="1" min="1"></div>
+            <div class="field"><label>الحالة الفنية</label>
+              <select id="hse-ppe-f-condition"></select>
+            </div>
+            <div class="field"><label>تاريخ التسليم *</label><input type="date" id="hse-ppe-f-issue-date"></div>
+            <div class="field"><label>العمر الافتراضي (بالأيام - اختياري)</label><input type="number" id="hse-ppe-f-lifespan"></div>
+            <div class="field field-full"><label>ملاحظات</label><input type="text" id="hse-ppe-f-notes"></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-ppe-btn-save">حفظ سجل التسليم</button></div>
+          <div id="hse-ppe-form-alert"></div>
+        </div>
       </div>
     </section>
 
