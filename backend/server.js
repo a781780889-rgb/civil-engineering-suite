@@ -2346,6 +2346,42 @@ const API_HANDLERS = {
   '/api/equipment/operators/license-alerts': {
     GET: async (_body, query) => EQ.getOperatorLicenseAlerts({ withinDays: query?.withinDays || 30 }),
   },
+
+  // ----- الجزء الثالث (3/4) من القسم السابع: التكاليف + الإنتاجية + التنبيهات -----
+  '/api/equipment/costs/breakdown': {
+    GET: async (_body, query) => {
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQ.getEquipmentCostBreakdown(query.equipmentId, { dateFrom: query.dateFrom || null, dateTo: query.dateTo || null });
+    },
+  },
+  '/api/equipment/costs/fleet-summary': {
+    GET: async (_body, query) => EQ.getFleetCostSummary({
+      projectId: query?.projectId || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+    }),
+  },
+  '/api/equipment/costs/transport/log': {
+    POST: async (body) => EQ.logTransportCost(body),
+  },
+
+  '/api/equipment/productivity': {
+    GET: async (_body, query) => {
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQ.getEquipmentProductivity(query.equipmentId, { dateFrom: query.dateFrom || null, dateTo: query.dateTo || null });
+    },
+  },
+  '/api/equipment/productivity/compare': {
+    GET: async (_body, query) => EQ.compareEquipmentProductivity({
+      type: query?.type || null, category: query?.category || null,
+      dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+    }),
+  },
+
+  '/api/equipment/alerts/center': {
+    GET: async (_body, query) => EQ.getAlertsCenter({
+      withinDays: query?.withinDays ? Number(query.withinDays) : 14,
+      fuelLowThresholdPercent: query?.fuelLowThresholdPercent ? Number(query.fuelLowThresholdPercent) : 15,
+    }),
+  },
 };
 
 const server = http.createServer(async (req, res) => {
