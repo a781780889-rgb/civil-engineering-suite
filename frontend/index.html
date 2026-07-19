@@ -80,6 +80,18 @@
     <div class="nav-item" data-panel="eq-tracking">
       <span class="nav-icon">◎</span> تتبع المعدات
     </div>
+    <div class="nav-item" data-panel="eq-fuel">
+      <span class="nav-icon">⛽</span> إدارة الوقود
+    </div>
+    <div class="nav-item" data-panel="eq-maintenance">
+      <span class="nav-icon">🔧</span> إدارة الصيانة
+    </div>
+    <div class="nav-item" data-panel="eq-spareparts">
+      <span class="nav-icon">▥</span> قطع الغيار
+    </div>
+    <div class="nav-item" data-panel="eq-operators">
+      <span class="nav-icon">👷</span> إدارة المشغلين
+    </div>
   </nav>
 
   <main class="main-content">
@@ -815,6 +827,231 @@
           <button class="btn btn-outline" id="eq-btn-load-track">عرض السجل</button>
         </div>
         <div id="eq-track-content"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم السابع (الجزء 2/4): إدارة الوقود ============ -->
+    <section class="calc-panel" id="panel-eq-fuel">
+      <div class="panel-header"><h2>إدارة الوقود (Fuel Management)</h2><span class="panel-code">EQUIPMENT.FUEL</span></div>
+      <div class="panel-body">
+        <div class="form-grid" id="eq-fuel-form">
+          <div class="field-group-title">تسجيل عملية تعبئة وقود</div>
+          <div class="field"><label>المعدة *</label><select id="eq-fuel-equipment"></select></div>
+          <div class="field"><label>الكمية (لتر) *</label><input type="number" id="eq-fuel-quantity"></div>
+          <div class="field"><label>نوع الوقود</label>
+            <select id="eq-fuel-type"><option value="">(افتراضي حسب المعدة)</option></select>
+          </div>
+          <div class="field"><label>سعر اللتر</label><input type="number" id="eq-fuel-price" step="0.01"></div>
+          <div class="field"><label>قراءة العداد / الساعات عند التعبئة</label><input type="number" id="eq-fuel-odometer"></div>
+          <div class="field"><label>محطة التعبئة</label><input type="text" id="eq-fuel-station"></div>
+          <div class="field"><label>ملاحظات</label><input type="text" id="eq-fuel-note"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="eq-btn-log-fuel">تسجيل التعبئة</button>
+        </div>
+        <div id="eq-fuel-alert"></div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">إحصائيات استهلاك الوقود</div>
+          <div class="pm-toolbar">
+            <select id="eq-fuel-stats-equipment"></select>
+            <select id="eq-fuel-stats-period">
+              <option value="all">كل الفترات</option>
+              <option value="week">آخر أسبوع</option>
+              <option value="month">آخر شهر</option>
+              <option value="year">آخر سنة</option>
+            </select>
+            <button class="btn btn-outline" id="eq-btn-load-fuel-stats">عرض الإحصائيات</button>
+          </div>
+          <div id="eq-fuel-stats-content"></div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">سجل عمليات التعبئة</div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-fuel-log-table">
+              <thead><tr><th>المعدة</th><th>الكمية</th><th>سعر اللتر</th><th>التكلفة</th><th>المحطة</th><th>التاريخ</th></tr></thead>
+              <tbody id="eq-fuel-log-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم السابع (الجزء 2/4): إدارة الصيانة ============ -->
+    <section class="calc-panel" id="panel-eq-maintenance">
+      <div class="panel-header"><h2>إدارة الصيانة (Maintenance Management)</h2><span class="panel-code">EQUIPMENT.MAINTENANCE</span></div>
+      <div class="panel-body">
+
+        <div class="pm-card">
+          <div class="pm-card-title">تنبيهات الصيانة القادمة والمتأخرة</div>
+          <div class="btn-row"><button class="btn btn-outline" id="eq-btn-load-maint-alerts">تحديث التنبيهات</button></div>
+          <div id="eq-maint-alerts-content"></div>
+        </div>
+
+        <div class="form-grid" id="eq-msch-form" style="margin-top:16px">
+          <div class="field-group-title">جدولة صيانة دورية جديدة</div>
+          <div class="field"><label>المعدة *</label><select id="eq-msch-equipment"></select></div>
+          <div class="field"><label>الدورية *</label><select id="eq-msch-frequency"></select></div>
+          <div class="field"><label>كل كم ساعة تشغيل (لدورية "حسب الساعات")</label><input type="number" id="eq-msch-interval-hours"></div>
+          <div class="field"><label>تاريخ الاستحقاق القادم</label><input type="date" id="eq-msch-next-date"></div>
+          <div class="field"><label>ساعات التشغيل عند الاستحقاق القادم</label><input type="number" id="eq-msch-next-hours"></div>
+          <div class="field"><label>المسؤول عن الصيانة</label><input type="text" id="eq-msch-assigned"></div>
+          <div class="field" style="grid-column:1/-1"><label>وصف مهام الصيانة</label><input type="text" id="eq-msch-desc"></div>
+        </div>
+        <div class="btn-row"><button class="btn btn-primary" id="eq-btn-create-msch">إنشاء الجدولة</button></div>
+        <div id="eq-msch-alert"></div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">جداول الصيانة الدورية الحالية</div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-msch-table">
+              <thead><tr><th>المعدة</th><th>الدورية</th><th>الاستحقاق القادم</th><th>المسؤول</th><th></th></tr></thead>
+              <tbody id="eq-msch-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="form-grid" id="eq-mrec-form" style="margin-top:16px">
+          <div class="field-group-title">تسجيل صيانة (دورية منفذة / طارئة)</div>
+          <div class="field"><label>المعدة *</label><select id="eq-mrec-equipment"></select></div>
+          <div class="field"><label>نوع الصيانة *</label>
+            <select id="eq-mrec-type"><option value="preventive">صيانة دورية</option><option value="emergency">صيانة طارئة</option></select>
+          </div>
+          <div class="field"><label>درجة الخطورة</label><select id="eq-mrec-severity"><option value="">—</option></select></div>
+          <div class="field"><label>الفني المسؤول</label><input type="text" id="eq-mrec-technician"></div>
+          <div class="field"><label>تكلفة الإصلاح (بدون قطع الغيار)</label><input type="number" id="eq-mrec-cost"></div>
+          <div class="field"><label>الحالة</label><select id="eq-mrec-status"></select></div>
+          <div class="field"><label>وقت البداية</label><input type="datetime-local" id="eq-mrec-start"></div>
+          <div class="field"><label>وقت الانتهاء (إن اكتملت)</label><input type="datetime-local" id="eq-mrec-end"></div>
+          <div class="field" style="grid-column:1/-1"><label>وصف العطل (للصيانة الطارئة)</label><input type="text" id="eq-mrec-fault-desc"></div>
+          <div class="field" style="grid-column:1/-1"><label>سبب العطل</label><input type="text" id="eq-mrec-fault-cause"></div>
+          <div class="field" style="grid-column:1/-1"><label>ملاحظات</label><input type="text" id="eq-mrec-notes"></div>
+          <div class="field-group-title" style="grid-column:1/-1">قطع الغيار المستخدمة (اختياري)</div>
+          <div class="field"><label>القطعة</label><select id="eq-mrec-part"></select></div>
+          <div class="field"><label>الكمية المستخدمة</label><input type="number" id="eq-mrec-part-qty" value="1"></div>
+          <div class="field" style="align-self:end"><button type="button" class="btn btn-outline" id="eq-btn-add-part-use">+ إضافة للقائمة</button></div>
+          <div class="field" style="grid-column:1/-1" id="eq-mrec-parts-list"></div>
+        </div>
+        <div class="btn-row"><button class="btn btn-primary" id="eq-btn-create-mrec">حفظ سجل الصيانة</button></div>
+        <div id="eq-mrec-alert"></div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">إحصائيات صيانة معدة</div>
+          <div class="pm-toolbar">
+            <select id="eq-mstats-equipment"></select>
+            <button class="btn btn-outline" id="eq-btn-load-mstats">عرض الإحصائيات</button>
+          </div>
+          <div id="eq-mstats-content"></div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">سجل عمليات الصيانة</div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-mrec-table">
+              <thead><tr><th>المعدة</th><th>النوع</th><th>الحالة</th><th>التكلفة الإجمالية</th><th>مدة التوقف (ساعة)</th><th>البداية</th></tr></thead>
+              <tbody id="eq-mrec-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم السابع (الجزء 2/4): إدارة قطع الغيار ============ -->
+    <section class="calc-panel" id="panel-eq-spareparts">
+      <div class="panel-header"><h2>إدارة قطع الغيار (Spare Parts Management)</h2><span class="panel-code">EQUIPMENT.SPAREPARTS</span></div>
+      <div class="panel-body">
+
+        <div class="pm-card">
+          <div class="pm-card-title">قطع غيار وصلت للحد الأدنى من المخزون</div>
+          <div class="btn-row"><button class="btn btn-outline" id="eq-btn-load-low-stock">تحديث</button></div>
+          <div id="eq-low-stock-content"></div>
+        </div>
+
+        <div class="form-grid" id="eq-part-form" style="margin-top:16px">
+          <div class="field-group-title">إضافة / تعديل قطعة غيار</div>
+          <div class="field"><label>اسم القطعة *</label><input type="text" id="eq-part-name"></div>
+          <div class="field"><label>رقم القطعة</label><input type="text" id="eq-part-number"></div>
+          <div class="field"><label>الشركة المصنعة</label><input type="text" id="eq-part-manufacturer"></div>
+          <div class="field"><label>المورد</label><input type="text" id="eq-part-supplier"></div>
+          <div class="field"><label>الكمية بالمخزون</label><input type="number" id="eq-part-stock" value="0"></div>
+          <div class="field"><label>سعر الوحدة</label><input type="number" id="eq-part-price" value="0"></div>
+          <div class="field"><label>الحد الأدنى للمخزون</label><input type="number" id="eq-part-min-stock" value="0"></div>
+          <div class="field"><label>العمر الافتراضي</label><input type="text" id="eq-part-lifespan"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="eq-btn-save-part">حفظ القطعة</button>
+          <button class="btn btn-outline" id="eq-btn-reset-part-form" type="button">تفريغ النموذج</button>
+        </div>
+        <div id="eq-part-alert"></div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">مخزون قطع الغيار</div>
+          <div class="pm-toolbar">
+            <input type="text" id="eq-part-search" placeholder="بحث بالاسم / رقم القطعة...">
+          </div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-parts-table">
+              <thead><tr><th>الاسم</th><th>رقم القطعة</th><th>المخزون</th><th>الحد الأدنى</th><th>سعر الوحدة</th><th></th></tr></thead>
+              <tbody id="eq-parts-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم السابع (الجزء 2/4): إدارة المشغلين ============ -->
+    <section class="calc-panel" id="panel-eq-operators">
+      <div class="panel-header"><h2>إدارة المشغلين (Operators Management)</h2><span class="panel-code">EQUIPMENT.OPERATORS</span></div>
+      <div class="panel-body">
+
+        <div class="pm-card">
+          <div class="pm-card-title">تنبيهات انتهاء رخص القيادة/التشغيل</div>
+          <div class="btn-row"><button class="btn btn-outline" id="eq-btn-load-license-alerts">تحديث التنبيهات</button></div>
+          <div id="eq-license-alerts-content"></div>
+        </div>
+
+        <div class="form-grid" id="eq-op-form" style="margin-top:16px">
+          <div class="field-group-title">إضافة / تعديل مشغّل</div>
+          <div class="field"><label>الاسم *</label><input type="text" id="eq-opr-name"></div>
+          <div class="field"><label>رقم الهوية</label><input type="text" id="eq-opr-national-id"></div>
+          <div class="field"><label>رقم الرخصة</label><input type="text" id="eq-opr-license-number"></div>
+          <div class="field"><label>نوع الرخصة</label><select id="eq-opr-license-type"><option value="">—</option></select></div>
+          <div class="field"><label>تاريخ انتهاء الرخصة</label><input type="date" id="eq-opr-license-expiry"></div>
+          <div class="field"><label>سنوات الخبرة</label><input type="number" id="eq-opr-experience" value="0"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="eq-btn-save-operator">حفظ المشغّل</button>
+          <button class="btn btn-outline" id="eq-btn-reset-op-form" type="button">تفريغ النموذج</button>
+        </div>
+        <div id="eq-opr-alert"></div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">تقييم أداء / تسجيل مخالفة</div>
+          <div class="pm-toolbar">
+            <select id="eq-opr-action-select"></select>
+            <input type="number" id="eq-opr-rating" placeholder="تقييم 1-5" min="1" max="5" style="max-width:120px">
+            <button class="btn btn-outline" id="eq-btn-rate-operator">حفظ التقييم</button>
+          </div>
+          <div class="pm-toolbar">
+            <input type="text" id="eq-opr-violation-desc" placeholder="وصف المخالفة...">
+            <button class="btn btn-outline" id="eq-btn-add-violation">تسجيل مخالفة</button>
+          </div>
+          <div id="eq-opr-action-alert"></div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">سجل المشغّلين</div>
+          <div class="pm-toolbar">
+            <input type="text" id="eq-opr-search" placeholder="بحث بالاسم / رقم الرخصة...">
+          </div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-operators-table">
+              <thead><tr><th>الاسم</th><th>نوع الرخصة</th><th>انتهاء الرخصة</th><th>الخبرة (سنوات)</th><th>التقييم</th><th></th></tr></thead>
+              <tbody id="eq-operators-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 
