@@ -107,6 +107,19 @@
     <div class="nav-item" data-panel="eq-ai">
       <span class="nav-icon">🤖</span> الذكاء الاصطناعي والتكامل
     </div>
+    <div class="sidebar-title" style="margin-top:16px">القسم الثامن</div>
+    <div class="nav-item" data-panel="hse-dashboard">
+      <span class="nav-icon">▦</span> لوحة معلومات السلامة
+    </div>
+    <div class="nav-item" data-panel="hse-plans">
+      <span class="nav-icon">📋</span> خطط السلامة
+    </div>
+    <div class="nav-item" data-panel="hse-risks">
+      <span class="nav-icon">⚠</span> إدارة المخاطر
+    </div>
+    <div class="nav-item" data-panel="hse-incidents">
+      <span class="nav-icon">🚑</span> الحوادث والإصابات
+    </div>
   </nav>
 
   <main class="main-content">
@@ -1277,6 +1290,315 @@
       </div>
     </section>
 
+    <!-- ============ القسم الثامن: لوحة معلومات السلامة ============ -->
+    <section class="calc-panel" id="panel-hse-dashboard">
+      <div class="panel-header"><h2>لوحة معلومات السلامة المهنية (HSE Dashboard)</h2><span class="panel-code">HSE.DASHBOARD</span></div>
+      <div class="panel-body">
+        <div class="pm-toolbar">
+          <input type="text" id="hse-dash-project" placeholder="معرّف المشروع (اختياري - اتركه فارغاً لعرض كل المشاريع)">
+          <button class="btn btn-outline" id="hse-btn-load-dashboard">تحميل</button>
+        </div>
+        <div class="result-cards" id="hse-dash-cards"></div>
+        <div class="pm-grid-2">
+          <div class="pm-card">
+            <div class="pm-card-title">توزيع المخاطر المفتوحة حسب مستوى الخطورة</div>
+            <div id="hse-chart-risk-level" class="pm-bars"></div>
+          </div>
+          <div class="pm-card">
+            <div class="pm-card-title">توزيع الحوادث حسب النوع</div>
+            <div id="hse-chart-incident-type" class="pm-bars"></div>
+          </div>
+        </div>
+        <div class="pm-grid-2">
+          <div class="pm-card">
+            <div class="pm-card-title">أحدث الحوادث المسجّلة</div>
+            <div id="hse-recent-incidents" class="pm-activity-log"></div>
+          </div>
+          <div class="pm-card">
+            <div class="pm-card-title">أعلى المخاطر أولوية (غير مغلقة)</div>
+            <div id="hse-top-risks" class="pm-activity-log"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم الثامن: خطط السلامة ============ -->
+    <section class="calc-panel" id="panel-hse-plans">
+      <div class="panel-header"><h2>إدارة خطط السلامة (Safety Plans)</h2><span class="panel-code">HSE.SAFETY_PLANS</span></div>
+      <div class="panel-body">
+
+        <div id="hse-plan-list-view">
+          <div class="pm-toolbar">
+            <input type="text" id="hse-plan-search" placeholder="بحث بالعنوان / الرمز...">
+            <select id="hse-plan-filter-type"><option value="">كل الأنواع</option></select>
+            <select id="hse-plan-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-plan-btn-new">+ خطة سلامة جديدة</button>
+          </div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="hse-plan-table">
+              <thead>
+                <tr><th>الرمز</th><th>العنوان</th><th>النوع</th><th>المشروع</th><th>الإصدار</th><th>الحالة</th><th></th></tr>
+              </thead>
+              <tbody id="hse-plan-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-plan-form-view" style="display:none">
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-outline" id="hse-plan-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-plan-form">
+            <div class="field-group-title">البيانات الأساسية</div>
+            <div class="field"><label>عنوان الخطة *</label><input type="text" id="hse-plan-f-title"></div>
+            <div class="field">
+              <label>نوع الخطة *</label>
+              <select id="hse-plan-f-type"></select>
+            </div>
+            <div class="field"><label>معرّف المشروع *</label><input type="text" id="hse-plan-f-project"></div>
+            <div class="field"><label>المسؤول عن الخطة</label><input type="text" id="hse-plan-f-responsible"></div>
+            <div class="field"><label>تاريخ السريان</label><input type="date" id="hse-plan-f-effective"></div>
+            <div class="field"><label>تاريخ المراجعة القادمة</label><input type="date" id="hse-plan-f-review"></div>
+            <div class="field field-full"><label>الوصف</label><textarea id="hse-plan-f-description" rows="2"></textarea></div>
+
+            <div class="field-group-title">أهداف وسياسات وإجراءات السلامة (سطر لكل بند)</div>
+            <div class="field field-full"><label>أهداف السلامة</label><textarea id="hse-plan-f-objectives" rows="3" placeholder="بند في كل سطر"></textarea></div>
+            <div class="field field-full"><label>سياسات السلامة</label><textarea id="hse-plan-f-policies" rows="3" placeholder="بند في كل سطر"></textarea></div>
+            <div class="field field-full"><label>إجراءات السلامة / تعليمات العمل الآمن</label><textarea id="hse-plan-f-procedures" rows="3" placeholder="بند في كل سطر"></textarea></div>
+
+            <div class="field-group-title">خطط الإخلاء والطوارئ (تُستخدم عند اختيار هذا النوع من الخطط)</div>
+            <div class="field field-full"><label>نقاط التجمع (سطر لكل نقطة)</label><textarea id="hse-plan-f-assembly" rows="2"></textarea></div>
+            <div class="field field-full"><label>مسارات الإخلاء (سطر لكل مسار)</label><textarea id="hse-plan-f-routes" rows="2"></textarea></div>
+            <div class="field"><label>رابط خريطة السلامة</label><input type="text" id="hse-plan-f-map-url"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="hse-plan-btn-save">حفظ الخطة</button>
+          </div>
+          <div id="hse-plan-form-alert"></div>
+        </div>
+
+        <div id="hse-plan-detail-view" style="display:none">
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-outline" id="hse-plan-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-plan-detail-content"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============ القسم الثامن: إدارة المخاطر ============ -->
+    <section class="calc-panel" id="panel-hse-risks">
+      <div class="panel-header"><h2>إدارة المخاطر (Risk Assessment)</h2><span class="panel-code">HSE.RISK_ASSESSMENT</span></div>
+      <div class="panel-body">
+
+        <div class="pm-card" style="margin-bottom:16px">
+          <div class="pm-card-title">مصفوفة المخاطر (Risk Matrix 5×5)</div>
+          <div class="pm-toolbar">
+            <input type="text" id="hse-matrix-project" placeholder="معرّف المشروع (اختياري)">
+            <button class="btn btn-outline" id="hse-btn-load-matrix">تحميل المصفوفة</button>
+          </div>
+          <div id="hse-matrix-content"></div>
+        </div>
+
+        <div id="hse-risk-list-view">
+          <div class="pm-toolbar">
+            <input type="text" id="hse-risk-search" placeholder="بحث بالعنوان / الرمز...">
+            <select id="hse-risk-filter-category"><option value="">كل التصنيفات</option></select>
+            <select id="hse-risk-filter-level"><option value="">كل المستويات</option></select>
+            <select id="hse-risk-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-risk-btn-new">+ تقييم خطر جديد</button>
+          </div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="hse-risk-table">
+              <thead>
+                <tr><th>الرمز</th><th>الخطر</th><th>التصنيف</th><th>الاحتمالية</th><th>الشدة</th><th>الدرجة</th><th>المستوى</th><th>الحالة</th><th></th></tr>
+              </thead>
+              <tbody id="hse-risk-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-risk-form-view" style="display:none">
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-outline" id="hse-risk-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-risk-form">
+            <div class="field-group-title">بيانات الخطر</div>
+            <div class="field field-full"><label>عنوان/وصف الخطر *</label><input type="text" id="hse-risk-f-title"></div>
+            <div class="field"><label>معرّف المشروع *</label><input type="text" id="hse-risk-f-project"></div>
+            <div class="field">
+              <label>تصنيف الخطر *</label>
+              <select id="hse-risk-f-category"></select>
+            </div>
+            <div class="field"><label>الموقع</label><input type="text" id="hse-risk-f-location"></div>
+            <div class="field field-full"><label>وصف تفصيلي</label><textarea id="hse-risk-f-description" rows="2"></textarea></div>
+
+            <div class="field-group-title">تقييم الاحتمالية والتأثير (مصفوفة ISO 45001)</div>
+            <div class="field">
+              <label>الاحتمالية (1 نادر جداً - 5 شبه مؤكد) *</label>
+              <select id="hse-risk-f-likelihood">
+                <option value="1">1 - نادر جداً</option><option value="2">2 - نادر</option>
+                <option value="3">3 - محتمل</option><option value="4">4 - مرجّح</option>
+                <option value="5">5 - شبه مؤكد</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>شدة التأثير (1 طفيف - 5 كارثي) *</label>
+              <select id="hse-risk-f-severity">
+                <option value="1">1 - طفيف (إسعافات أولية)</option><option value="2">2 - بسيط</option>
+                <option value="3">3 - متوسط</option><option value="4">4 - جسيم</option>
+                <option value="5">5 - كارثي (وفاة)</option>
+              </select>
+            </div>
+
+            <div class="field-group-title">إجراءات التحكم</div>
+            <div class="field">
+              <label>مستوى التحكم (هرم التحكم بالمخاطر)</label>
+              <select id="hse-risk-f-hierarchy">
+                <option value="">— بدون تحديد —</option>
+              </select>
+            </div>
+            <div class="field"><label>المسؤول عن التنفيذ</label><input type="text" id="hse-risk-f-responsible"></div>
+            <div class="field"><label>تاريخ المراجعة</label><input type="date" id="hse-risk-f-review"></div>
+            <div class="field field-full"><label>وصف إجراءات التحكم</label><textarea id="hse-risk-f-control-measures" rows="2"></textarea></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="hse-risk-btn-save">حفظ تقييم الخطر</button>
+          </div>
+          <div id="hse-risk-form-alert"></div>
+        </div>
+
+        <div id="hse-risk-detail-view" style="display:none">
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-outline" id="hse-risk-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-risk-detail-content"></div>
+
+          <div class="pm-card" style="margin-top:16px">
+            <div class="pm-card-title">إضافة إجراء تحكم جديد</div>
+            <div class="form-grid">
+              <div class="field field-full"><label>وصف الإجراء *</label><input type="text" id="hse-rca-f-description"></div>
+              <div class="field">
+                <label>مستوى التحكم</label>
+                <select id="hse-rca-f-hierarchy"><option value="">— بدون تحديد —</option></select>
+              </div>
+              <div class="field"><label>المسؤول عن التنفيذ</label><input type="text" id="hse-rca-f-responsible"></div>
+              <div class="field"><label>تاريخ الاستحقاق</label><input type="date" id="hse-rca-f-due"></div>
+            </div>
+            <div class="btn-row"><button class="btn btn-primary" id="hse-rca-btn-add">إضافة الإجراء</button></div>
+            <div id="hse-rca-form-alert"></div>
+          </div>
+
+          <div class="pm-card" style="margin-top:16px">
+            <div class="pm-card-title">إجراءات التحكم المسجّلة</div>
+            <div class="pm-table-wrap">
+              <table class="detail-table">
+                <thead><tr><th>الإجراء</th><th>المستوى</th><th>المسؤول</th><th>الاستحقاق</th><th>الحالة</th><th></th></tr></thead>
+                <tbody id="hse-rca-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============ القسم الثامن: الحوادث والإصابات ============ -->
+    <section class="calc-panel" id="panel-hse-incidents">
+      <div class="panel-header"><h2>إدارة الحوادث والإصابات (Incident & Injury Management)</h2><span class="panel-code">HSE.INCIDENTS</span></div>
+      <div class="panel-body">
+
+        <div class="pm-card" style="margin-bottom:16px">
+          <div class="pm-card-title">مؤشرات السلامة (معدل التكرار ومعدل الشدة - وفق OSHA/ISO 45001)</div>
+          <div class="pm-toolbar">
+            <input type="text" id="hse-kpi-project" placeholder="معرّف المشروع (اختياري)">
+            <input type="number" id="hse-kpi-manhours" placeholder="إجمالي ساعات العمل الفعلية">
+            <button class="btn btn-outline" id="hse-btn-load-kpis">احسب المؤشرات</button>
+          </div>
+          <div class="result-cards" id="hse-kpi-cards"></div>
+        </div>
+
+        <div id="hse-inc-list-view">
+          <div class="pm-toolbar">
+            <input type="text" id="hse-inc-search" placeholder="بحث بالوصف / الرمز / الموقع / اسم المصاب...">
+            <select id="hse-inc-filter-type"><option value="">كل الأنواع</option></select>
+            <select id="hse-inc-filter-severity"><option value="">كل درجات الإصابة</option></select>
+            <select id="hse-inc-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-inc-btn-new">+ تسجيل حادث جديد</button>
+          </div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="hse-inc-table">
+              <thead>
+                <tr><th>الرمز</th><th>النوع</th><th>التاريخ</th><th>الموقع</th><th>المصاب</th><th>درجة الإصابة</th><th>الحالة</th><th></th></tr>
+              </thead>
+              <tbody id="hse-inc-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-inc-form-view" style="display:none">
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-outline" id="hse-inc-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-inc-form">
+            <div class="field-group-title">بيانات الحادث الأساسية</div>
+            <div class="field">
+              <label>نوع الحادث *</label>
+              <select id="hse-inc-f-type"></select>
+            </div>
+            <div class="field"><label>معرّف المشروع *</label><input type="text" id="hse-inc-f-project"></div>
+            <div class="field"><label>تاريخ ووقت الحادث *</label><input type="datetime-local" id="hse-inc-f-occurred"></div>
+            <div class="field"><label>موقع الحادث *</label><input type="text" id="hse-inc-f-location"></div>
+            <div class="field field-full"><label>وصف الحادث *</label><textarea id="hse-inc-f-description" rows="3"></textarea></div>
+
+            <div class="field-group-title">الشخص المصاب (إن وُجد)</div>
+            <div class="field"><label>اسم المصاب</label><input type="text" id="hse-inc-f-injured-name"></div>
+            <div class="field"><label>الدور الوظيفي للمصاب</label><input type="text" id="hse-inc-f-injured-role"></div>
+            <div class="field">
+              <label>نوع الإصابة</label>
+              <select id="hse-inc-f-injury-type"><option value="">— لا يوجد —</option></select>
+            </div>
+            <div class="field">
+              <label>درجة الإصابة</label>
+              <select id="hse-inc-f-injury-severity"></select>
+            </div>
+            <div class="field"><label>أيام العمل الضائعة</label><input type="number" id="hse-inc-f-lost-days" value="0"></div>
+
+            <div class="field-group-title">الشهود والمرفقات</div>
+            <div class="field field-full"><label>الشهود (سطر لكل شاهد)</label><textarea id="hse-inc-f-witnesses" rows="2"></textarea></div>
+            <div class="field"><label>المُبلِّغ عن الحادث</label><input type="text" id="hse-inc-f-reported-by"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="hse-inc-btn-save">حفظ الحادث</button>
+          </div>
+          <div id="hse-inc-form-alert"></div>
+        </div>
+
+        <div id="hse-inc-detail-view" style="display:none">
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-outline" id="hse-inc-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-inc-detail-content"></div>
+
+          <div class="pm-card" style="margin-top:16px">
+            <div class="pm-card-title">التحقيق والإغلاق</div>
+            <div class="form-grid">
+              <div class="field field-full"><label>السبب المباشر</label><input type="text" id="hse-inc-f-direct-cause"></div>
+              <div class="field field-full"><label>السبب الجذري</label><input type="text" id="hse-inc-f-root-cause"></div>
+              <div class="field field-full"><label>الإجراءات التصحيحية (سطر لكل إجراء - أضف "!مكتمل" في نهاية السطر لتعليمه كمكتمل)</label><textarea id="hse-inc-f-corrective" rows="3"></textarea></div>
+              <div class="field"><label>حالة الحادث</label>
+                <select id="hse-inc-f-status"></select>
+              </div>
+            </div>
+            <div class="btn-row"><button class="btn btn-primary" id="hse-inc-btn-update-investigation">حفظ التحقيق / تحديث الحالة</button></div>
+            <div id="hse-inc-investigation-alert"></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -1362,5 +1684,6 @@
 <script src="js/pm.js"></script>
 <script src="js/schedule.js"></script>
 <script src="js/equipment.js"></script>
+<script src="js/hse.js"></script>
 </body>
 </html>
