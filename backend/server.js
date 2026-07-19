@@ -38,6 +38,7 @@ const BIZC = require('./utils/businessContracts');
 const BIZO = require('./utils/businessOperations');
 const SEC = require('./utils/businessSecurity');
 const GOV = require('./utils/businessGovernance');
+const EQ = require('./utils/equipmentManagement');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -2086,6 +2087,107 @@ const API_HANDLERS = {
   },
   '/api/biz/ai/ask': {
     POST: async (body) => { if (!body.question) throw new Error('السؤال (question) مطلوب'); return { success: true, data: await GOV.answerManagementQuestion(body.question) }; },
+  },
+
+  // ===================================================================
+  // ===== القسم السابع (الجزء 1/4) - إدارة المعدات: البيانات الأساسية،
+  // ===== إدارة التشغيل، إدارة الحجز، تتبع المعدات
+  // ===================================================================
+
+  '/api/equipment/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        categories: EQ.EQUIPMENT_CATEGORIES,
+        type_labels: EQ.EQUIPMENT_TYPE_LABELS,
+        statuses: EQ.EQUIPMENT_STATUSES,
+        status_labels: EQ.EQUIPMENT_STATUS_LABELS,
+        ownership_types: EQ.OWNERSHIP_TYPES,
+        fuel_types: EQ.FUEL_TYPES,
+      },
+    }),
+  },
+  '/api/equipment/dashboard': {
+    GET: async (_body, query) => EQ.getBasicDashboard(query?.projectId || null),
+  },
+
+  // ----- سجل المعدات (CRUD) -----
+  '/api/equipment/items': {
+    GET: async (_body, query) => EQ.listEquipment({
+      category: query?.category, type: query?.type, status: query?.status,
+      projectId: query?.projectId, ownership: query?.ownership, search: query?.search,
+    }),
+    POST: async (body) => EQ.createEquipment(body),
+  },
+  '/api/equipment/items/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف المعدة (id) مطلوب');
+      return EQ.getEquipment(query.id);
+    },
+  },
+  '/api/equipment/items/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المعدة (id) مطلوب');
+      const { id, ...rest } = body;
+      return EQ.updateEquipment(id, rest);
+    },
+  },
+  '/api/equipment/items/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المعدة (id) مطلوب');
+      return EQ.deleteEquipment(body.id);
+    },
+  },
+
+  // ----- إدارة التشغيل -----
+  '/api/equipment/operations/start': {
+    POST: async (body) => EQ.startOperation(body),
+  },
+  '/api/equipment/operations/end': {
+    POST: async (body) => EQ.endOperation(body),
+  },
+  '/api/equipment/operations': {
+    GET: async (_body, query) => EQ.listOperations({
+      equipmentId: query?.equipmentId, projectId: query?.projectId,
+      openOnly: query?.openOnly, dateFrom: query?.dateFrom, dateTo: query?.dateTo,
+    }),
+  },
+  '/api/equipment/operations/stats': {
+    GET: async (_body, query) => {
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQ.getOperationStats(query.equipmentId, { period: query.period || 'all' });
+    },
+  },
+
+  // ----- إدارة الحجز -----
+  '/api/equipment/reservations': {
+    GET: async (_body, query) => EQ.listReservations({
+      equipmentId: query?.equipmentId, projectId: query?.projectId, status: query?.status,
+    }),
+    POST: async (body) => EQ.createReservation(body),
+  },
+  '/api/equipment/reservations/cancel': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الحجز (id) مطلوب');
+      return EQ.cancelReservation(body.id);
+    },
+  },
+  '/api/equipment/reservations/calendar': {
+    GET: async (_body, query) => {
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQ.getReservationCalendar(query.equipmentId);
+    },
+  },
+
+  // ----- تتبع المعدات -----
+  '/api/equipment/tracking/movement': {
+    POST: async (body) => EQ.logMovement(body),
+  },
+  '/api/equipment/tracking/history': {
+    GET: async (_body, query) => {
+      if (!query?.equipmentId) throw new Error('معرّف المعدة (equipmentId) مطلوب');
+      return EQ.getEquipmentTrackingHistory(query.equipmentId);
+    },
   },
 };
 
