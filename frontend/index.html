@@ -92,6 +92,15 @@
     <div class="nav-item" data-panel="eq-operators">
       <span class="nav-icon">👷</span> إدارة المشغلين
     </div>
+    <div class="nav-item" data-panel="eq-costs">
+      <span class="nav-icon">💰</span> إدارة التكاليف
+    </div>
+    <div class="nav-item" data-panel="eq-productivity">
+      <span class="nav-icon">📈</span> إدارة الإنتاجية
+    </div>
+    <div class="nav-item" data-panel="eq-alerts">
+      <span class="nav-icon">🔔</span> مركز التنبيهات
+    </div>
   </nav>
 
   <main class="main-content">
@@ -1052,6 +1061,104 @@
             </table>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== الجزء الثالث: إدارة التكاليف ===== -->
+    <section class="calc-panel" id="panel-eq-costs">
+      <div class="panel-header"><h2>إدارة التكاليف (Cost Management)</h2><span class="panel-code">EQUIPMENT.COSTS</span></div>
+      <div class="panel-body">
+
+        <div class="pm-card">
+          <div class="pm-card-title">ملخص تكاليف الأسطول</div>
+          <div class="pm-toolbar">
+            <input type="text" id="eq-cost-project" placeholder="معرّف المشروع (اختياري)">
+            <input type="date" id="eq-cost-from" title="من تاريخ">
+            <input type="date" id="eq-cost-to" title="إلى تاريخ">
+            <button class="btn btn-outline" id="eq-btn-load-fleet-cost">تحديث</button>
+          </div>
+          <div class="result-cards" id="eq-fleet-cost-cards"></div>
+          <div class="pm-card-title" style="margin-top:12px">أعلى المعدات تكلفة</div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-fleet-cost-table">
+              <thead><tr><th>الرمز</th><th>الاسم</th><th>التكلفة الإجمالية</th></tr></thead>
+              <tbody id="eq-fleet-cost-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">تفصيل تكلفة معدة واحدة</div>
+          <div class="pm-toolbar">
+            <select id="eq-cost-equipment"></select>
+            <button class="btn btn-outline" id="eq-btn-load-eq-cost">عرض التفصيل</button>
+          </div>
+          <div id="eq-cost-detail"></div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">تسجيل تكلفة نقل</div>
+          <div class="pm-toolbar">
+            <select id="eq-transport-equipment"></select>
+            <input type="number" id="eq-transport-amount" placeholder="قيمة تكلفة النقل">
+            <input type="text" id="eq-transport-note" placeholder="ملاحظة (اختياري)">
+            <button class="btn btn-primary" id="eq-btn-log-transport">حفظ</button>
+          </div>
+          <div id="eq-transport-alert"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===== الجزء الثالث: إدارة الإنتاجية ===== -->
+    <section class="calc-panel" id="panel-eq-productivity">
+      <div class="panel-header"><h2>إدارة الإنتاجية (Productivity Management)</h2><span class="panel-code">EQUIPMENT.PRODUCTIVITY</span></div>
+      <div class="panel-body">
+
+        <div class="pm-card">
+          <div class="pm-card-title">إنتاجية معدة واحدة</div>
+          <div class="pm-toolbar">
+            <select id="eq-prod-equipment"></select>
+            <input type="date" id="eq-prod-from" title="من تاريخ">
+            <input type="date" id="eq-prod-to" title="إلى تاريخ">
+            <button class="btn btn-outline" id="eq-btn-load-productivity">عرض</button>
+          </div>
+          <div class="result-cards" id="eq-prod-cards"></div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">مقارنة كفاءة المعدات المتماثلة</div>
+          <div class="pm-toolbar">
+            <select id="eq-prod-cmp-category"></select>
+            <button class="btn btn-outline" id="eq-btn-compare-productivity">مقارنة</button>
+          </div>
+          <div id="eq-prod-cmp-summary"></div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-prod-cmp-table">
+              <thead><tr><th>الرمز</th><th>الاسم</th><th>نسبة الاستغلال %</th><th>كفاءة التشغيل %</th><th>معدل الأعطال /100س</th></tr></thead>
+              <tbody id="eq-prod-cmp-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===== الجزء الثالث: مركز التنبيهات ===== -->
+    <section class="calc-panel" id="panel-eq-alerts">
+      <div class="panel-header"><h2>مركز التنبيهات الموحّد (Alerts Center)</h2><span class="panel-code">EQUIPMENT.ALERTS</span></div>
+      <div class="panel-body">
+
+        <div class="pm-card">
+          <div class="pm-toolbar">
+            <label>عرض التنبيهات خلال</label>
+            <input type="number" id="eq-alerts-within-days" value="14" style="max-width:100px"> يوم
+            <button class="btn btn-primary" id="eq-btn-load-alerts">تحديث التنبيهات</button>
+          </div>
+          <div class="result-cards" id="eq-alerts-summary-cards"></div>
+          <div id="eq-alerts-list" style="margin-top:12px"></div>
+        </div>
+
       </div>
     </section>
 
