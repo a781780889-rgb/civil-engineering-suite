@@ -47,6 +47,8 @@ const HSE_TRN = require('./utils/hseTraining');
 const HSE_HZM = require('./utils/hseHazmat');
 const HSE_FIRE = require('./utils/hseFireSafety');
 const HSE_VIOL = require('./utils/hseViolations');
+const HSE_REPORTS = require('./utils/hseReports');
+const HSE_AI = require('./utils/hseAI');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -3426,6 +3428,126 @@ const API_HANDLERS = {
   },
   '/api/hse/fire/alerts/open-faults': {
     GET: async (_body, query) => HSE_FIRE.getOpenFaults({ projectId: query?.projectId || null }),
+  },
+
+  // ===================================================================
+  // القسم الثامن - وحدة التقارير الموحّدة (HSE Reports)
+  // ===================================================================
+
+  '/api/hse/reports/incidents': {
+    GET: async (_body, query) => ({ success: true, report: HSE_REPORTS.buildIncidentsReport({
+      projectId: query?.projectId, type: query?.type, severity: query?.severity, status: query?.status,
+    }) }),
+  },
+  '/api/hse/reports/risks': {
+    GET: async (_body, query) => ({ success: true, report: HSE_REPORTS.buildRisksReport({
+      projectId: query?.projectId, category: query?.category, level: query?.level, status: query?.status,
+    }) }),
+  },
+  '/api/hse/reports/inspections': {
+    GET: async (_body, query) => ({ success: true, report: HSE_REPORTS.buildInspectionsReport({
+      projectId: query?.projectId, type: query?.type, status: query?.status,
+    }) }),
+  },
+  '/api/hse/reports/violations': {
+    GET: async (_body, query) => ({ success: true, report: HSE_REPORTS.buildViolationsReport({
+      projectId: query?.projectId, type: query?.type, severity: query?.severity, status: query?.status,
+    }) }),
+  },
+  '/api/hse/reports/permits': {
+    GET: async (_body, query) => ({ success: true, report: HSE_REPORTS.buildPermitsReport({
+      projectId: query?.projectId, type: query?.type, status: query?.status,
+    }) }),
+  },
+  '/api/hse/reports/ppe': {
+    GET: async (_body, query) => ({ success: true, report: HSE_REPORTS.buildPpeReport({ projectId: query?.projectId }) }),
+  },
+  '/api/hse/reports/emergency': {
+    GET: async (_body, query) => ({ success: true, report: HSE_REPORTS.buildEmergencyReport({ projectId: query?.projectId }) }),
+  },
+  '/api/hse/reports/training': {
+    GET: async (_body, query) => ({ success: true, report: HSE_REPORTS.buildTrainingReport({ projectId: query?.projectId }) }),
+  },
+  '/api/hse/reports/performance': {
+    GET: async (_body, query) => ({ success: true, report: HSE_REPORTS.buildPerformanceReport({
+      projectId: query?.projectId || null, totalManHours: query?.totalManHours ? Number(query.totalManHours) : null,
+      periodFrom: query?.periodFrom || null, periodTo: query?.periodTo || null,
+    }) }),
+  },
+  '/api/hse/reports/executive': {
+    GET: async (_body, query) => ({ success: true, report: HSE_REPORTS.buildExecutiveReport({ projectId: query?.projectId || null }) }),
+  },
+
+  // ----- تصدير تقارير HSE -----
+  '/api/hse/reports/export/pdf': {
+    POST: async (body) => {
+      if (!body.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = HSE_REPORTS.exportHseReportToPDF(body.report, { projectName: body.projectName, engineerName: body.engineerName });
+      return { success: true, ...result };
+    },
+  },
+  '/api/hse/reports/export/excel': {
+    POST: async (body) => {
+      if (!body.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = HSE_REPORTS.exportHseReportToExcel(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/hse/reports/export/csv': {
+    POST: async (body) => {
+      if (!body.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = HSE_REPORTS.exportHseReportToCSV(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/hse/reports/export/word': {
+    POST: async (body) => {
+      if (!body.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = HSE_REPORTS.exportHseReportToWord(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/hse/reports/export/print': {
+    POST: async (body) => {
+      if (!body.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = HSE_REPORTS.exportHseReportToPrintableHTML(body.report, { projectName: body.projectName });
+      return { success: true, ...result };
+    },
+  },
+
+  // ===================================================================
+  // القسم الثامن - المساعد الذكي للسلامة المهنية (HSE AI Assistant)
+  // ===================================================================
+
+  '/api/hse/ai/status': {
+    GET: async () => ({ success: true, available: HSE_AI.isAIAvailable() }),
+  },
+  '/api/hse/ai/analyze-data': {
+    POST: async (body) => HSE_AI.analyzeSafetyData({ projectId: body.projectId || null }),
+  },
+  '/api/hse/ai/predict-risks': {
+    POST: async (body) => HSE_AI.predictRisks({ projectId: body.projectId || null }),
+  },
+  '/api/hse/ai/recurring-causes': {
+    POST: async (body) => HSE_AI.analyzeRecurringIncidentCauses({ projectId: body.projectId || null }),
+  },
+  '/api/hse/ai/improvement-plan': {
+    POST: async (body) => HSE_AI.generateSafetyImprovementPlan({ projectId: body.projectId || null, focusArea: body.focusArea || null }),
+  },
+  '/api/hse/ai/summarize': {
+    POST: async (body) => {
+      if (!body.recordType || !body.recordId) throw new Error('يجب توفير recordType و recordId');
+      return HSE_AI.summarizeRecord({ recordType: body.recordType, recordId: body.recordId });
+    },
+  },
+  '/api/hse/ai/team-performance': {
+    POST: async (body) => HSE_AI.evaluateSafetyTeamPerformance({ projectId: body.projectId || null }),
+  },
+  '/api/hse/ai/ask': {
+    POST: async (body) => {
+      if (!body.question) throw new Error('نص السؤال (question) مطلوب');
+      return HSE_AI.askSafetyQuestion({ question: body.question, projectId: body.projectId || null });
+    },
   },
 };
 
