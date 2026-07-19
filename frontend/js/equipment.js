@@ -3,6 +3,7 @@
 // القسم السابع: إدارة المعدات
 // الجزء 1/4: البيانات الأساسية + إدارة التشغيل + إدارة الحجز + تتبع المعدات
 // الجزء 2/4: الوقود + الصيانة (الدورية والطارئة) + قطع الغيار + المشغلون
+// الجزء 3/4: إدارة التكاليف + إدارة الإنتاجية + مركز التنبيهات الموحّد
 // ============================================================
 
 const EQ_API = '/api/equipment';
@@ -1298,3 +1299,212 @@ document.getElementById('eq-btn-add-violation')?.addEventListener('click', async
     eqAlert(alertEl, 'error', e.message);
   }
 });
+
+// ================================================================
+// الجزء الثالث: إدارة التكاليف
+// ================================================================
+
+document.querySelector('[data-panel="eq-costs"]')?.addEventListener('click', async () => {
+  await eqEnsureRefData();
+  await eqPopulateEquipmentSelect(document.getElementById('eq-cost-equipment'));
+  await eqPopulateEquipmentSelect(document.getElementById('eq-transport-equipment'));
+  eqLoadFleetCostSummary();
+});
+
+function eqCostCardsHTML(totals) {
+  return `
+    <div class="result-card"><div class="label">تكلفة التشغيل</div><div class="value">${totals.operating_cost}</div></div>
+    <div class="result-card"><div class="label">تكلفة الوقود</div><div class="value">${totals.fuel_cost}</div></div>
+    <div class="result-card"><div class="label">تكلفة العمالة</div><div class="value">${totals.labor_cost}</div></div>
+    <div class="result-card"><div class="label">تكلفة الصيانة</div><div class="value">${totals.maintenance_cost}</div></div>
+    <div class="result-card"><div class="label">تكلفة قطع الغيار</div><div class="value">${totals.spare_parts_cost}</div></div>
+    <div class="result-card"><div class="label">تكلفة النقل</div><div class="value">${totals.transport_cost}</div></div>
+    <div class="result-card"><div class="label">تكلفة الإيجار</div><div class="value">${totals.rental_cost}</div></div>
+    <div class="result-card"><div class="label">تكلفة التأمين</div><div class="value">${totals.insurance_cost}</div></div>
+    <div class="result-card"><div class="label">تكلفة الإهلاك</div><div class="value">${totals.depreciation_cost}</div></div>
+    <div class="result-card"><div class="label">التكلفة الإجمالية</div><div class="value">${totals.total_cost}</div></div>
+  `;
+}
+
+async function eqLoadFleetCostSummary() {
+  const cardsEl = document.getElementById('eq-fleet-cost-cards');
+  const tbody = document.getElementById('eq-fleet-cost-tbody');
+  try {
+    const res = await eqFetch('/costs/fleet-summary', {
+      query: {
+        projectId: document.getElementById('eq-cost-project').value || null,
+        dateFrom: document.getElementById('eq-cost-from').value || null,
+        dateTo: document.getElementById('eq-cost-to').value || null,
+      },
+    });
+    const d = res.data;
+    cardsEl.innerHTML = eqCostCardsHTML(d.totals);
+    if (!d.most_costly_equipment.length) {
+      tbody.innerHTML = `<tr><td colspan="3" class="pm-empty-state">لا توجد بيانات تكاليف بعد</td></tr>`;
+    } else {
+      tbody.innerHTML = d.most_costly_equipment.map(e => `
+        <tr><td>${e.equipment_code}</td><td>${e.equipment_name}</td><td>${e.total_cost}</td></tr>
+      `).join('');
+    }
+  } catch (e) {
+    eqAlert(cardsEl, 'error', e.message);
+  }
+}
+
+document.getElementById('eq-btn-load-fleet-cost')?.addEventListener('click', eqLoadFleetCostSummary);
+
+document.getElementById('eq-btn-load-eq-cost')?.addEventListener('click', async () => {
+  const detailEl = document.getElementById('eq-cost-detail');
+  try {
+    const equipmentId = document.getElementById('eq-cost-equipment').value;
+    if (!equipmentId) throw new Error('يرجى اختيار المعدة');
+    const res = await eqFetch('/costs/breakdown', {
+      query: {
+        equipmentId,
+        dateFrom: document.getElementById('eq-cost-from').value || null,
+        dateTo: document.getElementById('eq-cost-to').value || null,
+      },
+    });
+    const d = res.data;
+    detailEl.innerHTML = `
+      <div class="pm-card-title">${d.equipment_code} — ${d.equipment_name} (ساعات التشغيل: ${d.operating_hours})</div>
+      <div class="result-cards">${eqCostCardsHTML(d.breakdown)}</div>
+      <div class="result-card" style="margin-top:8px"><div class="label">تكلفة الساعة التشغيلية</div><div class="value">${d.cost_per_operating_hour}</div></div>
+    `;
+  } catch (e) {
+    eqAlert(detailEl, 'error', e.message);
+  }
+});
+
+document.getElementById('eq-btn-log-transport')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('eq-transport-alert');
+  try {
+    const equipment_id = document.getElementById('eq-transport-equipment').value;
+    const amount = document.getElementById('eq-transport-amount').value;
+    const note = document.getElementById('eq-transport-note').value || null;
+    if (!equipment_id) throw new Error('يرجى اختيار المعدة');
+    if (!amount || Number(amount) <= 0) throw new Error('يرجى إدخال قيمة تكلفة نقل صحيحة');
+    await eqFetch('/costs/transport/log', { method: 'POST', body: { equipment_id, amount: Number(amount), note } });
+    eqAlert(alertEl, 'success', 'تم تسجيل تكلفة النقل بنجاح');
+    document.getElementById('eq-transport-amount').value = '';
+    document.getElementById('eq-transport-note').value = '';
+  } catch (e) {
+    eqAlert(alertEl, 'error', e.message);
+  }
+});
+
+// ================================================================
+// الجزء الثالث: إدارة الإنتاجية
+// ================================================================
+
+document.querySelector('[data-panel="eq-productivity"]')?.addEventListener('click', async () => {
+  const ref = await eqEnsureRefData();
+  await eqPopulateEquipmentSelect(document.getElementById('eq-prod-equipment'));
+  const catSelect = document.getElementById('eq-prod-cmp-category');
+  if (catSelect.options.length <= 0) {
+    catSelect.innerHTML = `<option value="">كل الفئات</option>` + eqCategoryOptionsHTML(ref);
+  }
+});
+
+document.getElementById('eq-btn-load-productivity')?.addEventListener('click', async () => {
+  const cardsEl = document.getElementById('eq-prod-cards');
+  try {
+    const equipmentId = document.getElementById('eq-prod-equipment').value;
+    if (!equipmentId) throw new Error('يرجى اختيار المعدة');
+    const res = await eqFetch('/productivity', {
+      query: {
+        equipmentId,
+        dateFrom: document.getElementById('eq-prod-from').value || null,
+        dateTo: document.getElementById('eq-prod-to').value || null,
+      },
+    });
+    const d = res.data;
+    cardsEl.innerHTML = `
+      <div class="result-card"><div class="label">ساعات التشغيل</div><div class="value">${d.operating_hours}</div></div>
+      <div class="result-card"><div class="label">ساعات التوقف</div><div class="value">${d.downtime_hours}</div></div>
+      <div class="result-card"><div class="label">نسبة الاستغلال</div><div class="value">${d.utilization_rate_percent}<span class="unit">%</span></div></div>
+      <div class="result-card"><div class="label">كفاءة التشغيل</div><div class="value">${d.operating_efficiency_percent}<span class="unit">%</span></div></div>
+      <div class="result-card"><div class="label">كفاءة الوقود</div><div class="value">${d.fuel_efficiency_hours_per_unit ?? '—'}</div></div>
+      <div class="result-card"><div class="label">معدل الأعطال / 100 ساعة</div><div class="value">${d.fault_rate_per_100h}</div></div>
+      <div class="result-card"><div class="label">متوسط الفترة بين الأعطال (يوم)</div><div class="value">${d.average_time_between_faults_days ?? '—'}</div></div>
+      <div class="result-card"><div class="label">متوسط زمن الإصلاح MTTR (ساعة)</div><div class="value">${d.average_repair_time_hours_mttr}</div></div>
+      <div class="result-card"><div class="label">متوسط ساعات العمل/يوم</div><div class="value">${d.average_hours_per_work_day}</div></div>
+    `;
+  } catch (e) {
+    eqAlert(cardsEl, 'error', e.message);
+  }
+});
+
+document.getElementById('eq-btn-compare-productivity')?.addEventListener('click', async () => {
+  const summaryEl = document.getElementById('eq-prod-cmp-summary');
+  const tbody = document.getElementById('eq-prod-cmp-tbody');
+  try {
+    const category = document.getElementById('eq-prod-cmp-category').value || null;
+    const res = await eqFetch('/productivity/compare', { query: { category } });
+    const d = res.data;
+    if (!d.count) {
+      summaryEl.innerHTML = '';
+      tbody.innerHTML = `<tr><td colspan="5" class="pm-empty-state">لا توجد معدات مطابقة</td></tr>`;
+      return;
+    }
+    summaryEl.innerHTML = `
+      <div class="pm-activity-item"><span>متوسط الكفاءة: ${d.average_efficiency_percent}%</span></div>
+      <div class="pm-activity-item"><span>الأفضل أداءً: ${d.best_performing ? d.best_performing.equipment_name : '—'}</span></div>
+      <div class="pm-activity-item"><span>الأقل أداءً: ${d.worst_performing ? d.worst_performing.equipment_name : '—'}</span></div>
+    `;
+    tbody.innerHTML = d.items.map(i => `
+      <tr>
+        <td>${i.equipment_code}</td><td>${i.equipment_name}</td>
+        <td>${i.utilization_rate_percent}</td><td>${i.operating_efficiency_percent}</td>
+        <td>${i.fault_rate_per_100h}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    eqAlert(summaryEl, 'error', e.message);
+  }
+});
+
+// ================================================================
+// الجزء الثالث: مركز التنبيهات الموحّد
+// ================================================================
+
+document.querySelector('[data-panel="eq-alerts"]')?.addEventListener('click', () => {
+  eqLoadAlertsCenter();
+});
+
+function eqAlertSeverityTag(severity) {
+  const map = { critical: 'tag-bad', warning: 'tag-info', info: 'tag-ok' };
+  return map[severity] || 'tag-info';
+}
+
+const EQ_ALERT_SEVERITY_LABELS = { critical: 'حرج', warning: 'تحذير', info: 'معلومة' };
+
+async function eqLoadAlertsCenter() {
+  const cardsEl = document.getElementById('eq-alerts-summary-cards');
+  const listEl = document.getElementById('eq-alerts-list');
+  try {
+    const withinDays = document.getElementById('eq-alerts-within-days').value || 14;
+    const res = await eqFetch('/alerts/center', { query: { withinDays } });
+    const d = res.data;
+    cardsEl.innerHTML = `
+      <div class="result-card"><div class="label">إجمالي التنبيهات</div><div class="value">${d.count}</div></div>
+      <div class="result-card"><div class="label">حرجة</div><div class="value">${d.by_severity.critical || 0}</div></div>
+      <div class="result-card"><div class="label">تحذير</div><div class="value">${d.by_severity.warning || 0}</div></div>
+      <div class="result-card"><div class="label">معلومة</div><div class="value">${d.by_severity.info || 0}</div></div>
+    `;
+    if (!d.alerts.length) {
+      listEl.innerHTML = `<div class="pm-empty-state">لا توجد تنبيهات حالياً</div>`;
+      return;
+    }
+    listEl.innerHTML = d.alerts.map(a => `
+      <div class="pm-activity-item">
+        <span class="tag ${eqAlertSeverityTag(a.severity)}">${EQ_ALERT_SEVERITY_LABELS[a.severity] || a.severity}</span>
+        <span>${a.message}</span>
+        ${a.equipment_code ? `<span class="ts">(${a.equipment_code})</span>` : ''}
+        ${a.operator_name ? `<span class="ts">(${a.operator_name})</span>` : ''}
+      </div>
+    `).join('');
+  } catch (e) {
+    eqAlert(cardsEl, 'error', e.message);
+  }
+}
