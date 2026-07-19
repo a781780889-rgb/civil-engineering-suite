@@ -44,6 +44,7 @@ const EQI = require('./utils/equipmentIntelligence');
 const HSE = require('./utils/hseManagement');
 const HSE_EMG = require('./utils/hseEmergency');
 const HSE_TRN = require('./utils/hseTraining');
+const HSE_HZM = require('./utils/hseHazmat');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -3162,6 +3163,94 @@ const API_HANDLERS = {
   // ----- شهادات على وشك الانتهاء / منتهية -----
   '/api/hse/training/certificates/expiring': {
     GET: async (_body, query) => HSE_TRN.getExpiringCertificates({
+      projectId: query?.projectId, withinDays: query?.withinDays,
+    }),
+  },
+
+  // ===== القسم الثامن (الجزء 4/4) - إدارة المواد الخطرة (HSE Hazmat) =====
+
+  '/api/hse/hazmat/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        ghs_hazard_classes: HSE_HZM.GHS_HAZARD_CLASSES,
+        ghs_hazard_class_labels: HSE_HZM.GHS_HAZARD_CLASS_LABELS,
+        storage_conditions: HSE_HZM.STORAGE_CONDITIONS,
+        storage_condition_labels: HSE_HZM.STORAGE_CONDITION_LABELS,
+        transport_methods: HSE_HZM.TRANSPORT_METHODS,
+        transport_method_labels: HSE_HZM.TRANSPORT_METHOD_LABELS,
+        hazmat_item_statuses: HSE_HZM.HAZMAT_ITEM_STATUSES,
+        hazmat_item_status_labels: HSE_HZM.HAZMAT_ITEM_STATUS_LABELS,
+        movement_types: HSE_HZM.MOVEMENT_TYPES,
+        movement_type_labels: HSE_HZM.MOVEMENT_TYPE_LABELS,
+        disposal_methods: HSE_HZM.DISPOSAL_METHODS,
+        disposal_method_labels: HSE_HZM.DISPOSAL_METHOD_LABELS,
+        quantity_units: HSE_HZM.QUANTITY_UNITS,
+        sds_status_labels: HSE_HZM.SDS_STATUS_LABELS,
+        stock_status_labels: HSE_HZM.STOCK_STATUS_LABELS,
+      },
+    }),
+  },
+
+  '/api/hse/hazmat/dashboard': {
+    GET: async (_body, query) => HSE_HZM.getHazmatDashboard(query?.projectId || null),
+  },
+
+  // ----- المواد الخطرة -----
+  '/api/hse/hazmat/items': {
+    GET: async (_body, query) => HSE_HZM.listHazmatItems({
+      projectId: query?.projectId, hazardClass: query?.hazardClass, status: query?.status,
+      storageCondition: query?.storageCondition, stockStatus: query?.stockStatus,
+      sdsStatus: query?.sdsStatus, search: query?.search,
+    }),
+    POST: async (body) => HSE_HZM.createHazmatItem(body),
+  },
+  '/api/hse/hazmat/items/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف المادة الخطرة (id) مطلوب');
+      return HSE_HZM.getHazmatItem(query.id);
+    },
+  },
+  '/api/hse/hazmat/items/update': {
+    POST: async (body) => {
+      const { id, ...rest } = body;
+      if (!id) throw new Error('معرّف المادة الخطرة (id) مطلوب');
+      return HSE_HZM.updateHazmatItem(id, rest);
+    },
+  },
+  '/api/hse/hazmat/items/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المادة الخطرة (id) مطلوب');
+      return HSE_HZM.deleteHazmatItem(body.id);
+    },
+  },
+
+  // ----- سجل حركة المخزون (استلام / صرف / تخلص / تعديل جرد) -----
+  '/api/hse/hazmat/movements': {
+    GET: async (_body, query) => HSE_HZM.listMovements({
+      itemId: query?.itemId, projectId: query?.projectId, type: query?.type,
+      dateFrom: query?.dateFrom, dateTo: query?.dateTo,
+    }),
+    POST: async (body) => HSE_HZM.createMovement(body),
+  },
+  '/api/hse/hazmat/movements/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف سجل الحركة (id) مطلوب');
+      return HSE_HZM.deleteMovement(body.id);
+    },
+  },
+
+  // ----- تنبيهات -----
+  '/api/hse/hazmat/alerts/sds-expiring': {
+    GET: async (_body, query) => HSE_HZM.getExpiringSds({
+      projectId: query?.projectId, withinDays: query?.withinDays,
+    }),
+  },
+  '/api/hse/hazmat/alerts/low-stock': {
+    GET: async (_body, query) => HSE_HZM.getLowStockItems({ projectId: query?.projectId || null }),
+  },
+  '/api/hse/hazmat/alerts/expiring-materials': {
+    GET: async (_body, query) => HSE_HZM.getExpiringMaterials({
       projectId: query?.projectId, withinDays: query?.withinDays,
     }),
   },
