@@ -2631,6 +2631,30 @@ const API_HANDLERS = {
         injury_type_labels: HSE.INJURY_TYPE_LABELS,
         incident_statuses: HSE.INCIDENT_STATUSES,
         incident_status_labels: HSE.INCIDENT_STATUS_LABELS,
+
+        inspection_types: HSE.INSPECTION_TYPES,
+        inspection_type_labels: HSE.INSPECTION_TYPE_LABELS,
+        inspection_statuses: HSE.INSPECTION_STATUSES,
+        inspection_status_labels: HSE.INSPECTION_STATUS_LABELS,
+        checklist_item_results: HSE.CHECKLIST_ITEM_RESULTS,
+        checklist_item_result_labels: HSE.CHECKLIST_ITEM_RESULT_LABELS,
+        finding_severities: HSE.FINDING_SEVERITIES,
+        finding_severity_labels: HSE.FINDING_SEVERITY_LABELS,
+        finding_statuses: HSE.FINDING_STATUSES,
+        finding_status_labels: HSE.FINDING_STATUS_LABELS,
+
+        permit_types: HSE.PERMIT_TYPES,
+        permit_type_labels: HSE.PERMIT_TYPE_LABELS,
+        permit_statuses: HSE.PERMIT_STATUSES,
+        permit_status_labels: HSE.PERMIT_STATUS_LABELS,
+        permit_standard_precautions: HSE.PERMIT_STANDARD_PRECAUTIONS,
+
+        ppe_types: HSE.PPE_TYPES,
+        ppe_type_labels: HSE.PPE_TYPE_LABELS,
+        ppe_conditions: HSE.PPE_CONDITIONS,
+        ppe_condition_labels: HSE.PPE_CONDITION_LABELS,
+        ppe_item_statuses: HSE.PPE_ITEM_STATUSES,
+        ppe_item_status_labels: HSE.PPE_ITEM_STATUS_LABELS,
       },
     }),
   },
@@ -2747,6 +2771,149 @@ const API_HANDLERS = {
       periodFrom: query?.periodFrom || null,
       periodTo: query?.periodTo || null,
     }),
+  },
+
+  // ===================================================================
+  // ===== القسم الثامن (الجزء 2/4) - إدارة السلامة المهنية (HSE):
+  // ===== إدارة التفتيشات، تصاريح العمل (Permit to Work)، معدات
+  // ===== الوقاية الشخصية (PPE)
+  // ===================================================================
+
+  '/api/hse/inspections': {
+    GET: async (_body, query) => HSE.listInspections({
+      projectId: query?.projectId, type: query?.type, status: query?.status,
+      dateFrom: query?.dateFrom, dateTo: query?.dateTo, search: query?.search,
+    }),
+    POST: async (body) => HSE.createInspection(body),
+  },
+  '/api/hse/inspections/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف جولة التفتيش (id) مطلوب');
+      return HSE.getInspection(query.id);
+    },
+  },
+  '/api/hse/inspections/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف جولة التفتيش (id) مطلوب');
+      const { id, ...rest } = body;
+      return HSE.updateInspection(id, rest);
+    },
+  },
+  '/api/hse/inspections/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف جولة التفتيش (id) مطلوب');
+      return HSE.deleteInspection(body.id);
+    },
+  },
+  '/api/hse/inspections/approve': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف جولة التفتيش (id) مطلوب');
+      return HSE.approveInspection(body.id, { approved_by: body.approved_by || null });
+    },
+  },
+
+  '/api/hse/inspections/findings': {
+    GET: async (_body, query) => HSE.listInspectionFindings({
+      inspectionId: query?.inspectionId, projectId: query?.projectId, status: query?.status, severity: query?.severity,
+    }),
+    POST: async (body) => HSE.addInspectionFinding(body),
+  },
+  '/api/hse/inspections/findings/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المخالفة (id) مطلوب');
+      const { id, ...rest } = body;
+      return HSE.updateInspectionFinding(id, rest);
+    },
+  },
+
+  '/api/hse/permits': {
+    GET: async (_body, query) => HSE.listPermits({
+      projectId: query?.projectId, type: query?.type, status: query?.status, search: query?.search,
+    }),
+    POST: async (body) => HSE.createPermit(body),
+  },
+  '/api/hse/permits/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف التصريح (id) مطلوب');
+      return HSE.getPermit(query.id);
+    },
+  },
+  '/api/hse/permits/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف التصريح (id) مطلوب');
+      const { id, ...rest } = body;
+      return HSE.updatePermit(id, rest);
+    },
+  },
+  '/api/hse/permits/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف التصريح (id) مطلوب');
+      return HSE.deletePermit(body.id);
+    },
+  },
+  '/api/hse/permits/approve': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف التصريح (id) مطلوب');
+      return HSE.approvePermit(body.id, { approver_name: body.approver_name, approver_role: body.approver_role || null, notes: body.notes || null });
+    },
+  },
+  '/api/hse/permits/activate': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف التصريح (id) مطلوب');
+      return HSE.activatePermit(body.id);
+    },
+  },
+  '/api/hse/permits/close': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف التصريح (id) مطلوب');
+      return HSE.closePermit(body.id, { closed_by: body.closed_by || null, closing_notes: body.closing_notes || null });
+    },
+  },
+  '/api/hse/permits/expiring': {
+    GET: async (_body, query) => HSE.getExpiringPermits({
+      projectId: query?.projectId || null, withinDays: query?.withinDays ? Number(query.withinDays) : 3,
+    }),
+  },
+
+  '/api/hse/ppe': {
+    GET: async (_body, query) => HSE.listPpeItems({
+      projectId: query?.projectId, type: query?.type, status: query?.status,
+      employeeName: query?.employeeName, search: query?.search,
+    }),
+    POST: async (body) => HSE.createPpeItem(body),
+  },
+  '/api/hse/ppe/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف سجل معدة الوقاية (id) مطلوب');
+      return HSE.getPpeItem(query.id);
+    },
+  },
+  '/api/hse/ppe/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف سجل معدة الوقاية (id) مطلوب');
+      const { id, ...rest } = body;
+      return HSE.updatePpeItem(id, rest);
+    },
+  },
+  '/api/hse/ppe/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف سجل معدة الوقاية (id) مطلوب');
+      return HSE.deletePpeItem(body.id);
+    },
+  },
+  '/api/hse/ppe/replace': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف سجل معدة الوقاية (id) مطلوب');
+      return HSE.replacePpeItem(body.id, { condition_note: body.condition_note || null, issue_date: body.issue_date || null });
+    },
+  },
+  '/api/hse/ppe/due-for-replacement': {
+    GET: async (_body, query) => HSE.getPpeDueForReplacement({
+      projectId: query?.projectId || null, withinDays: query?.withinDays ? Number(query.withinDays) : 14,
+    }),
+  },
+  '/api/hse/ppe/compliance-summary': {
+    GET: async (_body, query) => HSE.getPpeComplianceSummary({ projectId: query?.projectId || null }),
   },
 };
 
