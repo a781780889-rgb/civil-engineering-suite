@@ -1,0 +1,20 @@
+{
+  "users": [
+    {
+      "id": "USR-1784445305181-705",
+      "username": "admin",
+      "full_name": "مدير النظام الافتراضي",
+      "email": null,
+      "role": "system_admin",
+      "password_hash": "f22540083b9c9eb2540ce86002229265:6b8092fc042a5a3cc3a2bfaeb53730bfce8ef18631b25ddeccd7127dc84096dc729fa991dda0797dd7156728a52e5f7c8dde2a2c3be5fd3c73fa56f0d49a291c",
+      "is_active": true,
+      "two_factor": {
+        "enabled": false,
+        "secret": null
+      },
+      "created_at": "2026-07-19T07:15:05.298Z",
+      "updated_at": "2026-07-19T07:15:05.298Z",
+      "last_login_at": null
+    }
+  ]
+}
