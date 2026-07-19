@@ -303,7 +303,32 @@ const DEFAULT_ROLES = {
   },
   client_viewer: {
     label: 'العميل (عرض فقط)',
-    permissions: { dashboard: ['view'], contracts: ['view'], invoices: ['view'], reports: ['view'] },
+    permissions: { dashboard: ['view'], contracts: ['view'], invoices: ['view'], reports: ['view'], equipment: ['view'] },
+  },
+
+  // ----- أدوار القسم السابع: إدارة المعدات (Equipment & Assets Management) -----
+  equipment_manager: {
+    label: 'مدير المعدات',
+    permissions: {
+      equipment: ['view', 'create', 'update', 'delete', 'manage'],
+      dashboard: ['view'], reports: ['view', 'export'], ai: ['use'],
+    },
+  },
+  site_engineer: {
+    label: 'مهندس الموقع',
+    permissions: { equipment: ['view', 'create', 'update'], dashboard: ['view'], reports: ['view'] },
+  },
+  maintenance_officer: {
+    label: 'مسؤول الصيانة',
+    permissions: { equipment: ['view', 'update', 'maintenance'], dashboard: ['view'], reports: ['view'] },
+  },
+  warehouse_keeper: {
+    label: 'أمين المخزن',
+    permissions: { equipment: ['view', 'spare_parts'], warehouse: ['view', 'create', 'update'], dashboard: ['view'] },
+  },
+  equipment_operator: {
+    label: 'المشغل',
+    permissions: { equipment: ['view', 'operate'] },
   },
 };
 
