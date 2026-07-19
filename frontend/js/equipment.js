@@ -1,7 +1,8 @@
 // ============================================================
 // Civil Engineering Suite — Frontend Logic
-// القسم السابع: إدارة المعدات (الجزء 1/4)
-// البيانات الأساسية + إدارة التشغيل + إدارة الحجز + تتبع المعدات
+// القسم السابع: إدارة المعدات
+// الجزء 1/4: البيانات الأساسية + إدارة التشغيل + إدارة الحجز + تتبع المعدات
+// الجزء 2/4: الوقود + الصيانة (الدورية والطارئة) + قطع الغيار + المشغلون
 // ============================================================
 
 const EQ_API = '/api/equipment';
@@ -692,5 +693,608 @@ document.getElementById('eq-btn-load-track')?.addEventListener('click', async ()
     `;
   } catch (e) {
     eqAlert(content, 'error', e.message);
+  }
+});
+
+// ================================================================
+// ===== الجزء الثاني: إدارة الوقود =====
+// ================================================================
+
+let EQ_REF2 = null; // بيانات مرجعية إضافية للجزء الثاني
+let eqMrecPartsBuffer = []; // قطع الغيار المضافة مؤقتاً لسجل صيانة قيد الإنشاء
+
+async function eqEnsureRefData2() {
+  if (EQ_REF2) return EQ_REF2;
+  const res = await eqFetch('/reference-data-p2');
+  EQ_REF2 = res.data;
+  return EQ_REF2;
+}
+
+document.querySelector('[data-panel="eq-fuel"]')?.addEventListener('click', async () => {
+  const ref = await eqEnsureRefData();
+  await eqPopulateEquipmentSelect(document.getElementById('eq-fuel-equipment'));
+  await eqPopulateEquipmentSelect(document.getElementById('eq-fuel-stats-equipment'), { placeholder: 'اختر معدة لعرض إحصائياتها...' });
+  const fuelTypeSel = document.getElementById('eq-fuel-type');
+  if (fuelTypeSel.options.length <= 1) fuelTypeSel.innerHTML += eqFuelOptionsHTML(ref);
+  eqLoadFuelLogTable();
+});
+
+document.getElementById('eq-btn-log-fuel')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('eq-fuel-alert');
+  try {
+    const payload = {
+      equipment_id: document.getElementById('eq-fuel-equipment').value,
+      quantity: Number(document.getElementById('eq-fuel-quantity').value) || 0,
+      fuel_type: document.getElementById('eq-fuel-type').value || null,
+      unit_price: Number(document.getElementById('eq-fuel-price').value) || 0,
+      odometer_or_hours: document.getElementById('eq-fuel-odometer').value ? Number(document.getElementById('eq-fuel-odometer').value) : null,
+      station: document.getElementById('eq-fuel-station').value || null,
+      note: document.getElementById('eq-fuel-note').value || null,
+    };
+    if (!payload.equipment_id) throw new Error('يرجى اختيار المعدة');
+    await eqFetch('/fuel/log', { method: 'POST', body: payload });
+    eqAlert(alertEl, 'success', 'تم تسجيل عملية التعبئة بنجاح');
+    ['eq-fuel-quantity', 'eq-fuel-price', 'eq-fuel-odometer', 'eq-fuel-station', 'eq-fuel-note'].forEach(id => document.getElementById(id).value = '');
+    eqLoadFuelLogTable();
+  } catch (e) {
+    eqAlert(alertEl, 'error', e.message);
+  }
+});
+
+async function eqLoadFuelLogTable() {
+  const tbody = document.getElementById('eq-fuel-log-tbody');
+  try {
+    const res = await eqFetch('/fuel/logs');
+    const items = res.data;
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="pm-empty-state">لا توجد عمليات تعبئة مسجّلة</td></tr>`;
+      return;
+    }
+    const eqRes = await eqFetch('/items');
+    const eqMap = Object.fromEntries(eqRes.data.map(e => [e.id, e]));
+    tbody.innerHTML = items.map(f => `
+      <tr>
+        <td>${eqMap[f.equipment_id] ? eqMap[f.equipment_id].code + ' — ' + eqMap[f.equipment_id].name : f.equipment_id}</td>
+        <td>${f.quantity}</td>
+        <td>${f.unit_price}</td>
+        <td>${f.cost}</td>
+        <td>${f.station || '—'}</td>
+        <td>${eqFmtDateTime(f.filled_at)}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-error">${e.message}</div></td></tr>`;
+  }
+}
+
+document.getElementById('eq-btn-load-fuel-stats')?.addEventListener('click', async () => {
+  const content = document.getElementById('eq-fuel-stats-content');
+  const equipmentId = document.getElementById('eq-fuel-stats-equipment').value;
+  if (!equipmentId) { eqAlert(content, 'error', 'يرجى اختيار المعدة'); return; }
+  const period = document.getElementById('eq-fuel-stats-period').value;
+  try {
+    const res = await eqFetch('/fuel/stats', { query: { equipmentId, period } });
+    const d = res.data;
+    content.innerHTML = `
+      <div class="result-cards">
+        <div class="result-card"><div class="label">عدد عمليات التعبئة</div><div class="value">${d.entries_count}</div></div>
+        <div class="result-card"><div class="label">إجمالي الكمية</div><div class="value">${d.total_quantity}<span class="unit">لتر</span></div></div>
+        <div class="result-card"><div class="label">إجمالي التكلفة</div><div class="value">${d.total_cost}</div></div>
+        <div class="result-card"><div class="label">متوسط سعر اللتر</div><div class="value">${d.average_unit_price}</div></div>
+        <div class="result-card"><div class="label">متوسط الاستهلاك</div><div class="value">${d.average_consumption_per_hour_or_km ?? '—'}</div></div>
+      </div>
+      ${d.abnormal_consumption_entries.length ? `
+        <div class="alert alert-error" style="margin-top:12px">
+          تم رصد ${d.abnormal_consumption_entries.length} عملية تعبئة باستهلاك غير طبيعي (تتجاوز المتوسط بنسبة كبيرة).
+        </div>` : ''}
+    `;
+  } catch (e) {
+    eqAlert(content, 'error', e.message);
+  }
+});
+
+// ================================================================
+// ===== الجزء الثاني: إدارة الصيانة =====
+// ================================================================
+
+document.querySelector('[data-panel="eq-maintenance"]')?.addEventListener('click', async () => {
+  const ref = await eqEnsureRefData();
+  const ref2 = await eqEnsureRefData2();
+
+  await eqPopulateEquipmentSelect(document.getElementById('eq-msch-equipment'));
+  await eqPopulateEquipmentSelect(document.getElementById('eq-mrec-equipment'));
+  await eqPopulateEquipmentSelect(document.getElementById('eq-mstats-equipment'), { placeholder: 'اختر معدة لعرض إحصائياتها...' });
+
+  const freqSel = document.getElementById('eq-msch-frequency');
+  if (freqSel.options.length === 0) {
+    freqSel.innerHTML = ref2.maintenance_frequencies.map(f => `<option value="${f}">${ref2.maintenance_frequency_labels[f]}</option>`).join('');
+  }
+  const sevSel = document.getElementById('eq-mrec-severity');
+  if (sevSel.options.length <= 1) {
+    sevSel.innerHTML += ref2.maintenance_severities.map(s => `<option value="${s}">${ref2.maintenance_severity_labels[s]}</option>`).join('');
+  }
+  const statusSel = document.getElementById('eq-mrec-status');
+  if (statusSel.options.length === 0) {
+    statusSel.innerHTML = ref2.maintenance_statuses.map(s => `<option value="${s}"${s === 'scheduled' ? ' selected' : ''}>${ref2.maintenance_status_labels[s]}</option>`).join('');
+  }
+  await eqPopulateSparePartSelect(document.getElementById('eq-mrec-part'));
+
+  eqLoadMaintenanceAlerts();
+  eqLoadMaintenanceSchedulesTable(ref2);
+  eqLoadMaintenanceRecordsTable(ref2);
+});
+
+document.getElementById('eq-btn-load-maint-alerts')?.addEventListener('click', () => eqLoadMaintenanceAlerts());
+
+async function eqLoadMaintenanceAlerts() {
+  const content = document.getElementById('eq-maint-alerts-content');
+  try {
+    const res = await eqFetch('/maintenance/alerts', { query: { withinDays: 14 } });
+    const items = res.data;
+    if (!items.length) {
+      content.innerHTML = `<div class="pm-empty-state">لا توجد تنبيهات صيانة حالياً</div>`;
+      return;
+    }
+    const typeLabel = { date_due: 'موعد قادم', date_overdue: 'متأخرة', hours_due: 'اقتراب ساعات التشغيل', hours_overdue: 'تجاوز ساعات التشغيل' };
+    content.innerHTML = items.map(a => `
+      <div class="pm-activity-item">
+        <span class="tag ${a.type.includes('overdue') ? 'tag-danger' : 'tag-warning'}">${typeLabel[a.type] || a.type}</span>
+        <span>${a.equipment_code} — ${a.equipment_name}${a.due_date ? ' — ' + eqFmtDate(a.due_date) : ''}${a.remaining_hours != null ? ' — متبقٍ ' + a.remaining_hours + ' ساعة' : ''}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    eqAlert(content, 'error', e.message);
+  }
+}
+
+document.getElementById('eq-btn-create-msch')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('eq-msch-alert');
+  try {
+    const payload = {
+      equipment_id: document.getElementById('eq-msch-equipment').value,
+      frequency: document.getElementById('eq-msch-frequency').value,
+      interval_hours: document.getElementById('eq-msch-interval-hours').value ? Number(document.getElementById('eq-msch-interval-hours').value) : null,
+      next_due_date: document.getElementById('eq-msch-next-date').value || null,
+      next_due_hours: document.getElementById('eq-msch-next-hours').value ? Number(document.getElementById('eq-msch-next-hours').value) : null,
+      assigned_to: document.getElementById('eq-msch-assigned').value || null,
+      description: document.getElementById('eq-msch-desc').value || null,
+    };
+    if (!payload.equipment_id) throw new Error('يرجى اختيار المعدة');
+    await eqFetch('/maintenance/schedules', { method: 'POST', body: payload });
+    eqAlert(alertEl, 'success', 'تم إنشاء جدولة الصيانة بنجاح');
+    ['eq-msch-interval-hours', 'eq-msch-next-date', 'eq-msch-next-hours', 'eq-msch-assigned', 'eq-msch-desc'].forEach(id => document.getElementById(id).value = '');
+    const ref2 = await eqEnsureRefData2();
+    eqLoadMaintenanceSchedulesTable(ref2);
+    eqLoadMaintenanceAlerts();
+  } catch (e) {
+    eqAlert(alertEl, 'error', e.message);
+  }
+});
+
+async function eqLoadMaintenanceSchedulesTable(ref2) {
+  const tbody = document.getElementById('eq-msch-tbody');
+  try {
+    const res = await eqFetch('/maintenance/schedules');
+    const items = res.data;
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="pm-empty-state">لا توجد جداول صيانة</td></tr>`;
+      return;
+    }
+    const eqRes = await eqFetch('/items');
+    const eqMap = Object.fromEntries(eqRes.data.map(e => [e.id, e]));
+    tbody.innerHTML = items.map(s => `
+      <tr>
+        <td>${eqMap[s.equipment_id] ? eqMap[s.equipment_id].code + ' — ' + eqMap[s.equipment_id].name : s.equipment_id}</td>
+        <td>${ref2.maintenance_frequency_labels[s.frequency] || s.frequency}</td>
+        <td>${s.next_due_date ? eqFmtDate(s.next_due_date) : (s.next_due_hours != null ? s.next_due_hours + ' ساعة' : '—')}</td>
+        <td>${s.assigned_to || '—'}</td>
+        <td><button class="pm-link-btn pm-mini-btn-danger" data-msch-delete="${s.id}">حذف</button></td>
+      </tr>
+    `).join('');
+    tbody.querySelectorAll('[data-msch-delete]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('هل تريد حذف جدولة الصيانة؟')) return;
+      await eqFetch('/maintenance/schedules/delete', { method: 'POST', body: { id: b.dataset.mschDelete } });
+      eqLoadMaintenanceSchedulesTable(ref2);
+      eqLoadMaintenanceAlerts();
+    }));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="alert alert-error">${e.message}</div></td></tr>`;
+  }
+}
+
+async function eqPopulateSparePartSelect(selectEl) {
+  const res = await eqFetch('/spare-parts');
+  selectEl.innerHTML = `<option value="">اختر قطعة الغيار...</option>` +
+    res.data.map(p => `<option value="${p.id}">${p.name} (متاح: ${p.stock_quantity})</option>`).join('');
+}
+
+document.getElementById('eq-btn-add-part-use')?.addEventListener('click', () => {
+  const partSel = document.getElementById('eq-mrec-part');
+  const qtyInput = document.getElementById('eq-mrec-part-qty');
+  const partId = partSel.value;
+  const qty = Number(qtyInput.value) || 0;
+  if (!partId || qty <= 0) return;
+  const partName = partSel.options[partSel.selectedIndex].textContent;
+  eqMrecPartsBuffer.push({ part_id: partId, quantity: qty, label: partName });
+  eqRenderMrecPartsBuffer();
+  qtyInput.value = 1;
+});
+
+function eqRenderMrecPartsBuffer() {
+  const el = document.getElementById('eq-mrec-parts-list');
+  if (!eqMrecPartsBuffer.length) {
+    el.innerHTML = `<div class="pm-empty-state">لم تُضف أي قطع غيار بعد</div>`;
+    return;
+  }
+  el.innerHTML = eqMrecPartsBuffer.map((p, idx) => `
+    <div class="pm-activity-item">
+      <span>${p.label} — الكمية: ${p.quantity}</span>
+      <button class="pm-link-btn pm-mini-btn-danger" data-remove-part="${idx}">إزالة</button>
+    </div>
+  `).join('');
+  el.querySelectorAll('[data-remove-part]').forEach(b => b.addEventListener('click', () => {
+    eqMrecPartsBuffer.splice(Number(b.dataset.removePart), 1);
+    eqRenderMrecPartsBuffer();
+  }));
+}
+eqRenderMrecPartsBuffer();
+
+document.getElementById('eq-btn-create-mrec')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('eq-mrec-alert');
+  try {
+    const payload = {
+      equipment_id: document.getElementById('eq-mrec-equipment').value,
+      maintenance_type: document.getElementById('eq-mrec-type').value,
+      severity: document.getElementById('eq-mrec-severity').value || null,
+      technician: document.getElementById('eq-mrec-technician').value || null,
+      repair_cost: Number(document.getElementById('eq-mrec-cost').value) || 0,
+      status: document.getElementById('eq-mrec-status').value,
+      started_at: document.getElementById('eq-mrec-start').value ? new Date(document.getElementById('eq-mrec-start').value).toISOString() : null,
+      completed_at: document.getElementById('eq-mrec-end').value ? new Date(document.getElementById('eq-mrec-end').value).toISOString() : null,
+      fault_description: document.getElementById('eq-mrec-fault-desc').value || null,
+      fault_cause: document.getElementById('eq-mrec-fault-cause').value || null,
+      notes: document.getElementById('eq-mrec-notes').value || null,
+      spare_parts_used: eqMrecPartsBuffer.map(p => ({ part_id: p.part_id, quantity: p.quantity })),
+    };
+    if (!payload.equipment_id) throw new Error('يرجى اختيار المعدة');
+    await eqFetch('/maintenance/records', { method: 'POST', body: payload });
+    eqAlert(alertEl, 'success', 'تم حفظ سجل الصيانة بنجاح');
+    ['eq-mrec-technician', 'eq-mrec-cost', 'eq-mrec-start', 'eq-mrec-end', 'eq-mrec-fault-desc', 'eq-mrec-fault-cause', 'eq-mrec-notes'].forEach(id => document.getElementById(id).value = '');
+    eqMrecPartsBuffer = [];
+    eqRenderMrecPartsBuffer();
+    await eqPopulateSparePartSelect(document.getElementById('eq-mrec-part'));
+    const ref2 = await eqEnsureRefData2();
+    eqLoadMaintenanceRecordsTable(ref2);
+    eqLoadMaintenanceAlerts();
+    eqLoadMaintenanceSchedulesTable(ref2);
+  } catch (e) {
+    eqAlert(alertEl, 'error', e.message);
+  }
+});
+
+async function eqLoadMaintenanceRecordsTable(ref2) {
+  const tbody = document.getElementById('eq-mrec-tbody');
+  try {
+    const res = await eqFetch('/maintenance/records');
+    const items = res.data;
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="pm-empty-state">لا توجد سجلات صيانة</td></tr>`;
+      return;
+    }
+    const eqRes = await eqFetch('/items');
+    const eqMap = Object.fromEntries(eqRes.data.map(e => [e.id, e]));
+    tbody.innerHTML = items.map(m => `
+      <tr>
+        <td>${eqMap[m.equipment_id] ? eqMap[m.equipment_id].code + ' — ' + eqMap[m.equipment_id].name : m.equipment_id}</td>
+        <td>${ref2.maintenance_type_labels[m.maintenance_type] || m.maintenance_type}</td>
+        <td>${ref2.maintenance_status_labels[m.status] || m.status}</td>
+        <td>${m.total_cost}</td>
+        <td>${m.downtime_hours ?? '—'}</td>
+        <td>${eqFmtDateTime(m.started_at)}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-error">${e.message}</div></td></tr>`;
+  }
+}
+
+document.getElementById('eq-btn-load-mstats')?.addEventListener('click', async () => {
+  const content = document.getElementById('eq-mstats-content');
+  const equipmentId = document.getElementById('eq-mstats-equipment').value;
+  if (!equipmentId) { eqAlert(content, 'error', 'يرجى اختيار المعدة'); return; }
+  try {
+    const res = await eqFetch('/maintenance/stats', { query: { equipmentId } });
+    const d = res.data;
+    content.innerHTML = `
+      <div class="result-cards">
+        <div class="result-card"><div class="label">إجمالي السجلات</div><div class="value">${d.total_records}</div></div>
+        <div class="result-card"><div class="label">أعطال طارئة</div><div class="value">${d.emergency_faults_count}</div></div>
+        <div class="result-card"><div class="label">صيانات دورية</div><div class="value">${d.preventive_count}</div></div>
+        <div class="result-card"><div class="label">إجمالي تكلفة الصيانة</div><div class="value">${d.total_maintenance_cost}</div></div>
+        <div class="result-card"><div class="label">إجمالي ساعات التوقف</div><div class="value">${d.total_downtime_hours}</div></div>
+        <div class="result-card"><div class="label">متوسط زمن الإصلاح</div><div class="value">${d.average_repair_time_hours}<span class="unit">ساعة</span></div></div>
+        <div class="result-card"><div class="label">متوسط الأيام بين الأعطال</div><div class="value">${d.average_days_between_faults ?? '—'}</div></div>
+      </div>
+    `;
+  } catch (e) {
+    eqAlert(content, 'error', e.message);
+  }
+});
+
+// ================================================================
+// ===== الجزء الثاني: إدارة قطع الغيار =====
+// ================================================================
+
+let eqEditingPartId = null;
+
+document.querySelector('[data-panel="eq-spareparts"]')?.addEventListener('click', () => {
+  eqLoadLowStockParts();
+  eqLoadPartsTable();
+});
+
+document.getElementById('eq-btn-load-low-stock')?.addEventListener('click', () => eqLoadLowStockParts());
+
+async function eqLoadLowStockParts() {
+  const content = document.getElementById('eq-low-stock-content');
+  try {
+    const res = await eqFetch('/spare-parts/low-stock');
+    const items = res.data;
+    if (!items.length) {
+      content.innerHTML = `<div class="pm-empty-state">لا توجد قطع غيار وصلت للحد الأدنى</div>`;
+      return;
+    }
+    content.innerHTML = items.map(p => `
+      <div class="pm-activity-item">
+        <span class="tag tag-danger">مخزون منخفض</span>
+        <span>${p.name} — المتاح: ${p.stock_quantity} (الحد الأدنى: ${p.min_stock_level})</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    eqAlert(content, 'error', e.message);
+  }
+}
+
+document.getElementById('eq-btn-save-part')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('eq-part-alert');
+  try {
+    const payload = {
+      name: document.getElementById('eq-part-name').value,
+      part_number: document.getElementById('eq-part-number').value || null,
+      manufacturer: document.getElementById('eq-part-manufacturer').value || null,
+      supplier: document.getElementById('eq-part-supplier').value || null,
+      stock_quantity: Number(document.getElementById('eq-part-stock').value) || 0,
+      unit_price: Number(document.getElementById('eq-part-price').value) || 0,
+      min_stock_level: Number(document.getElementById('eq-part-min-stock').value) || 0,
+      expected_lifespan: document.getElementById('eq-part-lifespan').value || null,
+    };
+    if (!payload.name) throw new Error('اسم القطعة مطلوب');
+    if (eqEditingPartId) {
+      await eqFetch('/spare-parts/update', { method: 'POST', body: { id: eqEditingPartId, ...payload } });
+      eqAlert(alertEl, 'success', 'تم تحديث قطعة الغيار بنجاح');
+    } else {
+      await eqFetch('/spare-parts', { method: 'POST', body: payload });
+      eqAlert(alertEl, 'success', 'تم إضافة قطعة الغيار بنجاح');
+    }
+    eqResetPartForm();
+    eqLoadPartsTable();
+    eqLoadLowStockParts();
+  } catch (e) {
+    eqAlert(alertEl, 'error', e.message);
+  }
+});
+
+function eqResetPartForm() {
+  eqEditingPartId = null;
+  ['eq-part-name', 'eq-part-number', 'eq-part-manufacturer', 'eq-part-supplier', 'eq-part-lifespan'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('eq-part-stock').value = 0;
+  document.getElementById('eq-part-price').value = 0;
+  document.getElementById('eq-part-min-stock').value = 0;
+}
+document.getElementById('eq-btn-reset-part-form')?.addEventListener('click', eqResetPartForm);
+
+document.getElementById('eq-part-search')?.addEventListener('input', debounceEq(() => eqLoadPartsTable(), 300));
+
+async function eqLoadPartsTable() {
+  const tbody = document.getElementById('eq-parts-tbody');
+  try {
+    const res = await eqFetch('/spare-parts', { query: { search: document.getElementById('eq-part-search').value || null } });
+    const items = res.data;
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="pm-empty-state">لا توجد قطع غيار مسجّلة</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(p => `
+      <tr>
+        <td>${p.name}</td>
+        <td>${p.part_number || '—'}</td>
+        <td>${p.stock_quantity <= p.min_stock_level ? `<span class="tag tag-danger">${p.stock_quantity}</span>` : p.stock_quantity}</td>
+        <td>${p.min_stock_level}</td>
+        <td>${p.unit_price}</td>
+        <td>
+          <button class="pm-link-btn" data-part-restock="${p.id}">تزويد مخزون</button>
+          <button class="pm-link-btn" data-part-edit="${p.id}">تعديل</button>
+          <button class="pm-link-btn pm-mini-btn-danger" data-part-delete="${p.id}">حذف</button>
+        </td>
+      </tr>
+    `).join('');
+    tbody.querySelectorAll('[data-part-edit]').forEach(b => b.addEventListener('click', () => {
+      const p = items.find(x => x.id === b.dataset.partEdit);
+      eqEditingPartId = p.id;
+      document.getElementById('eq-part-name').value = p.name || '';
+      document.getElementById('eq-part-number').value = p.part_number || '';
+      document.getElementById('eq-part-manufacturer').value = p.manufacturer || '';
+      document.getElementById('eq-part-supplier').value = p.supplier || '';
+      document.getElementById('eq-part-stock').value = p.stock_quantity;
+      document.getElementById('eq-part-price').value = p.unit_price;
+      document.getElementById('eq-part-min-stock').value = p.min_stock_level;
+      document.getElementById('eq-part-lifespan').value = p.expected_lifespan || '';
+    }));
+    tbody.querySelectorAll('[data-part-restock]').forEach(b => b.addEventListener('click', async () => {
+      const qty = prompt('كمية التزويد الجديدة:');
+      if (!qty || Number(qty) <= 0) return;
+      await eqFetch('/spare-parts/restock', { method: 'POST', body: { id: b.dataset.partRestock, quantity: Number(qty) } });
+      eqLoadPartsTable();
+      eqLoadLowStockParts();
+    }));
+    tbody.querySelectorAll('[data-part-delete]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('هل تريد حذف قطعة الغيار؟')) return;
+      await eqFetch('/spare-parts/delete', { method: 'POST', body: { id: b.dataset.partDelete } });
+      eqLoadPartsTable();
+      eqLoadLowStockParts();
+    }));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-error">${e.message}</div></td></tr>`;
+  }
+}
+
+// ================================================================
+// ===== الجزء الثاني: إدارة المشغلين =====
+// ================================================================
+
+let eqEditingOperatorId = null;
+
+document.querySelector('[data-panel="eq-operators"]')?.addEventListener('click', async () => {
+  const ref2 = await eqEnsureRefData2();
+  const licSel = document.getElementById('eq-opr-license-type');
+  if (licSel.options.length <= 1) {
+    licSel.innerHTML += ref2.license_types.map(t => `<option value="${t}">${ref2.license_type_labels[t]}</option>`).join('');
+  }
+  eqLoadLicenseAlerts();
+  eqLoadOperatorsTable();
+});
+
+document.getElementById('eq-btn-load-license-alerts')?.addEventListener('click', () => eqLoadLicenseAlerts());
+
+async function eqLoadLicenseAlerts() {
+  const content = document.getElementById('eq-license-alerts-content');
+  try {
+    const res = await eqFetch('/operators/license-alerts', { query: { withinDays: 30 } });
+    const items = res.data;
+    if (!items.length) {
+      content.innerHTML = `<div class="pm-empty-state">لا توجد رخص تنتهي قريباً</div>`;
+      return;
+    }
+    content.innerHTML = items.map(o => `
+      <div class="pm-activity-item">
+        <span class="tag ${o.status === 'expired' ? 'tag-danger' : 'tag-warning'}">${o.status === 'expired' ? 'منتهية' : 'قريبة الانتهاء'}</span>
+        <span>${o.name} — رخصة رقم ${o.license_number || '—'} — تنتهي ${eqFmtDate(o.license_expiry)}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    eqAlert(content, 'error', e.message);
+  }
+}
+
+document.getElementById('eq-btn-save-operator')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('eq-opr-alert');
+  try {
+    const payload = {
+      name: document.getElementById('eq-opr-name').value,
+      national_id: document.getElementById('eq-opr-national-id').value || null,
+      license_number: document.getElementById('eq-opr-license-number').value || null,
+      license_type: document.getElementById('eq-opr-license-type').value || null,
+      license_expiry: document.getElementById('eq-opr-license-expiry').value || null,
+      experience_years: Number(document.getElementById('eq-opr-experience').value) || 0,
+    };
+    if (!payload.name) throw new Error('اسم المشغل مطلوب');
+    if (eqEditingOperatorId) {
+      await eqFetch('/operators/update', { method: 'POST', body: { id: eqEditingOperatorId, ...payload } });
+      eqAlert(alertEl, 'success', 'تم تحديث بيانات المشغّل بنجاح');
+    } else {
+      await eqFetch('/operators', { method: 'POST', body: payload });
+      eqAlert(alertEl, 'success', 'تم إضافة المشغّل بنجاح');
+    }
+    eqResetOperatorForm();
+    eqLoadOperatorsTable();
+    eqLoadLicenseAlerts();
+  } catch (e) {
+    eqAlert(alertEl, 'error', e.message);
+  }
+});
+
+function eqResetOperatorForm() {
+  eqEditingOperatorId = null;
+  ['eq-opr-name', 'eq-opr-national-id', 'eq-opr-license-number', 'eq-opr-license-expiry'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('eq-opr-license-type').value = '';
+  document.getElementById('eq-opr-experience').value = 0;
+}
+document.getElementById('eq-btn-reset-op-form')?.addEventListener('click', eqResetOperatorForm);
+
+document.getElementById('eq-opr-search')?.addEventListener('input', debounceEq(() => eqLoadOperatorsTable(), 300));
+
+async function eqLoadOperatorsTable() {
+  const tbody = document.getElementById('eq-operators-tbody');
+  const ref2 = await eqEnsureRefData2();
+  try {
+    const res = await eqFetch('/operators', { query: { search: document.getElementById('eq-opr-search').value || null } });
+    const items = res.data;
+
+    const actionSel = document.getElementById('eq-opr-action-select');
+    actionSel.innerHTML = `<option value="">اختر مشغّلاً...</option>` + items.map(o => `<option value="${o.id}">${o.name}</option>`).join('');
+
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="pm-empty-state">لا يوجد مشغّلون مسجّلون</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(o => `
+      <tr>
+        <td>${o.name}</td>
+        <td>${o.license_type ? (ref2.license_type_labels[o.license_type] || o.license_type) : '—'}</td>
+        <td>${o.license_expiry ? eqFmtDate(o.license_expiry) : '—'}</td>
+        <td>${o.experience_years}</td>
+        <td>${o.performance_rating != null ? o.performance_rating + ' / 5' : '—'}</td>
+        <td>
+          <button class="pm-link-btn" data-opr-edit="${o.id}">تعديل</button>
+          <button class="pm-link-btn pm-mini-btn-danger" data-opr-delete="${o.id}">حذف</button>
+        </td>
+      </tr>
+    `).join('');
+    tbody.querySelectorAll('[data-opr-edit]').forEach(b => b.addEventListener('click', () => {
+      const o = items.find(x => x.id === b.dataset.oprEdit);
+      eqEditingOperatorId = o.id;
+      document.getElementById('eq-opr-name').value = o.name || '';
+      document.getElementById('eq-opr-national-id').value = o.national_id || '';
+      document.getElementById('eq-opr-license-number').value = o.license_number || '';
+      document.getElementById('eq-opr-license-type').value = o.license_type || '';
+      document.getElementById('eq-opr-license-expiry').value = o.license_expiry || '';
+      document.getElementById('eq-opr-experience').value = o.experience_years || 0;
+    }));
+    tbody.querySelectorAll('[data-opr-delete]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('هل تريد حذف المشغّل؟')) return;
+      await eqFetch('/operators/delete', { method: 'POST', body: { id: b.dataset.oprDelete } });
+      eqLoadOperatorsTable();
+    }));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-error">${e.message}</div></td></tr>`;
+  }
+}
+
+document.getElementById('eq-btn-rate-operator')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('eq-opr-action-alert');
+  try {
+    const id = document.getElementById('eq-opr-action-select').value;
+    const rating = Number(document.getElementById('eq-opr-rating').value);
+    if (!id) throw new Error('يرجى اختيار المشغّل');
+    await eqFetch('/operators/rate', { method: 'POST', body: { id, rating } });
+    eqAlert(alertEl, 'success', 'تم حفظ التقييم بنجاح');
+    document.getElementById('eq-opr-rating').value = '';
+    eqLoadOperatorsTable();
+  } catch (e) {
+    eqAlert(alertEl, 'error', e.message);
+  }
+});
+
+document.getElementById('eq-btn-add-violation')?.addEventListener('click', async () => {
+  const alertEl = document.getElementById('eq-opr-action-alert');
+  try {
+    const id = document.getElementById('eq-opr-action-select').value;
+    const description = document.getElementById('eq-opr-violation-desc').value;
+    if (!id) throw new Error('يرجى اختيار المشغّل');
+    if (!description) throw new Error('يرجى إدخال وصف المخالفة');
+    await eqFetch('/operators/violations/add', { method: 'POST', body: { id, description } });
+    eqAlert(alertEl, 'success', 'تم تسجيل المخالفة بنجاح');
+    document.getElementById('eq-opr-violation-desc').value = '';
+  } catch (e) {
+    eqAlert(alertEl, 'error', e.message);
   }
 });
