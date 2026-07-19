@@ -41,6 +41,7 @@ const GOV = require('./utils/businessGovernance');
 const EQ = require('./utils/equipmentManagement');
 const EQR = require('./utils/equipmentReports');
 const EQI = require('./utils/equipmentIntelligence');
+const HSE = require('./utils/hseManagement');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -2596,6 +2597,156 @@ const API_HANDLERS = {
       requirePermission(req, 'security', 'manage');
       return EQI.ensureEquipmentRolesSeeded();
     },
+  },
+
+  // ===================================================================
+  // ===== القسم الثامن (الجزء 1/4) - إدارة السلامة المهنية (HSE):
+  // ===== البنية الأساسية، لوحة التحكم، خطط السلامة، إدارة المخاطر،
+  // ===== إدارة الحوادث والإصابات
+  // ===================================================================
+
+  '/api/hse/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        safety_plan_types: HSE.SAFETY_PLAN_TYPES,
+        safety_plan_type_labels: HSE.SAFETY_PLAN_TYPE_LABELS,
+        safety_plan_statuses: HSE.SAFETY_PLAN_STATUSES,
+        safety_plan_status_labels: HSE.SAFETY_PLAN_STATUS_LABELS,
+        risk_categories: HSE.RISK_CATEGORIES,
+        risk_category_labels: HSE.RISK_CATEGORY_LABELS,
+        likelihood_levels: HSE.LIKELIHOOD_LEVELS,
+        severity_levels: HSE.SEVERITY_LEVELS,
+        risk_statuses: HSE.RISK_STATUSES,
+        risk_status_labels: HSE.RISK_STATUS_LABELS,
+        control_hierarchy: HSE.CONTROL_HIERARCHY,
+        control_hierarchy_labels: HSE.CONTROL_HIERARCHY_LABELS,
+        control_action_statuses: HSE.CONTROL_ACTION_STATUSES,
+        control_action_status_labels: HSE.CONTROL_ACTION_STATUS_LABELS,
+        incident_types: HSE.INCIDENT_TYPES,
+        incident_type_labels: HSE.INCIDENT_TYPE_LABELS,
+        injury_severities: HSE.INJURY_SEVERITIES,
+        injury_severity_labels: HSE.INJURY_SEVERITY_LABELS,
+        injury_types: HSE.INJURY_TYPES,
+        injury_type_labels: HSE.INJURY_TYPE_LABELS,
+        incident_statuses: HSE.INCIDENT_STATUSES,
+        incident_status_labels: HSE.INCIDENT_STATUS_LABELS,
+      },
+    }),
+  },
+
+  '/api/hse/dashboard': {
+    GET: async (_body, query) => HSE.getDashboard(query?.projectId || null),
+  },
+
+  '/api/hse/safety-plans': {
+    GET: async (_body, query) => HSE.listSafetyPlans({
+      projectId: query?.projectId, type: query?.type, status: query?.status, search: query?.search,
+    }),
+    POST: async (body) => HSE.createSafetyPlan(body),
+  },
+  '/api/hse/safety-plans/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الخطة (id) مطلوب');
+      return HSE.getSafetyPlan(query.id);
+    },
+  },
+  '/api/hse/safety-plans/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الخطة (id) مطلوب');
+      const { id, ...rest } = body;
+      return HSE.updateSafetyPlan(id, rest);
+    },
+  },
+  '/api/hse/safety-plans/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الخطة (id) مطلوب');
+      return HSE.deleteSafetyPlan(body.id);
+    },
+  },
+  '/api/hse/safety-plans/approve': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الخطة (id) مطلوب');
+      return HSE.approveSafetyPlan(body.id, { approved_by: body.approved_by || null });
+    },
+  },
+
+  '/api/hse/risks': {
+    GET: async (_body, query) => HSE.listRisks({
+      projectId: query?.projectId, category: query?.category, level: query?.level,
+      status: query?.status, search: query?.search,
+    }),
+    POST: async (body) => HSE.createRisk(body),
+  },
+  '/api/hse/risks/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الخطر (id) مطلوب');
+      return HSE.getRisk(query.id);
+    },
+  },
+  '/api/hse/risks/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الخطر (id) مطلوب');
+      const { id, ...rest } = body;
+      return HSE.updateRisk(id, rest);
+    },
+  },
+  '/api/hse/risks/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الخطر (id) مطلوب');
+      return HSE.deleteRisk(body.id);
+    },
+  },
+  '/api/hse/risks/matrix': {
+    GET: async (_body, query) => HSE.getRiskMatrix(query?.projectId || null),
+  },
+  '/api/hse/risks/control-actions': {
+    GET: async (_body, query) => HSE.listRiskControlActions({
+      riskId: query?.riskId, projectId: query?.projectId, status: query?.status, responsiblePerson: query?.responsiblePerson,
+    }),
+    POST: async (body) => HSE.addRiskControlAction(body),
+  },
+  '/api/hse/risks/control-actions/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الإجراء (id) مطلوب');
+      const { id, ...rest } = body;
+      return HSE.updateRiskControlAction(id, rest);
+    },
+  },
+
+  '/api/hse/incidents': {
+    GET: async (_body, query) => HSE.listIncidents({
+      projectId: query?.projectId, type: query?.type, severity: query?.severity, status: query?.status,
+      dateFrom: query?.dateFrom, dateTo: query?.dateTo, search: query?.search,
+    }),
+    POST: async (body) => HSE.createIncident(body),
+  },
+  '/api/hse/incidents/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الحادث (id) مطلوب');
+      return HSE.getIncident(query.id);
+    },
+  },
+  '/api/hse/incidents/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الحادث (id) مطلوب');
+      const { id, ...rest } = body;
+      return HSE.updateIncident(id, rest);
+    },
+  },
+  '/api/hse/incidents/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الحادث (id) مطلوب');
+      return HSE.deleteIncident(body.id);
+    },
+  },
+  '/api/hse/incidents/kpis': {
+    GET: async (_body, query) => HSE.calculateSafetyKPIs({
+      projectId: query?.projectId || null,
+      totalManHours: query?.totalManHours ? Number(query.totalManHours) : null,
+      periodFrom: query?.periodFrom || null,
+      periodTo: query?.periodTo || null,
+    }),
   },
 };
 
