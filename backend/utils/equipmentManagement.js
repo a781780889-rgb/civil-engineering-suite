@@ -11,9 +11,10 @@
  * التخزين: ملف JSON على القرص (backend/data/equipment.json) بنفس نمط
  * scheduling.js / projectManagement.js - بدون تبعيات خارجية.
  *
- * الأجزاء اللاحقة:
- *  - الجزء الرابع (4-أ): التقارير — منجز في backend/utils/equipmentReports.js
- *  - الجزء الرابع (4-ب): الذكاء الاصطناعي + التكامل + الصلاحيات المتقدمة (لاحقاً)
+ * الجزء الرابع (4-أ): التقارير — منجز في backend/utils/equipmentReports.js
+ * الجزء الرابع (4-ب): الذكاء الاصطناعي + التكامل + الصلاحيات المتقدمة —
+ *                     منجز في backend/utils/equipmentIntelligence.js       [منجز]
+ * بهذا اكتمل القسم السابع بكامل أجزائه الأربعة.
  */
 
 const fs = require('fs');
