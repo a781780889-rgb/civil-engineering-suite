@@ -64,6 +64,22 @@
     <div class="nav-item" data-panel="schedule-main">
       <span class="nav-icon">⏱</span> الجدول الزمني للمشاريع
     </div>
+    <div class="sidebar-title" style="margin-top:16px">القسم السابع</div>
+    <div class="nav-item" data-panel="eq-dashboard">
+      <span class="nav-icon">▦</span> لوحة معلومات المعدات
+    </div>
+    <div class="nav-item" data-panel="eq-registry">
+      <span class="nav-icon">▣</span> سجل المعدات
+    </div>
+    <div class="nav-item" data-panel="eq-operations">
+      <span class="nav-icon">⚙</span> إدارة التشغيل
+    </div>
+    <div class="nav-item" data-panel="eq-reservations">
+      <span class="nav-icon">▤</span> إدارة الحجز
+    </div>
+    <div class="nav-item" data-panel="eq-tracking">
+      <span class="nav-icon">◎</span> تتبع المعدات
+    </div>
   </nav>
 
   <main class="main-content">
@@ -567,6 +583,241 @@
       </div>
     </section>
 
+    <!-- ============ القسم السابع: لوحة معلومات المعدات ============ -->
+    <section class="calc-panel" id="panel-eq-dashboard">
+      <div class="panel-header"><h2>لوحة معلومات المعدات (Equipment Dashboard)</h2><span class="panel-code">EQUIPMENT.DASHBOARD</span></div>
+      <div class="panel-body">
+        <div class="result-cards" id="eq-dash-cards"></div>
+        <div class="pm-grid-2">
+          <div class="pm-card">
+            <div class="pm-card-title">توزيع المعدات حسب الحالة</div>
+            <div id="eq-chart-status" class="pm-bars"></div>
+          </div>
+          <div class="pm-card">
+            <div class="pm-card-title">آخر عمليات التشغيل</div>
+            <div id="eq-recent-ops" class="pm-activity-log"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم السابع: سجل المعدات ============ -->
+    <section class="calc-panel" id="panel-eq-registry">
+      <div class="panel-header"><h2>سجل المعدات (Equipment Registry)</h2><span class="panel-code">EQUIPMENT.REGISTRY</span></div>
+      <div class="panel-body">
+
+        <!-- ===== قائمة المعدات ===== -->
+        <div id="eq-list-view">
+          <div class="pm-toolbar">
+            <input type="text" id="eq-search" placeholder="بحث بالاسم / الرمز / الرقم التسلسلي / الشركة المصنعة...">
+            <select id="eq-filter-category">
+              <option value="">كل الفئات</option>
+            </select>
+            <select id="eq-filter-status">
+              <option value="">كل الحالات</option>
+            </select>
+            <button class="btn btn-primary" id="eq-btn-new">+ معدة جديدة</button>
+          </div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-table">
+              <thead>
+                <tr>
+                  <th>الرمز</th><th>الاسم</th><th>النوع</th><th>الحالة</th>
+                  <th>الموقع الحالي</th><th>ساعات التشغيل</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="eq-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ===== نموذج إنشاء / تعديل معدة ===== -->
+        <div id="eq-form-view" style="display:none">
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-outline" id="eq-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="eq-form">
+            <div class="field-group-title">البيانات الأساسية</div>
+            <div class="field"><label>اسم المعدة *</label><input type="text" id="eq-f-name"></div>
+            <div class="field">
+              <label>الفئة *</label>
+              <select id="eq-f-category"></select>
+            </div>
+            <div class="field">
+              <label>النوع *</label>
+              <select id="eq-f-type"></select>
+            </div>
+            <div class="field"><label>رقم المعدة (اختياري - يُولَّد تلقائياً)</label><input type="text" id="eq-f-code"></div>
+
+            <div class="field-group-title">بيانات الصانع</div>
+            <div class="field"><label>الشركة المصنعة</label><input type="text" id="eq-f-manufacturer"></div>
+            <div class="field"><label>الموديل</label><input type="text" id="eq-f-model"></div>
+            <div class="field"><label>سنة الصنع</label><input type="number" id="eq-f-year"></div>
+            <div class="field"><label>الرقم التسلسلي</label><input type="text" id="eq-f-serial"></div>
+            <div class="field"><label>رقم الهيكل</label><input type="text" id="eq-f-chassis"></div>
+            <div class="field"><label>رقم المحرك</label><input type="text" id="eq-f-engine"></div>
+            <div class="field"><label>اللون</label><input type="text" id="eq-f-color"></div>
+
+            <div class="field-group-title">المواصفات التشغيلية</div>
+            <div class="field"><label>الوزن (كجم)</label><input type="number" id="eq-f-weight"></div>
+            <div class="field"><label>الحمولة</label><input type="number" id="eq-f-load"></div>
+            <div class="field"><label>القدرة التشغيلية</label><input type="text" id="eq-f-power"></div>
+            <div class="field"><label>سعة الخزان (لتر)</label><input type="number" id="eq-f-tank"></div>
+            <div class="field">
+              <label>نوع الوقود</label>
+              <select id="eq-f-fuel"></select>
+            </div>
+            <div class="field"><label>متوسط استهلاك الوقود</label><input type="number" id="eq-f-fuel-avg"></div>
+
+            <div class="field-group-title">الموقع والمسؤولية</div>
+            <div class="field"><label>الموقع الحالي</label><input type="text" id="eq-f-location"></div>
+            <div class="field"><label>معرّف المشروع الحالي</label><input type="text" id="eq-f-project"></div>
+            <div class="field"><label>المسؤول عنها</label><input type="text" id="eq-f-responsible"></div>
+            <div class="field">
+              <label>حالة المعدة</label>
+              <select id="eq-f-status"></select>
+            </div>
+
+            <div class="field-group-title">الملكية والبيانات المالية</div>
+            <div class="field">
+              <label>نوع الملكية</label>
+              <select id="eq-f-ownership">
+                <option value="owned">مملوكة</option>
+                <option value="rented">مستأجرة</option>
+                <option value="leased">تأجير تمويلي</option>
+              </select>
+            </div>
+            <div class="field"><label>تاريخ الشراء</label><input type="date" id="eq-f-purchase-date"></div>
+            <div class="field"><label>سعر الشراء</label><input type="number" id="eq-f-purchase-price"></div>
+            <div class="field"><label>العمر التشغيلي (سنوات)</label><input type="number" id="eq-f-useful-life"></div>
+            <div class="field"><label>تاريخ انتهاء الضمان</label><input type="date" id="eq-f-warranty"></div>
+            <div class="field"><label>تاريخ انتهاء التأمين</label><input type="date" id="eq-f-insurance"></div>
+            <div class="field"><label>تكلفة الإيجار بالساعة</label><input type="number" id="eq-f-rental-cost"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="eq-btn-save">حفظ المعدة</button>
+          </div>
+          <div id="eq-form-alert"></div>
+        </div>
+
+        <!-- ===== تفاصيل المعدة ===== -->
+        <div id="eq-detail-view" style="display:none">
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-outline" id="eq-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="eq-detail-content"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============ القسم السابع: إدارة التشغيل ============ -->
+    <section class="calc-panel" id="panel-eq-operations">
+      <div class="panel-header"><h2>إدارة التشغيل (Operation Management)</h2><span class="panel-code">EQUIPMENT.OPERATIONS</span></div>
+      <div class="panel-body">
+        <div class="form-grid" id="eq-op-start-form">
+          <div class="field-group-title">بدء تشغيل معدة</div>
+          <div class="field">
+            <label>المعدة *</label>
+            <select id="eq-op-equipment"></select>
+          </div>
+          <div class="field"><label>معرّف المشروع</label><input type="text" id="eq-op-project"></div>
+          <div class="field"><label>اسم المشغّل</label><input type="text" id="eq-op-operator"></div>
+          <div class="field"><label>قراءة العداد عند البداية</label><input type="number" id="eq-op-odometer-start"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="eq-btn-start-op">بدء التشغيل</button>
+        </div>
+        <div id="eq-op-alert"></div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">التشغيلات المفتوحة حالياً</div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-open-ops-table">
+              <thead><tr><th>المعدة</th><th>المشروع</th><th>المشغّل</th><th>وقت البداية</th><th></th></tr></thead>
+              <tbody id="eq-open-ops-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">سجل التشغيل (آخر العمليات)</div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-ops-log-table">
+              <thead><tr><th>المعدة</th><th>المشروع</th><th>البداية</th><th>النهاية</th><th>المدة (ساعة)</th><th>المسافة</th></tr></thead>
+              <tbody id="eq-ops-log-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم السابع: إدارة الحجز ============ -->
+    <section class="calc-panel" id="panel-eq-reservations">
+      <div class="panel-header"><h2>إدارة حجز المعدات (Reservation Management)</h2><span class="panel-code">EQUIPMENT.RESERVATIONS</span></div>
+      <div class="panel-body">
+        <div class="form-grid" id="eq-rsv-form">
+          <div class="field-group-title">حجز جديد</div>
+          <div class="field">
+            <label>المعدة *</label>
+            <select id="eq-rsv-equipment"></select>
+          </div>
+          <div class="field"><label>معرّف المشروع *</label><input type="text" id="eq-rsv-project"></div>
+          <div class="field"><label>تاريخ البداية *</label><input type="date" id="eq-rsv-start"></div>
+          <div class="field"><label>تاريخ النهاية *</label><input type="date" id="eq-rsv-end"></div>
+          <div class="field"><label>المسؤول</label><input type="text" id="eq-rsv-responsible"></div>
+          <div class="field"><label>ملاحظات</label><input type="text" id="eq-rsv-note"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="eq-btn-create-rsv">إنشاء الحجز</button>
+        </div>
+        <div id="eq-rsv-alert"></div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">جدول الحجوزات النشطة</div>
+          <div class="pm-table-wrap">
+            <table class="detail-table" id="eq-rsv-table">
+              <thead><tr><th>المعدة</th><th>المشروع</th><th>من</th><th>إلى</th><th>المسؤول</th><th></th></tr></thead>
+              <tbody id="eq-rsv-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم السابع: تتبع المعدات ============ -->
+    <section class="calc-panel" id="panel-eq-tracking">
+      <div class="panel-header"><h2>تتبع المعدات (Equipment Tracking)</h2><span class="panel-code">EQUIPMENT.TRACKING</span></div>
+      <div class="panel-body">
+        <div class="form-grid" id="eq-mov-form">
+          <div class="field-group-title">تسجيل حركة / نقل معدة</div>
+          <div class="field">
+            <label>المعدة *</label>
+            <select id="eq-mov-equipment"></select>
+          </div>
+          <div class="field"><label>الموقع الجديد *</label><input type="text" id="eq-mov-to-location"></div>
+          <div class="field"><label>معرّف المشروع الجديد</label><input type="text" id="eq-mov-to-project"></div>
+          <div class="field"><label>ملاحظات</label><input type="text" id="eq-mov-note"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="eq-btn-log-mov">تسجيل الحركة</button>
+        </div>
+        <div id="eq-mov-alert"></div>
+
+        <div class="form-grid" style="margin-top:16px">
+          <div class="field-group-title">عرض سجل تتبع معدة</div>
+          <div class="field">
+            <label>المعدة</label>
+            <select id="eq-track-equipment"></select>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-outline" id="eq-btn-load-track">عرض السجل</button>
+        </div>
+        <div id="eq-track-content"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -651,5 +902,6 @@
 <script src="js/app.js"></script>
 <script src="js/pm.js"></script>
 <script src="js/schedule.js"></script>
+<script src="js/equipment.js"></script>
 </body>
 </html>
