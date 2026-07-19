@@ -46,6 +46,7 @@ const HSE_EMG = require('./utils/hseEmergency');
 const HSE_TRN = require('./utils/hseTraining');
 const HSE_HZM = require('./utils/hseHazmat');
 const HSE_FIRE = require('./utils/hseFireSafety');
+const HSE_VIOL = require('./utils/hseViolations');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -3254,6 +3255,64 @@ const API_HANDLERS = {
     GET: async (_body, query) => HSE_HZM.getExpiringMaterials({
       projectId: query?.projectId, withinDays: query?.withinDays,
     }),
+  },
+
+  // ===== القسم الثامن - وحدة إدارة المخالفات المستقلة (HSE Violations) =====
+
+  '/api/hse/violations/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        violation_types: HSE_VIOL.VIOLATION_TYPES,
+        violation_type_labels: HSE_VIOL.VIOLATION_TYPE_LABELS,
+        violation_severities: HSE_VIOL.VIOLATION_SEVERITIES,
+        violation_severity_labels: HSE_VIOL.VIOLATION_SEVERITY_LABELS,
+        violation_severity_sla_days: HSE_VIOL.VIOLATION_SEVERITY_SLA_DAYS,
+        violation_statuses: HSE_VIOL.VIOLATION_STATUSES,
+        violation_status_labels: HSE_VIOL.VIOLATION_STATUS_LABELS,
+      },
+    }),
+  },
+
+  '/api/hse/violations/dashboard': {
+    GET: async (_body, query) => HSE_VIOL.getViolationsDashboard(query?.projectId || null),
+  },
+
+  '/api/hse/violations': {
+    GET: async (_body, query) => HSE_VIOL.listViolations({
+      projectId: query?.projectId, type: query?.type, severity: query?.severity,
+      status: query?.status, responsiblePerson: query?.responsiblePerson,
+      search: query?.search, dateFrom: query?.dateFrom, dateTo: query?.dateTo,
+    }),
+    POST: async (body) => HSE_VIOL.createViolation(body),
+  },
+  '/api/hse/violations/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف المخالفة (id) مطلوب');
+      return HSE_VIOL.getViolation(query.id);
+    },
+  },
+  '/api/hse/violations/update': {
+    POST: async (body) => {
+      const { id, ...rest } = body;
+      if (!id) throw new Error('معرّف المخالفة (id) مطلوب');
+      return HSE_VIOL.updateViolation(id, rest);
+    },
+  },
+  '/api/hse/violations/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المخالفة (id) مطلوب');
+      return HSE_VIOL.deleteViolation(body.id);
+    },
+  },
+  '/api/hse/violations/close': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المخالفة (id) مطلوب');
+      return HSE_VIOL.closeViolation(body.id, { closed_by: body.closed_by, closure_notes: body.closure_notes });
+    },
+  },
+  '/api/hse/violations/overdue': {
+    GET: async (_body, query) => HSE_VIOL.getOverdueViolations(query?.projectId || null),
   },
 
   // ===================== إدارة معدات مكافحة الحريق =====================
