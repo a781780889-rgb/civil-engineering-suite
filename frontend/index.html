@@ -129,6 +129,18 @@
     <div class="nav-item" data-panel="hse-ppe">
       <span class="nav-icon">🦺</span> معدات الوقاية الشخصية
     </div>
+    <div class="nav-item" data-panel="hse-emg-dashboard">
+      <span class="nav-icon">🚨</span> لوحة معلومات الطوارئ
+    </div>
+    <div class="nav-item" data-panel="hse-emg-plans">
+      <span class="nav-icon">🗺️</span> خطط الطوارئ
+    </div>
+    <div class="nav-item" data-panel="hse-emg-drills">
+      <span class="nav-icon">🏃</span> تمارين الإخلاء
+    </div>
+    <div class="nav-item" data-panel="hse-emg-activations">
+      <span class="nav-icon">☎️</span> سجلات الطوارئ الفعلية
+    </div>
   </nav>
 
   <main class="main-content">
@@ -1807,6 +1819,189 @@
       </div>
     </section>
 
+    <!-- ===================== لوحة معلومات إدارة الطوارئ ===================== -->
+    <section class="calc-panel" id="panel-hse-emg-dashboard">
+      <div class="calc-card">
+        <h2>القسم الثامن — لوحة معلومات إدارة الطوارئ</h2>
+        <div class="toolbar">
+          <input type="text" id="hse-emg-dash-project" placeholder="معرّف المشروع (اختياري - اتركه فارغاً لعرض كل المشاريع)">
+          <button class="btn btn-outline" id="hse-emg-btn-load-dashboard">تحميل</button>
+        </div>
+        <div class="result-cards" id="hse-emg-dash-cards"></div>
+        <div class="grid-2">
+          <div>
+            <h3>معدات الإطفاء حسب الحالة</h3>
+            <div id="hse-emg-chart-fire-equipment" class="pm-bars"></div>
+          </div>
+          <div>
+            <h3>أقرب تمارين الإخلاء المجدولة</h3>
+            <div id="hse-emg-upcoming-drills" class="pm-activity-log"></div>
+          </div>
+        </div>
+        <h3>آخر سجلات الطوارئ الفعلية</h3>
+        <div id="hse-emg-recent-activations" class="pm-activity-log"></div>
+      </div>
+    </section>
+
+    <!-- ===================== خطط الطوارئ ===================== -->
+    <section class="calc-panel" id="panel-hse-emg-plans">
+      <div class="calc-card">
+        <h2>القسم الثامن — خطط الطوارئ (Emergency Response Plans)</h2>
+
+        <div id="hse-emg-plan-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-emg-plan-search" placeholder="بحث بالعنوان / الرمز...">
+            <select id="hse-emg-plan-filter-status"><option value="">كل الحالات</option></select>
+            <select id="hse-emg-plan-filter-scenario"><option value="">كل السيناريوهات</option></select>
+            <button class="btn btn-primary" id="hse-emg-plan-btn-new">+ خطة طوارئ جديدة</button>
+          </div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-emg-plan-table">
+              <thead><tr><th>الرمز</th><th>العنوان</th><th>السيناريوهات</th><th>الفرق</th><th>نقاط التجمع</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="hse-emg-plan-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-emg-plan-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-emg-plan-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-emg-plan-form">
+            <div class="field"><label>عنوان الخطة *</label><input type="text" id="hse-emg-plan-f-title"></div>
+            <div class="field"><label>معرّف المشروع *</label><input type="text" id="hse-emg-plan-f-project"></div>
+            <div class="field field-full"><label>سيناريوهات الطوارئ * (اختر واحداً أو أكثر)</label>
+              <select id="hse-emg-plan-f-scenarios" multiple size="6"></select>
+            </div>
+            <div class="field field-full"><label>الوصف</label><textarea id="hse-emg-plan-f-description" rows="2"></textarea></div>
+            <div class="field field-full"><label>فريق الطوارئ (دور | اسم | هاتف | مهام — سطر لكل عضو)</label>
+              <textarea id="hse-emg-plan-f-teams" rows="3" placeholder="incident_commander | أحمد محمد | 05xxxxxxxx | قيادة الاستجابة"></textarea>
+            </div>
+            <div class="field field-full"><label>نقاط التجمع (اسم | الموقع | السعة — سطر لكل نقطة)</label>
+              <textarea id="hse-emg-plan-f-assembly" rows="2" placeholder="نقطة تجمع رئيسية | بوابة المشروع الشمالية | 200"></textarea>
+            </div>
+            <div class="field field-full"><label>مخارج الطوارئ (اسم | الموقع — سطر لكل مخرج)</label>
+              <textarea id="hse-emg-plan-f-exits" rows="2"></textarea>
+            </div>
+            <div class="field field-full"><label>معدات الإطفاء (النوع | الموقع | الحالة — سطر لكل معدة)</label>
+              <textarea id="hse-emg-plan-f-fire-eq" rows="3" placeholder="fire_extinguisher | مبنى A - الطابق 1 | operational"></textarea>
+            </div>
+            <div class="field field-full"><label>جهات اتصال خارجية (الاسم | الهاتف — سطر لكل جهة)</label>
+              <textarea id="hse-emg-plan-f-contacts" rows="2" placeholder="الدفاع المدني | 998"></textarea>
+            </div>
+            <div class="field field-full"><label>إجراءات الاستجابة</label><textarea id="hse-emg-plan-f-procedures" rows="3"></textarea></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-emg-plan-btn-save">حفظ الخطة</button></div>
+          <div id="hse-emg-plan-form-alert"></div>
+        </div>
+
+        <div id="hse-emg-plan-detail-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-emg-plan-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-emg-plan-detail-content"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== تمارين وتدريبات الإخلاء ===================== -->
+    <section class="calc-panel" id="panel-hse-emg-drills">
+      <div class="calc-card">
+        <h2>القسم الثامن — تمارين وتدريبات الإخلاء (Drills)</h2>
+
+        <div id="hse-emg-drill-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-emg-drill-project" placeholder="معرّف المشروع (اختياري)">
+            <select id="hse-emg-drill-filter-type"><option value="">كل الأنواع</option></select>
+            <select id="hse-emg-drill-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-emg-drill-btn-new">+ تمرين جديد</button>
+          </div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-emg-drill-table">
+              <thead><tr><th>الرمز</th><th>النوع</th><th>تاريخ التمرين</th><th>الزمن المستهدف/الفعلي</th><th>نسبة الحضور</th><th>النتيجة</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="hse-emg-drill-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-emg-drill-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-emg-drill-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-emg-drill-form">
+            <div class="field"><label>نوع التمرين *</label><select id="hse-emg-drill-f-type"></select></div>
+            <div class="field"><label>السيناريو</label><select id="hse-emg-drill-f-scenario"></select></div>
+            <div class="field"><label>معرّف المشروع *</label><input type="text" id="hse-emg-drill-f-project"></div>
+            <div class="field"><label>تاريخ التمرين *</label><input type="date" id="hse-emg-drill-f-date"></div>
+            <div class="field"><label>منسّق التمرين</label><input type="text" id="hse-emg-drill-f-coordinator"></div>
+            <div class="field"><label>الزمن المستهدف (ثانية)</label><input type="number" id="hse-emg-drill-f-target-time"></div>
+            <div class="field"><label>عدد المشاركين المتوقع</label><input type="number" id="hse-emg-drill-f-expected"></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-emg-drill-btn-save">حفظ التمرين</button></div>
+          <div id="hse-emg-drill-form-alert"></div>
+        </div>
+
+        <div id="hse-emg-drill-complete-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-emg-drill-btn-back-from-complete">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-emg-drill-complete-form">
+            <div class="field"><label>الزمن الفعلي للإخلاء (ثانية) *</label><input type="number" id="hse-emg-drill-c-actual-time"></div>
+            <div class="field"><label>عدد الحضور الفعلي *</label><input type="number" id="hse-emg-drill-c-attended"></div>
+            <div class="field field-full"><label>ملاحظات</label><textarea id="hse-emg-drill-c-observations" rows="2"></textarea></div>
+            <div class="field field-full"><label>مشاكل تم رصدها (سطر لكل مشكلة)</label><textarea id="hse-emg-drill-c-issues" rows="2"></textarea></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-emg-drill-btn-complete">إتمام التمرين وحساب النتيجة</button></div>
+          <div id="hse-emg-drill-complete-alert"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== سجلات الطوارئ الفعلية ===================== -->
+    <section class="calc-panel" id="panel-hse-emg-activations">
+      <div class="calc-card">
+        <h2>القسم الثامن — سجلات الطوارئ الفعلية (Activation Log)</h2>
+
+        <div id="hse-emg-act-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-emg-act-project" placeholder="معرّف المشروع (اختياري)">
+            <select id="hse-emg-act-filter-scenario"><option value="">كل السيناريوهات</option></select>
+            <select id="hse-emg-act-filter-status"><option value="">كل الحالات</option></select>
+            <button class="btn btn-primary" id="hse-emg-act-btn-new">+ تبليغ حالة طوارئ</button>
+          </div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-emg-act-table">
+              <thead><tr><th>الرمز</th><th>السيناريو</th><th>الموقع</th><th>وقت التبليغ</th><th>الحالة</th><th></th></tr></thead>
+              <tbody id="hse-emg-act-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-emg-act-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-emg-act-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-emg-act-form">
+            <div class="field"><label>نوع السيناريو *</label><select id="hse-emg-act-f-scenario"></select></div>
+            <div class="field"><label>معرّف المشروع *</label><input type="text" id="hse-emg-act-f-project"></div>
+            <div class="field"><label>الموقع *</label><input type="text" id="hse-emg-act-f-location"></div>
+            <div class="field"><label>وقت التبليغ *</label><input type="datetime-local" id="hse-emg-act-f-reported"></div>
+            <div class="field"><label>المُبلِّغ</label><input type="text" id="hse-emg-act-f-reported-by"></div>
+            <div class="field field-full"><label>وصف الحادث</label><textarea id="hse-emg-act-f-description" rows="2"></textarea></div>
+          </div>
+          <div class="btn-row"><button class="btn btn-primary" id="hse-emg-act-btn-save">حفظ سجل الطوارئ</button></div>
+          <div id="hse-emg-act-form-alert"></div>
+        </div>
+
+        <div id="hse-emg-act-detail-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-emg-act-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-emg-act-detail-content"></div>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -1893,5 +2088,6 @@
 <script src="js/schedule.js"></script>
 <script src="js/equipment.js"></script>
 <script src="js/hse.js"></script>
+<script src="js/hseEmergency.js"></script>
 </body>
 </html>
