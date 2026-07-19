@@ -43,6 +43,7 @@ const EQR = require('./utils/equipmentReports');
 const EQI = require('./utils/equipmentIntelligence');
 const HSE = require('./utils/hseManagement');
 const HSE_EMG = require('./utils/hseEmergency');
+const HSE_TRN = require('./utils/hseTraining');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -3043,6 +3044,126 @@ const API_HANDLERS = {
       if (!body.id) throw new Error('معرّف سجل الطوارئ (id) مطلوب');
       return HSE_EMG.deleteActivation(body.id);
     },
+  },
+
+  // ===== القسم الثامن (الجزء 3/4) - إدارة التدريب (HSE Training) =====
+
+  '/api/hse/training/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        course_categories: HSE_TRN.COURSE_CATEGORIES,
+        course_category_labels: HSE_TRN.COURSE_CATEGORY_LABELS,
+        delivery_methods: HSE_TRN.DELIVERY_METHODS,
+        delivery_method_labels: HSE_TRN.DELIVERY_METHOD_LABELS,
+        course_statuses: HSE_TRN.COURSE_STATUSES,
+        course_status_labels: HSE_TRN.COURSE_STATUS_LABELS,
+        session_statuses: HSE_TRN.SESSION_STATUSES,
+        session_status_labels: HSE_TRN.SESSION_STATUS_LABELS,
+        enrollment_results: HSE_TRN.ENROLLMENT_RESULTS,
+        enrollment_result_labels: HSE_TRN.ENROLLMENT_RESULT_LABELS,
+        certificate_statuses: HSE_TRN.CERTIFICATE_STATUSES,
+        certificate_status_labels: HSE_TRN.CERTIFICATE_STATUS_LABELS,
+      },
+    }),
+  },
+
+  '/api/hse/training/dashboard': {
+    GET: async (_body, query) => HSE_TRN.getTrainingDashboard({ projectId: query?.projectId || null }),
+  },
+
+  // ----- الدورات -----
+  '/api/hse/training/courses': {
+    GET: async (_body, query) => HSE_TRN.listCourses({
+      category: query?.category, status: query?.status, mandatory: query?.mandatory, search: query?.search,
+    }),
+    POST: async (body) => HSE_TRN.createCourse(body),
+  },
+  '/api/hse/training/courses/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الدورة (id) مطلوب');
+      return HSE_TRN.getCourse(query.id);
+    },
+  },
+  '/api/hse/training/courses/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الدورة (id) مطلوب');
+      return HSE_TRN.updateCourse(body.id, body.updates || {});
+    },
+  },
+  '/api/hse/training/courses/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الدورة (id) مطلوب');
+      return HSE_TRN.deleteCourse(body.id);
+    },
+  },
+
+  // ----- الجلسات -----
+  '/api/hse/training/sessions': {
+    GET: async (_body, query) => HSE_TRN.listSessions({
+      courseId: query?.courseId, projectId: query?.projectId, status: query?.status,
+      dateFrom: query?.dateFrom, dateTo: query?.dateTo,
+    }),
+    POST: async (body) => HSE_TRN.createSession(body),
+  },
+  '/api/hse/training/sessions/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الجلسة (id) مطلوب');
+      return HSE_TRN.getSession(query.id);
+    },
+  },
+  '/api/hse/training/sessions/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الجلسة (id) مطلوب');
+      return HSE_TRN.updateSession(body.id, body.updates || {});
+    },
+  },
+  '/api/hse/training/sessions/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الجلسة (id) مطلوب');
+      return HSE_TRN.deleteSession(body.id);
+    },
+  },
+
+  // ----- تسجيل المتدربين والشهادات -----
+  '/api/hse/training/enrollments': {
+    GET: async (_body, query) => HSE_TRN.listEnrollments({
+      sessionId: query?.sessionId, courseId: query?.courseId, projectId: query?.projectId,
+      employeeId: query?.employeeId, result: query?.result, certificateStatus: query?.certificateStatus,
+      search: query?.search,
+    }),
+    POST: async (body) => HSE_TRN.createEnrollment(body),
+  },
+  '/api/hse/training/enrollments/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف تسجيل المتدرب (id) مطلوب');
+      return HSE_TRN.getEnrollment(query.id);
+    },
+  },
+  '/api/hse/training/enrollments/record-result': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف تسجيل المتدرب (id) مطلوب');
+      return HSE_TRN.recordEnrollmentResult(body.id, body);
+    },
+  },
+  '/api/hse/training/enrollments/retake': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف تسجيل المتدرب (id) مطلوب');
+      return HSE_TRN.retakeEnrollment(body.id);
+    },
+  },
+  '/api/hse/training/enrollments/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف تسجيل المتدرب (id) مطلوب');
+      return HSE_TRN.deleteEnrollment(body.id);
+    },
+  },
+
+  // ----- شهادات على وشك الانتهاء / منتهية -----
+  '/api/hse/training/certificates/expiring': {
+    GET: async (_body, query) => HSE_TRN.getExpiringCertificates({
+      projectId: query?.projectId, withinDays: query?.withinDays,
+    }),
   },
 };
 
