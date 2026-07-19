@@ -171,6 +171,15 @@
     <div class="nav-item" data-panel="hse-fire-alerts">
       <span class="nav-icon">⏱️</span> تنبيهات مكافحة الحريق
     </div>
+    <div class="nav-item" data-panel="hse-viol">
+      <span class="nav-icon">🚫</span> إدارة المخالفات
+    </div>
+    <div class="nav-item" data-panel="hse-reports">
+      <span class="nav-icon">📋</span> تقارير السلامة المهنية
+    </div>
+    <div class="nav-item" data-panel="hse-ai">
+      <span class="nav-icon">🤖</span> المساعد الذكي للسلامة
+    </div>
   </nav>
 
   <main class="main-content">
@@ -2458,6 +2467,130 @@
       </div>
     </section>
 
+    <!-- ============ القسم الثامن - إدارة المخالفات ============ -->
+    <section class="calc-panel" id="panel-hse-viol">
+      <div class="calc-card">
+        <h2>القسم الثامن — إدارة المخالفات</h2>
+
+        <div id="hse-viol-list-view">
+          <div class="toolbar">
+            <input type="text" id="hse-viol-search" placeholder="بحث بالوصف / الرمز / المسؤول...">
+            <select id="hse-viol-filter-type"><option value="">كل الأنواع</option></select>
+            <select id="hse-viol-filter-severity"><option value="">كل الدرجات</option></select>
+            <select id="hse-viol-filter-status"><option value="">كل الحالات</option></select>
+            <input type="text" id="hse-viol-filter-project" placeholder="معرّف المشروع (اختياري)">
+            <button class="btn btn-primary" id="hse-viol-btn-new">+ مخالفة جديدة</button>
+            <button class="btn btn-outline" id="hse-viol-btn-overdue">عرض المخالفات المتأخرة</button>
+          </div>
+          <div id="hse-viol-error"></div>
+          <div class="result-cards" id="hse-viol-dash-cards"></div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-viol-table">
+              <thead><tr><th>الرمز</th><th>النوع</th><th>الدرجة</th><th>الموقع</th><th>المسؤول</th><th>الحالة</th><th>موعد الإغلاق</th><th>إجراءات</th></tr></thead>
+              <tbody id="hse-viol-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="hse-viol-form-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-viol-btn-back-to-list">← رجوع للقائمة</button>
+          </div>
+          <div class="form-grid" id="hse-viol-form">
+            <div class="field"><label>نوع المخالفة *</label><select id="hse-viol-f-type"></select></div>
+            <div class="field"><label>درجة الخطورة *</label><select id="hse-viol-f-severity"></select></div>
+            <div class="field"><label>معرّف المشروع *</label><input type="text" id="hse-viol-f-project"></div>
+            <div class="field"><label>الموقع</label><input type="text" id="hse-viol-f-location"></div>
+            <div class="field"><label>الشخص المسؤول</label><input type="text" id="hse-viol-f-responsible"></div>
+            <div class="field"><label>تاريخ المخالفة</label><input type="date" id="hse-viol-f-date"></div>
+            <div class="field field-full"><label>وصف المخالفة *</label><textarea id="hse-viol-f-description" rows="2"></textarea></div>
+            <div class="field field-full"><label>الإجراءات التصحيحية المطلوبة</label><textarea id="hse-viol-f-corrective" rows="2"></textarea></div>
+            <div class="field"><label>رابط صورة (اختياري)</label><input type="text" id="hse-viol-f-photo"></div>
+          </div>
+          <button class="btn btn-primary" id="hse-viol-btn-save">حفظ المخالفة</button>
+          <div id="hse-viol-form-alert"></div>
+        </div>
+
+        <div id="hse-viol-detail-view" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-viol-btn-back-from-detail">← رجوع للقائمة</button>
+          </div>
+          <div id="hse-viol-detail-content"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم الثامن - تقارير السلامة المهنية ============ -->
+    <section class="calc-panel" id="panel-hse-reports">
+      <div class="calc-card">
+        <h2>القسم الثامن — تقارير السلامة المهنية</h2>
+        <div class="toolbar">
+          <input type="text" id="hse-rep-project" placeholder="معرّف المشروع (اختياري - اتركه فارغاً لكل المشاريع)">
+          <select id="hse-rep-type">
+            <option value="incidents">تقرير الحوادث</option>
+            <option value="risks">تقرير المخاطر</option>
+            <option value="inspections">تقرير التفتيش</option>
+            <option value="violations">تقرير المخالفات</option>
+            <option value="permits">تقرير تصاريح العمل</option>
+            <option value="ppe">تقرير معدات الوقاية (PPE)</option>
+            <option value="emergency">تقرير الطوارئ</option>
+            <option value="training">تقرير التدريب</option>
+            <option value="performance">تقرير الأداء (KPIs)</option>
+            <option value="executive">التقرير التنفيذي الشامل</option>
+          </select>
+          <button class="btn btn-primary" id="hse-rep-btn-generate">إنشاء التقرير</button>
+        </div>
+        <div id="hse-rep-error"></div>
+
+        <div id="hse-rep-result" style="display:none">
+          <div class="toolbar">
+            <button class="btn btn-outline" id="hse-rep-btn-pdf">تصدير PDF</button>
+            <button class="btn btn-outline" id="hse-rep-btn-excel">تصدير Excel</button>
+            <button class="btn btn-outline" id="hse-rep-btn-csv">تصدير CSV</button>
+            <button class="btn btn-outline" id="hse-rep-btn-word">تصدير Word</button>
+            <button class="btn btn-outline" id="hse-rep-btn-print">نسخة للطباعة</button>
+          </div>
+          <div id="hse-rep-export-links"></div>
+          <div class="result-cards" id="hse-rep-summary-cards"></div>
+          <div class="table-wrap">
+            <table class="detail-table" id="hse-rep-table">
+              <thead id="hse-rep-thead"></thead>
+              <tbody id="hse-rep-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم الثامن - المساعد الذكي للسلامة ============ -->
+    <section class="calc-panel" id="panel-hse-ai">
+      <div class="calc-card">
+        <h2>القسم الثامن — المساعد الذكي للسلامة المهنية</h2>
+        <div id="hse-ai-status-banner"></div>
+
+        <div class="toolbar">
+          <input type="text" id="hse-ai-project" placeholder="معرّف المشروع (اختياري)">
+        </div>
+
+        <div class="toolbar" style="flex-wrap:wrap">
+          <button class="btn btn-outline" id="hse-ai-btn-analyze">تحليل بيانات السلامة</button>
+          <button class="btn btn-outline" id="hse-ai-btn-predict">التنبؤ بالمخاطر</button>
+          <button class="btn btn-outline" id="hse-ai-btn-causes">تحليل أسباب الحوادث المتكررة</button>
+          <button class="btn btn-outline" id="hse-ai-btn-plan">إنشاء خطة تحسين السلامة</button>
+          <button class="btn btn-outline" id="hse-ai-btn-team">تقييم أداء فريق السلامة</button>
+        </div>
+
+        <div id="hse-ai-error"></div>
+        <div id="hse-ai-loading" style="display:none">جارٍ التحليل بواسطة الذكاء الاصطناعي...</div>
+        <div id="hse-ai-result" class="pm-activity-log"></div>
+
+        <h3 style="margin-top:20px">اسأل المساعد الذكي</h3>
+        <div class="field field-full"><textarea id="hse-ai-question" rows="3" placeholder="اكتب سؤالك عن السلامة المهنية هنا..."></textarea></div>
+        <button class="btn btn-primary" id="hse-ai-btn-ask">إرسال السؤال</button>
+        <div id="hse-ai-answer" class="pm-activity-log" style="margin-top:12px"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -2548,5 +2681,7 @@
 <script src="js/hseTraining.js"></script>
 <script src="js/hseHazmat.frontend.js"></script>
 <script src="js/hseFireSafety.js"></script>
+<script src="js/hseViolations.js"></script>
+<script src="js/hseReportsAI.js"></script>
 </body>
 </html>
