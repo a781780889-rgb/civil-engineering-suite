@@ -104,6 +104,9 @@
     <div class="nav-item" data-panel="eq-reports">
       <span class="nav-icon">📄</span> تقارير المعدات
     </div>
+    <div class="nav-item" data-panel="eq-ai">
+      <span class="nav-icon">🤖</span> الذكاء الاصطناعي والتكامل
+    </div>
   </nav>
 
   <main class="main-content">
@@ -1210,6 +1213,65 @@
               <tbody id="eq-rep-tbody"></tbody>
             </table>
           </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============ الذكاء الاصطناعي والتكامل (القسم السابع - الجزء 4-ب) ============ -->
+    <section class="calc-panel" id="panel-eq-ai">
+      <div class="panel-header"><h2>الذكاء الاصطناعي والتكامل (Equipment AI &amp; Integration)</h2><span class="panel-code">EQUIPMENT.AI</span></div>
+      <div class="panel-body">
+
+        <div class="pm-card" id="eq-ai-status-card">
+          <div class="pm-card-title">حالة ميزة الذكاء الاصطناعي</div>
+          <div id="eq-ai-status"></div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">تحليلات على مستوى معدة واحدة</div>
+          <div class="pm-toolbar">
+            <select id="eq-ai-equipment"><option value="">اختر المعدة...</option></select>
+            <button class="btn btn-outline" id="eq-btn-ai-predict-failures">🔮 التنبؤ بالأعطال</button>
+            <button class="btn btn-outline" id="eq-btn-ai-fuel-analysis">⛽ تحليل استهلاك الوقود</button>
+            <button class="btn btn-outline" id="eq-btn-ai-maint-schedule">🛠️ اقتراح جدول الصيانة الوقائية</button>
+            <button class="btn btn-outline" id="eq-btn-ai-efficiency-peers">📊 الكفاءة مقابل المعدات المماثلة</button>
+            <button class="btn btn-outline" id="eq-btn-ai-future-cost">💵 تقدير التكلفة المستقبلية</button>
+          </div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">تحليلات على مستوى الأسطول الكامل</div>
+          <div class="pm-toolbar">
+            <input type="text" id="eq-ai-project" placeholder="معرّف المشروع (اختياري لتضييق النطاق)">
+            <button class="btn btn-outline" id="eq-btn-ai-fleet-risk">⚠️ مخاطر الأعطال على مستوى الأسطول</button>
+            <button class="btn btn-outline" id="eq-btn-ai-suggest-allocation">🚧 اقتراح توزيع المعدات على المشاريع</button>
+            <button class="btn btn-outline" id="eq-btn-ai-proactive-alerts">🔔 تنبيهات استباقية للكفاءة</button>
+            <button class="btn btn-outline" id="eq-btn-ai-fleet-summary">📝 ملخص تنفيذي تلقائي</button>
+          </div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">مساعد الأسئلة الحرة</div>
+          <div class="pm-toolbar">
+            <input type="text" id="eq-ai-question" placeholder="اكتب سؤالك عن حالة المعدات..." style="flex:1;min-width:280px">
+            <button class="btn btn-primary" id="eq-btn-ai-ask">اسأل المساعد</button>
+          </div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title" id="eq-ai-result-title">نتيجة التحليل</div>
+          <div id="eq-ai-alert"></div>
+          <div id="eq-ai-result" style="white-space:pre-wrap;line-height:1.9"></div>
+        </div>
+
+        <div class="pm-card" style="margin-top:16px">
+          <div class="pm-card-title">لقطة التكامل الحيّة مع بقية النظام</div>
+          <div class="pm-toolbar">
+            <input type="text" id="eq-integ-project" placeholder="معرّف المشروع (اختياري)">
+            <button class="btn btn-outline" id="eq-btn-load-integration">تحميل لقطة التكامل</button>
+          </div>
+          <div id="eq-integration-content"></div>
         </div>
 
       </div>
