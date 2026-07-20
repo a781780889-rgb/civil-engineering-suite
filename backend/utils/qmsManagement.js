@@ -53,6 +53,8 @@ function ensureStore() {
       itpItems: {},            // { id: itpRecord }                 (نقاط الفحص ITP - الجزء 2)
       ncrs: {},                // { id: ncrRecord }                 (حالات عدم المطابقة NCR - الجزء 3)
       capas: {},               // { id: capaRecord }                (الإجراءات التصحيحية/الوقائية CAPA - الجزء 3)
+      mars: {},                // { id: marRecord }                 (طلبات اعتماد المواد MAR - الجزء 3)
+      sdrs: {},                // { id: sdrRecord }                 (طلبات اعتماد الرسومات SDR - الجزء 3)
       auditLog: [],
       seq: 0,
     };
@@ -72,7 +74,7 @@ function loadStore() {
   for (const key of [
     'qualityPlans', 'qualityPlanVersions', 'inspectionRequests',
     'materialTests', 'labs', 'labTechnicians', 'labEquipment', 'itpItems',
-    'ncrs', 'capas',
+    'ncrs', 'capas', 'mars', 'sdrs',
   ]) {
     if (!store[key]) { store[key] = {}; migrated = true; }
   }
@@ -275,6 +277,65 @@ const CAPA_EFFECTIVENESS_LABELS = {
   ineffective: 'غير فعّال',
 };
 
+// ----- طلبات اعتماد المواد (Material Approval Request - MAR) (الجزء 3) -----
+// دورة حياة حقيقية: مسودة → مُرسل → قيد المراجعة → معتمد | معتمد بملاحظات | مرفوض → (إعادة تقديم بعد الرفض)
+const MAR_STATUSES = ['draft', 'submitted', 'under_review', 'approved', 'approved_with_comments', 'rejected'];
+const MAR_STATUS_LABELS = {
+  draft: 'مسودة',
+  submitted: 'مُرسل',
+  under_review: 'قيد المراجعة',
+  approved: 'معتمد',
+  approved_with_comments: 'معتمد بملاحظات',
+  rejected: 'مرفوض',
+};
+// الانتقالات المسموحة بين حالات طلب اعتماد المواد
+const MAR_ALLOWED_TRANSITIONS = {
+  draft: ['submitted'],
+  submitted: ['under_review'],
+  under_review: ['approved', 'approved_with_comments', 'rejected'],
+  approved: [],
+  approved_with_comments: [],
+  rejected: ['submitted'],
+};
+
+const MAR_DISCIPLINES = [
+  'concrete', 'rebar', 'formwork', 'masonry', 'finishing', 'mep', 'earthwork', 'asphalt', 'other',
+];
+const MAR_DISCIPLINE_LABELS = {
+  concrete: 'خرسانة', rebar: 'حديد تسليح', formwork: 'شدة خشبية', masonry: 'مباني (طوب/بلوك)',
+  finishing: 'تشطيبات', mep: 'كهروميكانيكال', earthwork: 'أعمال ترابية', asphalt: 'أسفلت', other: 'أخرى',
+};
+
+// ----- طلبات اعتماد الرسومات (Shop Drawing Approval - SDR) (الجزء 3) -----
+// دورة حياة حقيقية: مسودة → مُرسل → قيد المراجعة → معتمد | معتمد بملاحظات | مرفوض/يتطلب إعادة مراجعة → (إعادة مراجعة برفع إصدار جديد)
+const SDR_STATUSES = ['draft', 'submitted', 'under_review', 'approved', 'approved_with_comments', 'rejected_resubmit'];
+const SDR_STATUS_LABELS = {
+  draft: 'مسودة',
+  submitted: 'مُرسل',
+  under_review: 'قيد المراجعة',
+  approved: 'معتمد',
+  approved_with_comments: 'معتمد بملاحظات',
+  rejected_resubmit: 'مرفوض - يتطلب إعادة تقديم',
+};
+// الانتقالات المسموحة بين حالات طلب اعتماد الرسومات
+const SDR_ALLOWED_TRANSITIONS = {
+  draft: ['submitted'],
+  submitted: ['under_review'],
+  under_review: ['approved', 'approved_with_comments', 'rejected_resubmit'],
+  approved: [],
+  approved_with_comments: [],
+  rejected_resubmit: ['submitted'],
+};
+
+const SDR_DISCIPLINES = [
+  'concrete', 'rebar', 'formwork', 'masonry', 'finishing', 'mep', 'earthwork', 'structural', 'architectural', 'other',
+];
+const SDR_DISCIPLINE_LABELS = {
+  concrete: 'خرسانة', rebar: 'حديد تسليح', formwork: 'شدة خشبية', masonry: 'مباني (طوب/بلوك)',
+  finishing: 'تشطيبات', mep: 'كهروميكانيكال', earthwork: 'أعمال ترابية',
+  structural: 'إنشائي', architectural: 'معماري', other: 'أخرى',
+};
+
 // ===================== لوحة التحكم (Dashboard) =====================
 
 function getDashboard(projectId = null) {
@@ -332,6 +393,23 @@ function getDashboard(projectId = null) {
     c.status !== 'closed' && c.due_date && new Date(c.due_date) < new Date()
   );
 
+  // ----- طلبات اعتماد المواد (MAR) - مؤشرات فعلية -----
+  const mars = Object.values(store.mars).filter(m => !projectId || m.project_id === projectId);
+  const marsPending = mars.filter(m => ['draft', 'submitted', 'under_review'].includes(m.status));
+  const marsApproved = mars.filter(m => ['approved', 'approved_with_comments'].includes(m.status));
+
+  // ----- طلبات اعتماد الرسومات (SDR) - مؤشرات فعلية -----
+  const sdrs = Object.values(store.sdrs).filter(s => !projectId || s.project_id === projectId);
+  const sdrsPending = sdrs.filter(s => ['draft', 'submitted', 'under_review'].includes(s.status));
+  const sdrsApproved = sdrs.filter(s => ['approved', 'approved_with_comments'].includes(s.status));
+
+  const recentApprovals = [
+    ...mars.filter(m => ['approved', 'approved_with_comments', 'rejected'].includes(m.status))
+      .map(m => ({ id: m.id, code: m.code, type: 'MAR', project_id: m.project_id, title: m.material_name, status: m.status, ts: m.updated_at })),
+    ...sdrs.filter(s => ['approved', 'approved_with_comments', 'rejected_resubmit'].includes(s.status))
+      .map(s => ({ id: s.id, code: s.code, type: 'SDR', project_id: s.project_id, title: s.drawing_title, status: s.status, ts: s.updated_at })),
+  ].sort((a, b) => new Date(b.ts) - new Date(a.ts)).slice(0, 10);
+
   return {
     success: true,
     data: {
@@ -345,17 +423,19 @@ function getDashboard(projectId = null) {
       ncr_open_count: openNcrs.length,
       ncr_closed_count: closedNcrs.length,
       ncr_avg_closure_days: avgNcrClosureDays,
-      // العناصر التالية (MAR/SDR) لم تُبنَ بعد وتُعرض كأصفار حقيقية لحين تنفيذها
-      // في جزء لاحق (اعتماد المواد واعتماد الرسومات):
-      material_approval_requests_count: 0,
-      shop_drawing_requests_count: 0,
+      material_approval_requests_count: mars.length,
+      material_approval_requests_pending_count: marsPending.length,
+      material_approval_requests_approved_count: marsApproved.length,
+      shop_drawing_requests_count: sdrs.length,
+      shop_drawing_requests_pending_count: sdrsPending.length,
+      shop_drawing_requests_approved_count: sdrsApproved.length,
       capa_count: capas.length,
       capa_open_count: openCapas.length,
       capa_overdue_count: overdueCapas.length,
       quality_compliance_rate: complianceRate,
       recent_inspections: recentInspections,
       recent_ncrs: recentNcrs,
-      recent_approvals: [],
+      recent_approvals: recentApprovals,
       recent_reports: [],
     },
   };
@@ -1638,6 +1718,366 @@ function evaluateCapaEffectiveness(id, { effectiveness, evaluated_by = null, not
   return { success: true, data: record };
 }
 
+// ===================== إدارة اعتماد المواد (Material Approval Request - MAR) =====================
+// (القسم التاسع - الجزء 3/4)
+
+function validateMarPayload(payload, { partial = false } = {}) {
+  const required = ['project_id', 'material_name', 'supplier_name'];
+  if (!partial) {
+    for (const f of required) {
+      if (!payload[f] || String(payload[f]).trim() === '') {
+        throw new Error(`الحقل "${f}" مطلوب لإنشاء طلب اعتماد مواد (MAR)`);
+      }
+    }
+  }
+  if (payload.discipline && !MAR_DISCIPLINES.includes(payload.discipline)) {
+    throw new Error(`تخصص غير صالح: ${payload.discipline}`);
+  }
+}
+
+function createMar(payload) {
+  validateMarPayload(payload);
+  const store = loadStore();
+  const id = newId('MAR');
+  const code = generateCode(store, 'MAR');
+  const record = {
+    id,
+    code,
+    project_id: payload.project_id,
+    material_name: payload.material_name,
+    discipline: payload.discipline || 'other',
+    supplier_name: payload.supplier_name,
+    manufacturer: payload.manufacturer || null,
+    country_of_origin: payload.country_of_origin || null,
+    specification_reference: payload.specification_reference || null,
+    quality_certificates: Array.isArray(payload.quality_certificates) ? payload.quality_certificates : [],
+    test_results: Array.isArray(payload.test_results) ? payload.test_results : [],
+    attachments: Array.isArray(payload.attachments) ? payload.attachments : [],
+    notes: payload.notes || null,
+    status: 'draft',
+    review_comments: [],
+    decided_by: null,
+    decided_at: null,
+    change_log: [{ ts: nowISO(), action: 'created', by: payload.created_by || null }],
+    created_by: payload.created_by || null,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+  store.mars[id] = record;
+  audit(store, { action: 'create', entity: 'mar', entityId: id, projectId: record.project_id });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listMars({ projectId, status, discipline, search } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.mars);
+  if (projectId) items = items.filter(m => m.project_id === projectId);
+  if (status) items = items.filter(m => m.status === status);
+  if (discipline) items = items.filter(m => m.discipline === discipline);
+  if (search) {
+    const q = String(search).toLowerCase();
+    items = items.filter(m =>
+      (m.material_name || '').toLowerCase().includes(q) ||
+      (m.code || '').toLowerCase().includes(q) ||
+      (m.supplier_name || '').toLowerCase().includes(q)
+    );
+  }
+  items.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+  return { success: true, data: items };
+}
+
+function getMar(id) {
+  const store = loadStore();
+  const record = store.mars[id];
+  if (!record) throw new Error('طلب اعتماد المواد غير موجود');
+  return { success: true, data: record };
+}
+
+function updateMar(id, changes) {
+  const store = loadStore();
+  const record = store.mars[id];
+  if (!record) throw new Error('طلب اعتماد المواد غير موجود');
+  if (['approved', 'approved_with_comments'].includes(record.status)) {
+    throw new Error('لا يمكن تعديل طلب اعتماد مواد معتمد بالفعل');
+  }
+  validateMarPayload({ ...record, ...changes }, { partial: true });
+
+  const updatable = [
+    'material_name', 'discipline', 'supplier_name', 'manufacturer', 'country_of_origin',
+    'specification_reference', 'quality_certificates', 'test_results', 'attachments', 'notes',
+  ];
+  for (const f of updatable) {
+    if (changes[f] !== undefined) record[f] = changes[f];
+  }
+  // إذا كان الطلب مرفوضاً وجرى تعديله، يعود تلقائياً إلى مسودة لإعادة التقديم
+  if (record.status === 'rejected') record.status = 'draft';
+  record.change_log.push({ ts: nowISO(), action: 'updated', by: changes.updated_by || null, fields: Object.keys(changes) });
+  record.updated_at = nowISO();
+  store.mars[id] = record;
+  audit(store, { action: 'update', entity: 'mar', entityId: id, projectId: record.project_id, details: changes });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function deleteMar(id) {
+  const store = loadStore();
+  const record = store.mars[id];
+  if (!record) throw new Error('طلب اعتماد المواد غير موجود');
+  if (record.status !== 'draft') {
+    throw new Error('لا يمكن حذف طلب اعتماد مواد إلا وهو في حالة "مسودة"');
+  }
+  delete store.mars[id];
+  audit(store, { action: 'delete', entity: 'mar', entityId: id, projectId: record.project_id });
+  saveStore(store);
+  return { success: true, data: { id } };
+}
+
+// انتقال حالة MAR وفق دورة حياة حقيقية ومقيَّدة
+function transitionMar(id, { to_status, by = null, comment = '' } = {}) {
+  const store = loadStore();
+  const record = store.mars[id];
+  if (!record) throw new Error('طلب اعتماد المواد غير موجود');
+  if (!MAR_STATUSES.includes(to_status)) throw new Error(`حالة غير صالحة: ${to_status}`);
+
+  const allowed = MAR_ALLOWED_TRANSITIONS[record.status] || [];
+  if (!allowed.includes(to_status)) {
+    throw new Error(`لا يمكن الانتقال من الحالة "${MAR_STATUS_LABELS[record.status]}" إلى "${MAR_STATUS_LABELS[to_status]}"`);
+  }
+
+  // تحقق فعلي: لا يمكن الإرسال بدون شهادات جودة أو نتائج اختبارات على الأقل
+  if (to_status === 'submitted' && (record.quality_certificates || []).length === 0 && (record.test_results || []).length === 0) {
+    throw new Error('لا يمكن إرسال طلب اعتماد المواد قبل إرفاق شهادة جودة واحدة أو نتيجة اختبار واحدة على الأقل');
+  }
+  // تحقق فعلي: قرارات الاعتماد/الرفض تتطلب تحديد الجهة القارِرة
+  if (['approved', 'approved_with_comments', 'rejected'].includes(to_status) && !by) {
+    throw new Error('اسم الجهة المُعتمِدة (by) مطلوب لتسجيل قرار الاعتماد أو الرفض');
+  }
+
+  record.status = to_status;
+  if (['approved', 'approved_with_comments', 'rejected'].includes(to_status)) {
+    record.decided_by = by;
+    record.decided_at = nowISO();
+  }
+  if (comment) {
+    record.review_comments.push({ ts: nowISO(), by, comment, status: to_status });
+  }
+  record.change_log.push({ ts: nowISO(), action: `transition_${to_status}`, by, comment });
+  record.updated_at = nowISO();
+  store.mars[id] = record;
+  audit(store, { action: 'transition', entity: 'mar', entityId: id, projectId: record.project_id, details: { to_status, by } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// إضافة تعليق مراجعة دون تغيير الحالة (نقاش أثناء المراجعة)
+function addMarComment(id, { by = null, comment } = {}) {
+  const store = loadStore();
+  const record = store.mars[id];
+  if (!record) throw new Error('طلب اعتماد المواد غير موجود');
+  if (!comment || String(comment).trim() === '') throw new Error('نص التعليق مطلوب');
+  record.review_comments.push({ ts: nowISO(), by, comment, status: record.status });
+  record.change_log.push({ ts: nowISO(), action: 'comment_added', by });
+  record.updated_at = nowISO();
+  store.mars[id] = record;
+  audit(store, { action: 'comment', entity: 'mar', entityId: id, projectId: record.project_id, details: { by } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// ===================== إدارة اعتماد الرسومات (Shop Drawing Approval - SDR) =====================
+// (القسم التاسع - الجزء 3/4)
+
+function validateSdrPayload(payload, { partial = false } = {}) {
+  const required = ['project_id', 'drawing_title', 'drawing_number'];
+  if (!partial) {
+    for (const f of required) {
+      if (!payload[f] || String(payload[f]).trim() === '') {
+        throw new Error(`الحقل "${f}" مطلوب لإنشاء طلب اعتماد رسم (SDR)`);
+      }
+    }
+  }
+  if (payload.discipline && !SDR_DISCIPLINES.includes(payload.discipline)) {
+    throw new Error(`تخصص غير صالح: ${payload.discipline}`);
+  }
+}
+
+function createSdr(payload) {
+  validateSdrPayload(payload);
+  const store = loadStore();
+  const id = newId('SDR');
+  const code = generateCode(store, 'SDR');
+  const record = {
+    id,
+    code,
+    project_id: payload.project_id,
+    drawing_title: payload.drawing_title,
+    drawing_number: payload.drawing_number,
+    discipline: payload.discipline || 'other',
+    contractor: payload.contractor || null,
+    consultant: payload.consultant || null,
+    // سجل إصدارات الرسم: كل رفع جديد يُضاف كإصدار برقم تسلسلي، مع رابط الملف وتاريخ الرفع
+    versions: [{
+      version_no: 1,
+      file_url: payload.file_url || null,
+      uploaded_by: payload.created_by || null,
+      uploaded_at: nowISO(),
+    }],
+    current_version: 1,
+    comments: [],
+    status: 'draft',
+    decided_by: null,
+    decided_at: null,
+    change_log: [{ ts: nowISO(), action: 'created', by: payload.created_by || null }],
+    created_by: payload.created_by || null,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+  store.sdrs[id] = record;
+  audit(store, { action: 'create', entity: 'sdr', entityId: id, projectId: record.project_id });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listSdrs({ projectId, status, discipline, search } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.sdrs);
+  if (projectId) items = items.filter(s => s.project_id === projectId);
+  if (status) items = items.filter(s => s.status === status);
+  if (discipline) items = items.filter(s => s.discipline === discipline);
+  if (search) {
+    const q = String(search).toLowerCase();
+    items = items.filter(s =>
+      (s.drawing_title || '').toLowerCase().includes(q) ||
+      (s.drawing_number || '').toLowerCase().includes(q) ||
+      (s.code || '').toLowerCase().includes(q)
+    );
+  }
+  items.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+  return { success: true, data: items };
+}
+
+function getSdr(id) {
+  const store = loadStore();
+  const record = store.sdrs[id];
+  if (!record) throw new Error('طلب اعتماد الرسم غير موجود');
+  return { success: true, data: record };
+}
+
+function updateSdr(id, changes) {
+  const store = loadStore();
+  const record = store.sdrs[id];
+  if (!record) throw new Error('طلب اعتماد الرسم غير موجود');
+  if (['approved', 'approved_with_comments'].includes(record.status)) {
+    throw new Error('لا يمكن تعديل طلب اعتماد رسم معتمد بالفعل');
+  }
+  validateSdrPayload({ ...record, ...changes }, { partial: true });
+
+  const updatable = ['drawing_title', 'drawing_number', 'discipline', 'contractor', 'consultant'];
+  for (const f of updatable) {
+    if (changes[f] !== undefined) record[f] = changes[f];
+  }
+  record.change_log.push({ ts: nowISO(), action: 'updated', by: changes.updated_by || null, fields: Object.keys(changes) });
+  record.updated_at = nowISO();
+  store.sdrs[id] = record;
+  audit(store, { action: 'update', entity: 'sdr', entityId: id, projectId: record.project_id, details: changes });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function deleteSdr(id) {
+  const store = loadStore();
+  const record = store.sdrs[id];
+  if (!record) throw new Error('طلب اعتماد الرسم غير موجود');
+  if (record.status !== 'draft') {
+    throw new Error('لا يمكن حذف طلب اعتماد رسم إلا وهو في حالة "مسودة"');
+  }
+  delete store.sdrs[id];
+  audit(store, { action: 'delete', entity: 'sdr', entityId: id, projectId: record.project_id });
+  saveStore(store);
+  return { success: true, data: { id } };
+}
+
+// رفع إصدار جديد من الرسم (مقارنة الإصدارات وسجل الاعتمادات الفعلي عبر versions[])
+function uploadSdrVersion(id, { file_url, uploaded_by = null } = {}) {
+  const store = loadStore();
+  const record = store.sdrs[id];
+  if (!record) throw new Error('طلب اعتماد الرسم غير موجود');
+  if (!file_url) throw new Error('رابط ملف الرسم (file_url) مطلوب لرفع إصدار جديد');
+  if (['approved', 'approved_with_comments'].includes(record.status)) {
+    throw new Error('لا يمكن رفع إصدار جديد لطلب معتمد بالفعل؛ الرسم المعتمد هو النسخة النهائية');
+  }
+
+  const nextVersion = record.current_version + 1;
+  record.versions.push({ version_no: nextVersion, file_url, uploaded_by, uploaded_at: nowISO() });
+  record.current_version = nextVersion;
+  // رفع إصدار جديد بعد الرفض يعيد الطلب تلقائياً لحالة مسودة تمهيداً لإعادة الإرسال
+  if (record.status === 'rejected_resubmit') record.status = 'draft';
+  record.change_log.push({ ts: nowISO(), action: 'version_uploaded', by: uploaded_by, details: { version_no: nextVersion } });
+  record.updated_at = nowISO();
+  store.sdrs[id] = record;
+  audit(store, { action: 'upload_version', entity: 'sdr', entityId: id, projectId: record.project_id, details: { version_no: nextVersion } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// إضافة تعليق مراجعة على رسم (مرتبط برقم إصدار محدد)
+function addSdrComment(id, { by = null, comment, version_no = null } = {}) {
+  const store = loadStore();
+  const record = store.sdrs[id];
+  if (!record) throw new Error('طلب اعتماد الرسم غير موجود');
+  if (!comment || String(comment).trim() === '') throw new Error('نص التعليق مطلوب');
+  record.comments.push({
+    ts: nowISO(), by, comment, version_no: version_no || record.current_version, status: record.status,
+  });
+  record.change_log.push({ ts: nowISO(), action: 'comment_added', by });
+  record.updated_at = nowISO();
+  store.sdrs[id] = record;
+  audit(store, { action: 'comment', entity: 'sdr', entityId: id, projectId: record.project_id, details: { by } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// انتقال حالة SDR وفق دورة حياة حقيقية ومقيَّدة (الاعتماد الإلكتروني وسجل الاعتمادات)
+function transitionSdr(id, { to_status, by = null, comment = '' } = {}) {
+  const store = loadStore();
+  const record = store.sdrs[id];
+  if (!record) throw new Error('طلب اعتماد الرسم غير موجود');
+  if (!SDR_STATUSES.includes(to_status)) throw new Error(`حالة غير صالحة: ${to_status}`);
+
+  const allowed = SDR_ALLOWED_TRANSITIONS[record.status] || [];
+  if (!allowed.includes(to_status)) {
+    throw new Error(`لا يمكن الانتقال من الحالة "${SDR_STATUS_LABELS[record.status]}" إلى "${SDR_STATUS_LABELS[to_status]}"`);
+  }
+
+  // تحقق فعلي: لا يمكن الإرسال بدون ملف رسم مرفوع فعلياً للإصدار الحالي
+  if (to_status === 'submitted') {
+    const currentVersion = record.versions.find(v => v.version_no === record.current_version);
+    if (!currentVersion || !currentVersion.file_url) {
+      throw new Error('لا يمكن إرسال طلب اعتماد الرسم قبل رفع ملف الرسم للإصدار الحالي');
+    }
+  }
+  // تحقق فعلي: قرارات الاعتماد/الرفض تتطلب تحديد الجهة القارِرة (اعتماد إلكتروني)
+  if (['approved', 'approved_with_comments', 'rejected_resubmit'].includes(to_status) && !by) {
+    throw new Error('اسم الجهة المُعتمِدة (by) مطلوب لتسجيل قرار الاعتماد أو الرفض');
+  }
+
+  record.status = to_status;
+  if (['approved', 'approved_with_comments', 'rejected_resubmit'].includes(to_status)) {
+    record.decided_by = by;
+    record.decided_at = nowISO();
+  }
+  if (comment) {
+    record.comments.push({ ts: nowISO(), by, comment, version_no: record.current_version, status: to_status });
+  }
+  record.change_log.push({ ts: nowISO(), action: `transition_${to_status}`, by, comment });
+  record.updated_at = nowISO();
+  store.sdrs[id] = record;
+  audit(store, { action: 'transition', entity: 'sdr', entityId: id, projectId: record.project_id, details: { to_status, by } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
 module.exports = {
   // ثوابت - الجزء 1
   QUALITY_PLAN_STATUSES, QUALITY_PLAN_STATUS_LABELS,
@@ -1661,6 +2101,12 @@ module.exports = {
   CAPA_STATUSES, CAPA_STATUS_LABELS, CAPA_ALLOWED_TRANSITIONS,
   CAPA_TYPES, CAPA_TYPE_LABELS,
   CAPA_EFFECTIVENESS, CAPA_EFFECTIVENESS_LABELS,
+
+  // ثوابت - الجزء 3 (MAR / SDR)
+  MAR_STATUSES, MAR_STATUS_LABELS, MAR_ALLOWED_TRANSITIONS,
+  MAR_DISCIPLINES, MAR_DISCIPLINE_LABELS,
+  SDR_STATUSES, SDR_STATUS_LABELS, SDR_ALLOWED_TRANSITIONS,
+  SDR_DISCIPLINES, SDR_DISCIPLINE_LABELS,
 
   // لوحة التحكم
   getDashboard,
@@ -1697,6 +2143,13 @@ module.exports = {
   // الإجراءات التصحيحية والوقائية CAPA
   createCapa, listCapas, getCapa, updateCapa, deleteCapa,
   transitionCapa, verifyCapa, evaluateCapaEffectiveness,
+
+  // اعتماد المواد MAR
+  createMar, listMars, getMar, updateMar, deleteMar, transitionMar, addMarComment,
+
+  // اعتماد الرسومات SDR
+  createSdr, listSdrs, getSdr, updateSdr, deleteSdr,
+  uploadSdrVersion, addSdrComment, transitionSdr,
 
   // للاستخدام الداخلي من أجزاء لاحقة (4/4)
   loadStore, saveStore, audit, generateCode, newId, nowISO, r2,
