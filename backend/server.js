@@ -3564,7 +3564,9 @@ const API_HANDLERS = {
   // ===================================================================
 
   '/api/qms/reference-data': {
-    GET: async () => ({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return ({
       success: true,
       data: {
         quality_plan_statuses: QMS.QUALITY_PLAN_STATUSES,
@@ -3577,79 +3579,112 @@ const API_HANDLERS = {
         ir_disciplines: QMS.IR_DISCIPLINES,
         ir_discipline_labels: QMS.IR_DISCIPLINE_LABELS,
       },
-    }),
+    });
+    },
+  },
+
+  // مرجعية معيار ISO 9001:2015 (بنود المعيار + ربطها بكيانات القسم فعلياً)
+  '/api/qms/iso9001': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return { success: true, data: QMS.getIso9001Reference() };
+    },
   },
 
   '/api/qms/dashboard': {
-    GET: async (_body, query) => QMS.getDashboard(query?.projectId || null),
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.getDashboard(query?.projectId || null);
+    },
   },
 
   '/api/qms/quality-plans': {
-    GET: async (_body, query) => QMS.listQualityPlans({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listQualityPlans({
       projectId: query?.projectId, status: query?.status, search: query?.search,
-    }),
-    POST: async (body) => QMS.createQualityPlan(body),
+    });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createQualityPlan(body);
+    },
   },
   '/api/qms/quality-plans/get': {
-    GET: async (_body, query) => {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
       if (!query?.id) throw new Error('معرّف الخطة (id) مطلوب');
       return QMS.getQualityPlan(query.id);
     },
   },
   '/api/qms/quality-plans/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف الخطة (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateQualityPlan(id, rest);
     },
   },
   '/api/qms/quality-plans/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف الخطة (id) مطلوب');
       return QMS.deleteQualityPlan(body.id);
     },
   },
   '/api/qms/quality-plans/approve': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id) throw new Error('معرّف الخطة (id) مطلوب');
       return QMS.approveQualityPlan(body.id, { approved_by: body.approved_by || null });
     },
   },
 
   '/api/qms/inspection-requests': {
-    GET: async (_body, query) => QMS.listInspectionRequests({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listInspectionRequests({
       projectId: query?.projectId, status: query?.status, result: query?.result,
       discipline: query?.discipline, search: query?.search,
-    }),
-    POST: async (body) => QMS.createInspectionRequest(body),
+    });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createInspectionRequest(body);
+    },
   },
   '/api/qms/inspection-requests/get': {
-    GET: async (_body, query) => {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
       if (!query?.id) throw new Error('معرّف طلب الفحص (id) مطلوب');
       return QMS.getInspectionRequest(query.id);
     },
   },
   '/api/qms/inspection-requests/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف طلب الفحص (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateInspectionRequest(id, rest);
     },
   },
   '/api/qms/inspection-requests/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف طلب الفحص (id) مطلوب');
       return QMS.deleteInspectionRequest(body.id);
     },
   },
   '/api/qms/inspection-requests/transition': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id || !body.to_status) throw new Error('معرّف الطلب (id) والحالة الجديدة (to_status) مطلوبان');
       return QMS.transitionInspectionRequest(body.id, { to_status: body.to_status, by: body.by || null });
     },
   },
   '/api/qms/inspection-requests/record-result': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id || !body.result) throw new Error('معرّف الطلب (id) والنتيجة (result) مطلوبان');
       return QMS.recordInspectionResult(body.id, {
         result: body.result, notes: body.notes || '', inspected_by: body.inspected_by || null, photos: body.photos || [],
@@ -3657,7 +3692,8 @@ const API_HANDLERS = {
     },
   },
   '/api/qms/inspection-requests/sign': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id || !body.party || !body.name) throw new Error('معرّف الطلب (id) والطرف (party) والاسم (name) مطلوبون');
       return QMS.signInspectionRequest(body.id, { party: body.party, name: body.name, role: body.role || null });
     },
@@ -3668,7 +3704,9 @@ const API_HANDLERS = {
   // ===================================================================
 
   '/api/qms/part2/reference-data': {
-    GET: async () => ({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return ({
       success: true,
       data: {
         material_categories: QMS.MATERIAL_CATEGORIES,
@@ -3687,38 +3725,49 @@ const API_HANDLERS = {
         itp_statuses: QMS.ITP_STATUSES,
         itp_status_labels: QMS.ITP_STATUS_LABELS,
       },
-    }),
+    });
+    },
   },
 
   // ----- اختبارات المواد -----
   '/api/qms/material-tests': {
-    GET: async (_body, query) => QMS.listMaterialTests({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listMaterialTests({
       projectId: query?.projectId, materialCategory: query?.materialCategory,
       status: query?.status, result: query?.result, labId: query?.labId, search: query?.search,
-    }),
-    POST: async (body) => QMS.createMaterialTest(body),
+    });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createMaterialTest(body);
+    },
   },
   '/api/qms/material-tests/get': {
-    GET: async (_body, query) => {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
       if (!query?.id) throw new Error('معرّف الاختبار (id) مطلوب');
       return QMS.getMaterialTest(query.id);
     },
   },
   '/api/qms/material-tests/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف الاختبار (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateMaterialTest(id, rest);
     },
   },
   '/api/qms/material-tests/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف الاختبار (id) مطلوب');
       return QMS.deleteMaterialTest(body.id);
     },
   },
   '/api/qms/material-tests/record-result': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف الاختبار (id) مطلوب');
       return QMS.recordMaterialTestResult(body.id, {
         result_value: body.result_value != null ? body.result_value : null,
@@ -3728,7 +3777,8 @@ const API_HANDLERS = {
     },
   },
   '/api/qms/material-tests/cancel': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف الاختبار (id) مطلوب');
       return QMS.cancelMaterialTest(body.id, { by: body.by || null, reason: body.reason || '' });
     },
@@ -3736,24 +3786,33 @@ const API_HANDLERS = {
 
   // ----- إدارة المختبر: المختبرات -----
   '/api/qms/labs': {
-    GET: async (_body, query) => QMS.listLabs({ search: query?.search }),
-    POST: async (body) => QMS.createLab(body),
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listLabs({ search: query?.search });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createLab(body);
+    },
   },
   '/api/qms/labs/get': {
-    GET: async (_body, query) => {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
       if (!query?.id) throw new Error('معرّف المختبر (id) مطلوب');
       return QMS.getLab(query.id);
     },
   },
   '/api/qms/labs/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف المختبر (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateLab(id, rest);
     },
   },
   '/api/qms/labs/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف المختبر (id) مطلوب');
       return QMS.deleteLab(body.id);
     },
@@ -3761,18 +3820,26 @@ const API_HANDLERS = {
 
   // ----- إدارة المختبر: الفنيون -----
   '/api/qms/lab-technicians': {
-    GET: async (_body, query) => QMS.listLabTechnicians({ labId: query?.labId }),
-    POST: async (body) => QMS.createLabTechnician(body),
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listLabTechnicians({ labId: query?.labId });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createLabTechnician(body);
+    },
   },
   '/api/qms/lab-technicians/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف الفني (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateLabTechnician(id, rest);
     },
   },
   '/api/qms/lab-technicians/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف الفني (id) مطلوب');
       return QMS.deleteLabTechnician(body.id);
     },
@@ -3780,18 +3847,26 @@ const API_HANDLERS = {
 
   // ----- إدارة المختبر: الأجهزة والمعايرة -----
   '/api/qms/lab-equipment': {
-    GET: async (_body, query) => QMS.listLabEquipment({ labId: query?.labId, status: query?.status }),
-    POST: async (body) => QMS.createLabEquipment(body),
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listLabEquipment({ labId: query?.labId, status: query?.status });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createLabEquipment(body);
+    },
   },
   '/api/qms/lab-equipment/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف الجهاز (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateLabEquipment(id, rest);
     },
   },
   '/api/qms/lab-equipment/calibrate': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id) throw new Error('معرّف الجهاز (id) مطلوب');
       return QMS.recordEquipmentCalibration(body.id, {
         calibration_date: body.calibration_date || null,
@@ -3801,7 +3876,8 @@ const API_HANDLERS = {
     },
   },
   '/api/qms/lab-equipment/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف الجهاز (id) مطلوب');
       return QMS.deleteLabEquipment(body.id);
     },
@@ -3809,33 +3885,43 @@ const API_HANDLERS = {
 
   // ----- نقاط الفحص (ITP) -----
   '/api/qms/itp': {
-    GET: async (_body, query) => QMS.listItpItems({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listItpItems({
       projectId: query?.projectId, status: query?.status,
       inspectionType: query?.inspectionType, responsibleParty: query?.responsibleParty, search: query?.search,
-    }),
-    POST: async (body) => QMS.createItpItem(body),
+    });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createItpItem(body);
+    },
   },
   '/api/qms/itp/get': {
-    GET: async (_body, query) => {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
       if (!query?.id) throw new Error('معرّف نقطة الفحص (id) مطلوب');
       return QMS.getItpItem(query.id);
     },
   },
   '/api/qms/itp/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف نقطة الفحص (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateItpItem(id, rest);
     },
   },
   '/api/qms/itp/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف نقطة الفحص (id) مطلوب');
       return QMS.deleteItpItem(body.id);
     },
   },
   '/api/qms/itp/decide': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id || !body.status) throw new Error('معرّف نقطة الفحص (id) والنتيجة (status) مطلوبان');
       return QMS.decideItpItem(body.id, { status: body.status, decided_by: body.decided_by || null, notes: body.notes || '' });
     },
@@ -3847,7 +3933,9 @@ const API_HANDLERS = {
   // ===================================================================
 
   '/api/qms/part3/reference-data': {
-    GET: async () => ({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return ({
       success: true,
       data: {
         ncr_statuses: QMS.NCR_STATUSES,
@@ -3865,38 +3953,49 @@ const API_HANDLERS = {
         capa_effectiveness: QMS.CAPA_EFFECTIVENESS,
         capa_effectiveness_labels: QMS.CAPA_EFFECTIVENESS_LABELS,
       },
-    }),
+    });
+    },
   },
 
   // ----- حالات عدم المطابقة (NCR) -----
   '/api/qms/ncrs': {
-    GET: async (_body, query) => QMS.listNcrs({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listNcrs({
       projectId: query?.projectId, status: query?.status,
       severity: query?.severity, discipline: query?.discipline, search: query?.search,
-    }),
-    POST: async (body) => QMS.createNcr(body),
+    });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createNcr(body);
+    },
   },
   '/api/qms/ncrs/get': {
-    GET: async (_body, query) => {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
       if (!query?.id) throw new Error('معرّف حالة عدم المطابقة (id) مطلوب');
       return QMS.getNcr(query.id);
     },
   },
   '/api/qms/ncrs/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف حالة عدم المطابقة (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateNcr(id, rest);
     },
   },
   '/api/qms/ncrs/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف حالة عدم المطابقة (id) مطلوب');
       return QMS.deleteNcr(body.id);
     },
   },
   '/api/qms/ncrs/transition': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id || !body.to_status) throw new Error('معرّف الحالة (id) والحالة الجديدة (to_status) مطلوبان');
       return QMS.transitionNcr(body.id, { to_status: body.to_status, by: body.by || null, notes: body.notes || '' });
     },
@@ -3904,46 +4003,58 @@ const API_HANDLERS = {
 
   // ----- الإجراءات التصحيحية والوقائية (CAPA) -----
   '/api/qms/capas': {
-    GET: async (_body, query) => QMS.listCapas({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listCapas({
       projectId: query?.projectId, ncrId: query?.ncrId, status: query?.status,
       type: query?.type, responsiblePerson: query?.responsiblePerson,
       overdueOnly: query?.overdueOnly === 'true', search: query?.search,
-    }),
-    POST: async (body) => QMS.createCapa(body),
+    });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createCapa(body);
+    },
   },
   '/api/qms/capas/get': {
-    GET: async (_body, query) => {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
       if (!query?.id) throw new Error('معرّف الإجراء (id) مطلوب');
       return QMS.getCapa(query.id);
     },
   },
   '/api/qms/capas/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف الإجراء (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateCapa(id, rest);
     },
   },
   '/api/qms/capas/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف الإجراء (id) مطلوب');
       return QMS.deleteCapa(body.id);
     },
   },
   '/api/qms/capas/transition': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id || !body.to_status) throw new Error('معرّف الإجراء (id) والحالة الجديدة (to_status) مطلوبان');
       return QMS.transitionCapa(body.id, { to_status: body.to_status, by: body.by || null });
     },
   },
   '/api/qms/capas/verify': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id || !body.verified_by) throw new Error('معرّف الإجراء (id) والجهة المتحقِّقة (verified_by) مطلوبان');
       return QMS.verifyCapa(body.id, { verified_by: body.verified_by, notes: body.notes || '' });
     },
   },
   '/api/qms/capas/evaluate-effectiveness': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id || !body.effectiveness) throw new Error('معرّف الإجراء (id) وتقييم الفاعلية (effectiveness) مطلوبان');
       return QMS.evaluateCapaEffectiveness(body.id, {
         effectiveness: body.effectiveness, evaluated_by: body.evaluated_by || null, notes: body.notes || '',
@@ -3958,7 +4069,9 @@ const API_HANDLERS = {
   // ===================================================================
 
   '/api/qms/part3b/reference-data': {
-    GET: async () => ({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return ({
       success: true,
       data: {
         mar_statuses: QMS.MAR_STATUSES,
@@ -3972,44 +4085,56 @@ const API_HANDLERS = {
         sdr_disciplines: QMS.SDR_DISCIPLINES,
         sdr_discipline_labels: QMS.SDR_DISCIPLINE_LABELS,
       },
-    }),
+    });
+    },
   },
 
   // ----- اعتماد المواد (MAR) -----
   '/api/qms/mars': {
-    GET: async (_body, query) => QMS.listMars({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listMars({
       projectId: query?.projectId, status: query?.status,
       discipline: query?.discipline, search: query?.search,
-    }),
-    POST: async (body) => QMS.createMar(body),
+    });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createMar(body);
+    },
   },
   '/api/qms/mars/get': {
-    GET: async (_body, query) => {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
       if (!query?.id) throw new Error('معرّف طلب اعتماد المواد (id) مطلوب');
       return QMS.getMar(query.id);
     },
   },
   '/api/qms/mars/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف طلب اعتماد المواد (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateMar(id, rest);
     },
   },
   '/api/qms/mars/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف طلب اعتماد المواد (id) مطلوب');
       return QMS.deleteMar(body.id);
     },
   },
   '/api/qms/mars/transition': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id || !body.to_status) throw new Error('معرّف الطلب (id) والحالة الجديدة (to_status) مطلوبان');
       return QMS.transitionMar(body.id, { to_status: body.to_status, by: body.by || null, comment: body.comment || '' });
     },
   },
   '/api/qms/mars/comment': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id || !body.comment) throw new Error('معرّف الطلب (id) ونص التعليق (comment) مطلوبان');
       return QMS.addMarComment(body.id, { by: body.by || null, comment: body.comment });
     },
@@ -4017,45 +4142,57 @@ const API_HANDLERS = {
 
   // ----- اعتماد الرسومات (SDR) -----
   '/api/qms/sdrs': {
-    GET: async (_body, query) => QMS.listSdrs({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS.listSdrs({
       projectId: query?.projectId, status: query?.status,
       discipline: query?.discipline, search: query?.search,
-    }),
-    POST: async (body) => QMS.createSdr(body),
+    });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMS.createSdr(body);
+    },
   },
   '/api/qms/sdrs/get': {
-    GET: async (_body, query) => {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
       if (!query?.id) throw new Error('معرّف طلب اعتماد الرسم (id) مطلوب');
       return QMS.getSdr(query.id);
     },
   },
   '/api/qms/sdrs/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف طلب اعتماد الرسم (id) مطلوب');
       const { id, ...rest } = body;
       return QMS.updateSdr(id, rest);
     },
   },
   '/api/qms/sdrs/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف طلب اعتماد الرسم (id) مطلوب');
       return QMS.deleteSdr(body.id);
     },
   },
   '/api/qms/sdrs/upload-version': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id || !body.file_url) throw new Error('معرّف الطلب (id) ورابط الملف (file_url) مطلوبان');
       return QMS.uploadSdrVersion(body.id, { file_url: body.file_url, uploaded_by: body.uploaded_by || null });
     },
   },
   '/api/qms/sdrs/comment': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id || !body.comment) throw new Error('معرّف الطلب (id) ونص التعليق (comment) مطلوبان');
       return QMS.addSdrComment(body.id, { by: body.by || null, comment: body.comment, version_no: body.version_no || null });
     },
   },
   '/api/qms/sdrs/transition': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id || !body.to_status) throw new Error('معرّف الطلب (id) والحالة الجديدة (to_status) مطلوبان');
       return QMS.transitionSdr(body.id, { to_status: body.to_status, by: body.by || null, comment: body.comment || '' });
     },
@@ -4067,7 +4204,9 @@ const API_HANDLERS = {
   // ===================================================================
 
   '/api/qms/part5/reference-data': {
-    GET: async () => ({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return ({
       success: true,
       data: {
         document_types: QMSX.DOCUMENT_TYPES,
@@ -4076,38 +4215,49 @@ const API_HANDLERS = {
         document_status_labels: QMSX.DOCUMENT_STATUS_LABELS,
         validity_state_labels: QMSX.VALIDITY_STATE_LABELS,
       },
-    }),
+    });
+    },
   },
 
   // ----- إدارة الوثائق -----
   '/api/qms/documents': {
-    GET: async (_body, query) => QMSX.listDocuments({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMSX.listDocuments({
       projectId: query?.projectId, docType: query?.docType, status: query?.status,
       validityState: query?.validityState, search: query?.search,
-    }),
-    POST: async (body) => QMSX.createDocument(body),
+    });
+    },
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'create');
+      return QMSX.createDocument(body);
+    },
   },
   '/api/qms/documents/get': {
-    GET: async (_body, query) => {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
       if (!query?.id) throw new Error('معرّف الوثيقة (id) مطلوب');
       return QMSX.getDocument(query.id);
     },
   },
   '/api/qms/documents/update': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id) throw new Error('معرّف الوثيقة (id) مطلوب');
       const { id, ...rest } = body;
       return QMSX.updateDocument(id, rest);
     },
   },
   '/api/qms/documents/delete': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'delete');
       if (!body.id) throw new Error('معرّف الوثيقة (id) مطلوب');
       return QMSX.deleteDocument(body.id);
     },
   },
   '/api/qms/documents/upload-version': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'update');
       if (!body.id || !body.file_url) throw new Error('معرّف الوثيقة (id) ورابط الملف (file_url) مطلوبان');
       return QMSX.uploadDocumentVersion(body.id, {
         file_url: body.file_url, uploaded_by: body.uploaded_by || null, notes: body.notes || null,
@@ -4115,21 +4265,28 @@ const API_HANDLERS = {
     },
   },
   '/api/qms/documents/archive': {
-    POST: async (body) => {
+    POST: async (body, query, req) => {
+      requirePermission(req, 'qms', 'approve');
       if (!body.id) throw new Error('معرّف الوثيقة (id) مطلوب');
       return QMSX.archiveDocument(body.id, { by: body.by || null });
     },
   },
   '/api/qms/documents/expiring': {
-    GET: async (_body, query) => QMSX.getExpiringDocuments({
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMSX.getExpiringDocuments({
       projectId: query?.projectId,
       withinDays: query?.withinDays ? Number(query.withinDays) : 30,
-    }),
+    });
+    },
   },
 
   // ----- مؤشرات الأداء (KPIs) -----
   '/api/qms/kpis': {
-    GET: async (_body, query) => QMSX.getQualityKpis({ projectId: query?.projectId }),
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return QMSX.getQualityKpis({ projectId: query?.projectId });
+    },
   },
 
   // ===================================================================
@@ -4146,6 +4303,49 @@ const API_HANDLERS = {
     GET: async (_body, query, req) => {
       requirePermission(req, 'qms', 'view');
       return { success: true, data: QMS_ALERTS.getAlertsSummary({ projectId: query?.projectId || null }) };
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم التاسع - سجل تدقيق الجودة (QMS Audit Log) ==============
+  // ===================================================================
+  // استعلام سجل تدقيق الجودة المحلي (auditLog داخل qms.json) - وهو أيضاً
+  // مُسجَّل تلقائياً ضمن السجل العام الموحّد للمنصة (/api/biz/security/audit-log)
+  // عبر كل استدعاء audit() داخلي في qmsManagement.js. صلاحية العرض هنا أعلى من
+  // 'view' العادية (manage) لأن سجل التدقيق يكشف من قام بماذا وعلى أي كيان.
+  '/api/qms/audit-log': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'manage');
+      return QMS.getAuditLog({
+        projectId: query?.projectId || null,
+        entity: query?.entity || null,
+        action: query?.action || null,
+        entityId: query?.entityId || null,
+        limit: query?.limit ? Number(query.limit) : 200,
+      });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم التاسع - نسخ احتياطي واستعادة خاصة بقسم الجودة =========
+  // ===================================================================
+  // منفصلة عن /api/biz/security/backup العام (الذي يشمل qms.json ضمنياً مع كل
+  // ملفات المنصة الأخرى)؛ هذه المسارات تسمح بنسخ/استعادة بيانات الجودة وحدها.
+  '/api/qms/backup': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'qms', 'manage');
+      return QMS.listQmsBackups();
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'manage');
+      return QMS.createQmsBackup({ label: body?.label || null, by: body?.by || null });
+    },
+  },
+  '/api/qms/backup/restore': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'manage');
+      if (!body?.fileName) throw new Error('اسم ملف النسخة الاحتياطية (fileName) مطلوب');
+      return QMS.restoreQmsBackup(body.fileName, { by: body?.by || null });
     },
   },
 
@@ -4327,7 +4527,10 @@ const API_HANDLERS = {
   // ===== القسم التاسع - البنود المتبقية: الذكاء الاصطناعي =============
   // ===================================================================
   '/api/qms/ai/available': {
-    GET: async () => ({ success: true, available: QMS_AI.isAIAvailable() }),
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return ({ success: true, available: QMS_AI.isAIAvailable() });
+    },
   },
   '/api/qms/ai/analyze-test-results': {
     POST: async (body, _query, req) => {
