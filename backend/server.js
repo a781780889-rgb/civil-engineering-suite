@@ -3943,6 +3943,116 @@ const API_HANDLERS = {
       });
     },
   },
+
+  // ===================================================================
+  // ===== القسم التاسع (الجزء 3/4 تكملة) - إدارة الجودة (QMS):
+  // ===== اعتماد المواد (Material Approval Request - MAR) +
+  // ===== اعتماد الرسومات (Shop Drawing Approval - SDR)
+  // ===================================================================
+
+  '/api/qms/part3b/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        mar_statuses: QMS.MAR_STATUSES,
+        mar_status_labels: QMS.MAR_STATUS_LABELS,
+        mar_allowed_transitions: QMS.MAR_ALLOWED_TRANSITIONS,
+        mar_disciplines: QMS.MAR_DISCIPLINES,
+        mar_discipline_labels: QMS.MAR_DISCIPLINE_LABELS,
+        sdr_statuses: QMS.SDR_STATUSES,
+        sdr_status_labels: QMS.SDR_STATUS_LABELS,
+        sdr_allowed_transitions: QMS.SDR_ALLOWED_TRANSITIONS,
+        sdr_disciplines: QMS.SDR_DISCIPLINES,
+        sdr_discipline_labels: QMS.SDR_DISCIPLINE_LABELS,
+      },
+    }),
+  },
+
+  // ----- اعتماد المواد (MAR) -----
+  '/api/qms/mars': {
+    GET: async (_body, query) => QMS.listMars({
+      projectId: query?.projectId, status: query?.status,
+      discipline: query?.discipline, search: query?.search,
+    }),
+    POST: async (body) => QMS.createMar(body),
+  },
+  '/api/qms/mars/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف طلب اعتماد المواد (id) مطلوب');
+      return QMS.getMar(query.id);
+    },
+  },
+  '/api/qms/mars/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف طلب اعتماد المواد (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateMar(id, rest);
+    },
+  },
+  '/api/qms/mars/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف طلب اعتماد المواد (id) مطلوب');
+      return QMS.deleteMar(body.id);
+    },
+  },
+  '/api/qms/mars/transition': {
+    POST: async (body) => {
+      if (!body.id || !body.to_status) throw new Error('معرّف الطلب (id) والحالة الجديدة (to_status) مطلوبان');
+      return QMS.transitionMar(body.id, { to_status: body.to_status, by: body.by || null, comment: body.comment || '' });
+    },
+  },
+  '/api/qms/mars/comment': {
+    POST: async (body) => {
+      if (!body.id || !body.comment) throw new Error('معرّف الطلب (id) ونص التعليق (comment) مطلوبان');
+      return QMS.addMarComment(body.id, { by: body.by || null, comment: body.comment });
+    },
+  },
+
+  // ----- اعتماد الرسومات (SDR) -----
+  '/api/qms/sdrs': {
+    GET: async (_body, query) => QMS.listSdrs({
+      projectId: query?.projectId, status: query?.status,
+      discipline: query?.discipline, search: query?.search,
+    }),
+    POST: async (body) => QMS.createSdr(body),
+  },
+  '/api/qms/sdrs/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف طلب اعتماد الرسم (id) مطلوب');
+      return QMS.getSdr(query.id);
+    },
+  },
+  '/api/qms/sdrs/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف طلب اعتماد الرسم (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateSdr(id, rest);
+    },
+  },
+  '/api/qms/sdrs/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف طلب اعتماد الرسم (id) مطلوب');
+      return QMS.deleteSdr(body.id);
+    },
+  },
+  '/api/qms/sdrs/upload-version': {
+    POST: async (body) => {
+      if (!body.id || !body.file_url) throw new Error('معرّف الطلب (id) ورابط الملف (file_url) مطلوبان');
+      return QMS.uploadSdrVersion(body.id, { file_url: body.file_url, uploaded_by: body.uploaded_by || null });
+    },
+  },
+  '/api/qms/sdrs/comment': {
+    POST: async (body) => {
+      if (!body.id || !body.comment) throw new Error('معرّف الطلب (id) ونص التعليق (comment) مطلوبان');
+      return QMS.addSdrComment(body.id, { by: body.by || null, comment: body.comment, version_no: body.version_no || null });
+    },
+  },
+  '/api/qms/sdrs/transition': {
+    POST: async (body) => {
+      if (!body.id || !body.to_status) throw new Error('معرّف الطلب (id) والحالة الجديدة (to_status) مطلوبان');
+      return QMS.transitionSdr(body.id, { to_status: body.to_status, by: body.by || null, comment: body.comment || '' });
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
