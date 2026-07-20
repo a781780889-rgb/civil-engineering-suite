@@ -57,6 +57,7 @@ const QMS_CHARTS = require('./utils/qmsCharts');
 const QMS_AI = require('./utils/qmsAI');
 const QMS_APPROVALS = require('./utils/qmsApprovals');
 const QMS_SUPPLY = require('./utils/qmsSupplyLink');
+const SURVEY = require('./utils/surveyManagement');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -4672,6 +4673,81 @@ const API_HANDLERS = {
       return QMS_SUPPLY.getStockQualityStatusReport({ projectId: query?.projectId || null });
     },
   },
+
+  // ===================== القسم العاشر - تطبيق المساحة (الجزء 1/6) =====================
+  '/api/survey/reference-data': {
+    GET: async () => SURVEY.getReferenceData(),
+  },
+  '/api/survey/dashboard': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.getDashboard();
+    },
+  },
+  '/api/survey/projects': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.listProjects(query);
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      return SURVEY.createProject(body);
+    },
+  },
+  '/api/survey/projects/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY.getProject(query.id) };
+    },
+  },
+  '/api/survey/projects/update': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'update');
+      return SURVEY.updateProject(body.id, body);
+    },
+  },
+  '/api/survey/projects/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'delete');
+      return SURVEY.deleteProject(body.id);
+    },
+  },
+  '/api/survey/coordinate-systems': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.listCoordinateSystems(query);
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      return SURVEY.createCoordinateSystem(body);
+    },
+  },
+  '/api/survey/coordinate-systems/set-default': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'update');
+      return SURVEY.setDefaultCoordinateSystem(body);
+    },
+  },
+  '/api/survey/coordinate-systems/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'delete');
+      return SURVEY.deleteCoordinateSystem(body);
+    },
+  },
+  '/api/survey/coordinates/convert': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY.convertCoordinates(body) };
+    },
+  },
+  '/api/survey/coordinates/validate': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      const { system_type, input } = body;
+      const result = system_type === 'UTM' ? SURVEY.validateUTM(input) : SURVEY.validateGeographic(input);
+      return { success: true, data: result };
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -4743,5 +4819,12 @@ server.listen(PORT, () => {
     EQI.ensureEquipmentRolesSeeded();
   } catch (e) {
     console.error('⚠️  تعذّرت تهيئة أدوار قسم إدارة المعدات:', e.message);
+  }
+
+  // الجزء الأول (1/6) من القسم العاشر: زرع أدوار قسم المساحة عند أول تشغيل
+  try {
+    SURVEY.ensureSurveyRolesSeeded();
+  } catch (e) {
+    console.error('⚠️  تعذّرت تهيئة أدوار قسم المساحة:', e.message);
   }
 });
