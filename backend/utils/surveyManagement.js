@@ -520,11 +520,19 @@ function getDashboard() {
 
   const recentAudit = store.auditLog.slice(-10).reverse();
 
+  const recentMeasurements = [...controlPoints]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 5)
+    .map((p) => ({
+      id: p.id, point_number: p.point_number, point_type: p.point_type,
+      easting: p.easting, northing: p.northing, elevation: p.elevation, created_at: p.created_at,
+    }));
+
   return {
     success: true,
     data: {
       total_projects: projects.length,
-      total_control_points: controlPoints.length,      // سيُملأ فعلياً في الجزء الثاني
+      total_control_points: controlPoints.length,
       total_stakeout_points: 0,                         // الجزء الثالث
       total_devices: 0,                                 // الجزء الرابع
       total_maps: Object.keys(store.maps).length,       // الجزء الخامس
@@ -534,7 +542,7 @@ function getDashboard() {
       projects_by_status: projectsByStatus,
       total_coordinate_systems: coordinateSystems.length,
       recent_projects: recentProjects,
-      recent_measurements: [],  // سيُملأ فعلياً في الجزء الثاني (نقاط الرفع)
+      recent_measurements: recentMeasurements,
       recent_reports: [],       // الجزء السادس
       devices_status: [],       // الجزء الرابع
       recent_activity: recentAudit,
@@ -555,6 +563,9 @@ function getReferenceData() {
       supported_coordinate_systems: SUPPORTED_SYSTEMS,
       supported_datums: SUPPORTED_DATUMS,
       utm_zone_count: 60,
+      control_point_types: CONTROL_POINT_TYPES,
+      control_point_type_labels_ar: CONTROL_POINT_TYPE_LABELS_AR,
+      survey_calc_types: ['distance', 'bearing', 'horizontal_angle', 'slope', 'closed_area', 'traverse_closure'],
     },
   };
 }
@@ -670,6 +681,412 @@ function exportCoordinateSystemsToCSV({ project_id }) {
   return { success: true, data: { url: `/reports/${filename}`, count: items.length } };
 }
 
+// ==================================================================================
+// ==================== الجزء الثاني (2/6): نقاط الرفع المساحي ======================
+// ==================================================================================
+
+const CONTROL_POINT_TYPES = [
+  'survey_point', 'benchmark', 'control_point', 'network_point', 'boundary_point', 'elevation_point',
+];
+
+const CONTROL_POINT_TYPE_LABELS_AR = {
+  survey_point: 'نقطة رفع', benchmark: 'نقطة مرجعية (Benchmark)', control_point: 'نقطة تحكم',
+  network_point: 'نقطة شبكة', boundary_point: 'نقطة حدود', elevation_point: 'نقطة مناسيب',
+};
+
+function validateControlPointInput(body, { partial = false } = {}) {
+  const errors = [];
+  if (!partial || body.project_id !== undefined) {
+    if (!body.project_id) errors.push('معرّف المشروع (project_id) مطلوب');
+  }
+  if (!partial || body.point_type !== undefined) {
+    if (!body.point_type || !CONTROL_POINT_TYPES.includes(body.point_type)) {
+      errors.push(`نوع النقطة غير صحيح. الأنواع المدعومة: ${CONTROL_POINT_TYPES.join(', ')}`);
+    }
+  }
+  if (!partial || body.easting !== undefined) {
+    if (body.easting === undefined || body.easting === null || body.easting === '' || Number.isNaN(Number(body.easting))) {
+      errors.push('قيمة Easting مطلوبة ويجب أن تكون رقماً');
+    }
+  }
+  if (!partial || body.northing !== undefined) {
+    if (body.northing === undefined || body.northing === null || body.northing === '' || Number.isNaN(Number(body.northing))) {
+      errors.push('قيمة Northing مطلوبة ويجب أن تكون رقماً');
+    }
+  }
+  if (body.elevation !== undefined && body.elevation !== null && body.elevation !== '' && Number.isNaN(Number(body.elevation))) {
+    errors.push('قيمة المنسوب (elevation) يجب أن تكون رقماً');
+  }
+  if (body.accuracy !== undefined && body.accuracy !== null && body.accuracy !== '' && Number(body.accuracy) < 0) {
+    errors.push('دقة القياس (accuracy) لا يمكن أن تكون سالبة');
+  }
+  return errors;
+}
+
+function createControlPoint(body) {
+  const store = loadStore();
+  const errors = validateControlPointInput(body || {});
+  if (errors.length) throw new Error(errors.join(' / '));
+  if (!store.projects[body.project_id]) throw new Error('المشروع المساحي غير موجود');
+
+  const existingForProject = Object.values(store.controlPoints).filter((p) => p.project_id === body.project_id);
+  const seq = existingForProject.length + 1;
+
+  const id = newId('CP');
+  const record = {
+    id,
+    project_id: body.project_id,
+    point_number: body.point_number && String(body.point_number).trim()
+      ? String(body.point_number).trim()
+      : `CP-${String(seq).padStart(4, '0')}`,
+    name: body.name || '',
+    point_type: body.point_type,
+    easting: r4(Number(body.easting)),
+    northing: r4(Number(body.northing)),
+    elevation: body.elevation !== undefined && body.elevation !== null && body.elevation !== '' ? r4(Number(body.elevation)) : null,
+    description: body.description || '',
+    measurement_date: body.measurement_date || nowISO(),
+    device_used: body.device_used || '',
+    accuracy: body.accuracy !== undefined && body.accuracy !== null && body.accuracy !== '' ? r4(Number(body.accuracy)) : null,
+    photos: Array.isArray(body.photos) ? body.photos : [],
+    notes: body.notes || '',
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  const dup = existingForProject.find((p) => p.point_number === record.point_number);
+  if (dup) throw new Error(`رقم النقطة "${record.point_number}" مستخدم مسبقاً في هذا المشروع`);
+
+  store.controlPoints[id] = record;
+  audit(store, {
+    action: 'create', entity: 'control_point', entityId: id, projectId: body.project_id,
+    details: { point_number: record.point_number, point_type: record.point_type },
+  });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function getControlPoint(id) {
+  const store = loadStore();
+  const rec = store.controlPoints[id];
+  if (!rec) throw new Error('نقطة الرفع غير موجودة');
+  return rec;
+}
+
+function listControlPoints({ project_id, point_type, q, sortBy = 'created_at', sortDir = 'desc', page = 1, pageSize = 100 } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.controlPoints);
+  if (project_id) items = items.filter((p) => p.project_id === project_id);
+  if (point_type) items = items.filter((p) => p.point_type === point_type);
+  if (q) {
+    const needle = String(q).toLowerCase();
+    items = items.filter((p) => p.point_number.toLowerCase().includes(needle)
+      || (p.name || '').toLowerCase().includes(needle)
+      || (p.description || '').toLowerCase().includes(needle));
+  }
+  items.sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (a[sortBy] < b[sortBy]) return -1 * dir;
+    if (a[sortBy] > b[sortBy]) return 1 * dir;
+    return 0;
+  });
+  const total = items.length;
+  const start = (Number(page) - 1) * Number(pageSize);
+  const paged = items.slice(start, start + Number(pageSize));
+  return { success: true, data: paged, pagination: { total, page: Number(page), pageSize: Number(pageSize) } };
+}
+
+function updateControlPoint(id, body) {
+  const store = loadStore();
+  const rec = store.controlPoints[id];
+  if (!rec) throw new Error('نقطة الرفع غير موجودة');
+  const errors = validateControlPointInput(body || {}, { partial: true });
+  if (errors.length) throw new Error(errors.join(' / '));
+
+  if (body.point_number !== undefined) {
+    const newNumber = String(body.point_number).trim();
+    if (newNumber && newNumber !== rec.point_number) {
+      const dup = Object.values(store.controlPoints)
+        .find((p) => p.project_id === rec.project_id && p.point_number === newNumber && p.id !== id);
+      if (dup) throw new Error(`رقم النقطة "${newNumber}" مستخدم مسبقاً في هذا المشروع`);
+      rec.point_number = newNumber;
+    }
+  }
+  const updatable = ['name', 'point_type', 'easting', 'northing', 'elevation', 'description',
+    'measurement_date', 'device_used', 'accuracy', 'photos', 'notes'];
+  for (const key of updatable) {
+    if (body[key] !== undefined) {
+      rec[key] = ['easting', 'northing', 'elevation', 'accuracy'].includes(key) && body[key] !== null && body[key] !== ''
+        ? r4(Number(body[key]))
+        : body[key];
+    }
+  }
+  rec.updated_at = nowISO();
+  audit(store, { action: 'update', entity: 'control_point', entityId: id, projectId: rec.project_id });
+  saveStore(store);
+  return { success: true, data: rec };
+}
+
+function deleteControlPoint(id) {
+  const store = loadStore();
+  const rec = store.controlPoints[id];
+  if (!rec) throw new Error('نقطة الرفع غير موجودة');
+  delete store.controlPoints[id];
+  audit(store, { action: 'delete', entity: 'control_point', entityId: id, projectId: rec.project_id });
+  saveStore(store);
+  return { success: true, data: { deleted: id } };
+}
+
+function exportControlPointsToCSV({ project_id, point_type } = {}) {
+  if (!project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+  const { data: items } = listControlPoints({ project_id, point_type, pageSize: 100000, page: 1 });
+  const headers = ['رقم النقطة', 'الاسم', 'النوع', 'Easting', 'Northing', 'المنسوب',
+    'الوصف', 'تاريخ القياس', 'الجهاز المستخدم', 'دقة القياس'];
+  const rows = items.map((p) => [
+    p.point_number, p.name || '', CONTROL_POINT_TYPE_LABELS_AR[p.point_type] || p.point_type,
+    p.easting, p.northing, p.elevation ?? '', p.description || '',
+    p.measurement_date ? String(p.measurement_date).slice(0, 10) : '', p.device_used || '', p.accuracy ?? '',
+  ]);
+  const buffer = generateCsv(headers, rows);
+  const filename = `survey-points-${project_id}-${Date.now()}.csv`;
+  const outputPath = path.join(REPORTS_DIR, filename);
+  fs.writeFileSync(outputPath, buffer);
+
+  const store = loadStore();
+  audit(store, { action: 'export_csv', entity: 'control_point', entityId: null, projectId: project_id, details: { count: items.length } });
+  saveStore(store);
+
+  return { success: true, data: { url: `/reports/${filename}`, count: items.length } };
+}
+
+// ==================================================================================
+// ============ الجزء الثاني (2/6): حسابات المساحة الأساسية (Survey Calculations) ====
+// ==================================================================================
+// جميع الصيغ أدناه معادلات مساحية/مثلثية قياسية معتمدة هندسياً وليست تقريبية:
+//  - المسافة الأفقية بين نقطتين: نظرية فيثاغورس على مستوى الإسقاط (Easting/Northing)
+//  - الاتجاه (Bearing/Azimuth): atan2(ΔE, ΔN) محوّلاً إلى Quadrant Bearing القياسي
+//  - الميل: نسبة فرق المنسوب إلى المسافة الأفقية (وكذلك بالنسبة المئوية والزاوية)
+//  - المساحة المغلقة: صيغة Shoelace (Gauss's Area Formula) على إحداثيات المضلع الفعلية
+//  - خطأ الإغلاق وتصحيحه: طريقة Bowditch/Compass Rule القياسية في أعمال المضلعات المساحية
+
+function calcDistance({ point1, point2 } = {}) {
+  if (!point1 || !point2) throw new Error('يجب إدخال إحداثيات النقطتين (point1, point2)');
+  const dE = Number(point2.easting) - Number(point1.easting);
+  const dN = Number(point2.northing) - Number(point1.northing);
+  if (Number.isNaN(dE) || Number.isNaN(dN)) throw new Error('إحداثيات Easting/Northing غير صحيحة');
+  const horizontalDistance = Math.sqrt(dE * dE + dN * dN);
+  let slopeDistance = horizontalDistance;
+  let elevationDifference = null;
+  if (point1.elevation !== undefined && point1.elevation !== null && point2.elevation !== undefined && point2.elevation !== null) {
+    elevationDifference = Number(point2.elevation) - Number(point1.elevation);
+    slopeDistance = Math.sqrt(horizontalDistance ** 2 + elevationDifference ** 2);
+  }
+  return {
+    horizontal_distance: r4(horizontalDistance),
+    slope_distance: r4(slopeDistance),
+    elevation_difference: elevationDifference !== null ? r4(elevationDifference) : null,
+    delta_easting: r4(dE),
+    delta_northing: r4(dN),
+  };
+}
+
+function azimuthToQuadrantBearing(azimuthDeg) {
+  let quadrant;
+  let angle;
+  const a = ((azimuthDeg % 360) + 360) % 360;
+  if (a >= 0 && a <= 90) { quadrant = ['N', 'E']; angle = a; }
+  else if (a > 90 && a <= 180) { quadrant = ['S', 'E']; angle = 180 - a; }
+  else if (a > 180 && a <= 270) { quadrant = ['S', 'W']; angle = a - 180; }
+  else { quadrant = ['N', 'W']; angle = 360 - a; }
+
+  const deg = Math.floor(angle);
+  const minFloat = (angle - deg) * 60;
+  const min = Math.floor(minFloat);
+  const sec = r2((minFloat - min) * 60);
+  return {
+    text: `${quadrant[0]}${deg}°${min}'${sec}"${quadrant[1]}`,
+    degrees: deg, minutes: min, seconds: sec, quadrant: quadrant.join(''),
+  };
+}
+
+function calcBearing({ point1, point2 } = {}) {
+  if (!point1 || !point2) throw new Error('يجب إدخال إحداثيات النقطتين (point1, point2)');
+  const dE = Number(point2.easting) - Number(point1.easting);
+  const dN = Number(point2.northing) - Number(point1.northing);
+  if (dE === 0 && dN === 0) throw new Error('النقطتان متطابقتان، لا يمكن حساب اتجاه');
+  let azimuthDeg = rad2deg(Math.atan2(dE, dN));
+  if (azimuthDeg < 0) azimuthDeg += 360;
+  const quadrantBearing = azimuthToQuadrantBearing(azimuthDeg);
+  return {
+    azimuth_decimal_degrees: r6(azimuthDeg),
+    quadrant_bearing: quadrantBearing.text,
+    quadrant_bearing_components: quadrantBearing,
+  };
+}
+
+function calcHorizontalAngle({ backsight, station, foresight } = {}) {
+  if (!backsight || !station || !foresight) throw new Error('يجب إدخال إحداثيات النقاط الثلاث (backsight, station, foresight)');
+  const bearingToBack = calcBearing({ point1: station, point2: backsight }).azimuth_decimal_degrees;
+  const bearingToFore = calcBearing({ point1: station, point2: foresight }).azimuth_decimal_degrees;
+  let angle = bearingToFore - bearingToBack;
+  angle = ((angle % 360) + 360) % 360;
+  return {
+    horizontal_angle_degrees: r6(angle),
+    bearing_to_backsight: r6(bearingToBack),
+    bearing_to_foresight: r6(bearingToFore),
+  };
+}
+
+function calcSlope({ point1, point2 } = {}) {
+  if (!point1 || !point2) throw new Error('يجب إدخال إحداثيات النقطتين (point1, point2)');
+  if (point1.elevation === undefined || point1.elevation === null || point2.elevation === undefined || point2.elevation === null) {
+    throw new Error('يجب توفر منسوب (elevation) لكل من النقطتين لحساب الميل');
+  }
+  const { horizontal_distance } = calcDistance({ point1, point2 });
+  if (horizontal_distance === 0) throw new Error('المسافة الأفقية بين النقطتين تساوي صفراً، لا يمكن حساب الميل');
+  const elevationDifference = Number(point2.elevation) - Number(point1.elevation);
+  const slopeRatio = elevationDifference / horizontal_distance;
+  const slopePercent = slopeRatio * 100;
+  const slopeAngleDeg = rad2deg(Math.atan(slopeRatio));
+  return {
+    elevation_difference: r4(elevationDifference),
+    horizontal_distance: r4(horizontal_distance),
+    slope_ratio: r6(slopeRatio),
+    slope_percent: r4(slopePercent),
+    slope_angle_degrees: r4(slopeAngleDeg),
+    direction: elevationDifference > 0 ? 'صاعد' : (elevationDifference < 0 ? 'هابط' : 'مستوٍ'),
+  };
+}
+
+function calcClosedArea({ points } = {}) {
+  if (!Array.isArray(points) || points.length < 3) {
+    throw new Error('يجب إدخال 3 نقاط على الأقل لتكوين مضلع مغلق');
+  }
+  const pts = points.map((p) => ({ easting: Number(p.easting), northing: Number(p.northing) }));
+  if (pts.some((p) => Number.isNaN(p.easting) || Number.isNaN(p.northing))) {
+    throw new Error('إحداثيات إحدى النقاط غير صحيحة');
+  }
+  let sum = 0;
+  let perimeter = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const cur = pts[i];
+    const next = pts[(i + 1) % pts.length];
+    sum += cur.easting * next.northing - next.easting * cur.northing;
+    perimeter += Math.sqrt((next.easting - cur.easting) ** 2 + (next.northing - cur.northing) ** 2);
+  }
+  const area = Math.abs(sum) / 2;
+  return {
+    area_sqm: r4(area),
+    area_hectares: r6(area / 10000),
+    area_donum: r6(area / 1000),
+    perimeter_m: r4(perimeter),
+    points_count: pts.length,
+  };
+}
+
+function calcTraverseClosure({ startPoint, legs } = {}) {
+  if (!startPoint) throw new Error('يجب إدخال نقطة البداية (startPoint)');
+  if (!Array.isArray(legs) || legs.length < 3) {
+    throw new Error('يجب إدخال 3 أضلاع على الأقل (كل ضلع: مسافة أفقية واتجاه/azimuth بالدرجات)');
+  }
+
+  let east = Number(startPoint.easting);
+  let north = Number(startPoint.northing);
+  if (Number.isNaN(east) || Number.isNaN(north)) throw new Error('إحداثيات نقطة البداية غير صحيحة');
+
+  let totalLength = 0;
+  const legVectors = legs.map((leg, idx) => {
+    const dist = Number(leg.distance);
+    const az = Number(leg.azimuth);
+    if (Number.isNaN(dist) || dist <= 0) throw new Error(`الضلع رقم ${idx + 1}: المسافة يجب أن تكون رقماً موجباً`);
+    if (Number.isNaN(az)) throw new Error(`الضلع رقم ${idx + 1}: الاتجاه (azimuth) يجب أن يكون رقماً`);
+    const azRad = deg2rad(az);
+    const dE = dist * Math.sin(azRad);
+    const dN = dist * Math.cos(azRad);
+    totalLength += dist;
+    east += dE; north += dN;
+    return { distance: dist, azimuth: az, dE, dN };
+  });
+
+  const errorEasting = east - Number(startPoint.easting);
+  const errorNorthing = north - Number(startPoint.northing);
+  const linearClosureError = Math.sqrt(errorEasting ** 2 + errorNorthing ** 2);
+  const precisionDenominator = linearClosureError > 0 ? Math.round(totalLength / linearClosureError) : Infinity;
+
+  let runningEast = Number(startPoint.easting);
+  let runningNorth = Number(startPoint.northing);
+  const correctedLegs = legVectors.map((leg, idx) => {
+    const proportion = leg.distance / totalLength;
+    const correctionE = -errorEasting * proportion;
+    const correctionN = -errorNorthing * proportion;
+    const correctedDE = leg.dE + correctionE;
+    const correctedDN = leg.dN + correctionN;
+    runningEast += correctedDE;
+    runningNorth += correctedDN;
+    return {
+      leg_number: idx + 1,
+      distance: r4(leg.distance),
+      azimuth: r6(leg.azimuth),
+      raw_delta_easting: r4(leg.dE),
+      raw_delta_northing: r4(leg.dN),
+      correction_easting: r6(correctionE),
+      correction_northing: r6(correctionN),
+      corrected_easting: r4(runningEast),
+      corrected_northing: r4(runningNorth),
+    };
+  });
+
+  return {
+    total_traverse_length: r4(totalLength),
+    computed_end_point: { easting: r4(east), northing: r4(north) },
+    closure_error: {
+      error_easting: r6(errorEasting),
+      error_northing: r6(errorNorthing),
+      linear_closure_error: r6(linearClosureError),
+      precision_ratio: precisionDenominator === Infinity ? '1/∞ (إغلاق مثالي)' : `1/${precisionDenominator}`,
+      accuracy_acceptable: precisionDenominator >= 5000,
+    },
+    corrected_legs: correctedLegs,
+    corrected_end_point: { easting: r4(runningEast), northing: r4(runningNorth) },
+  };
+}
+
+function runSurveyCalculation({ project_id = null, calc_type, input, actor = null } = {}) {
+  const CALC_FUNCTIONS = {
+    distance: calcDistance,
+    bearing: calcBearing,
+    horizontal_angle: calcHorizontalAngle,
+    slope: calcSlope,
+    closed_area: calcClosedArea,
+    traverse_closure: calcTraverseClosure,
+  };
+  const fn = CALC_FUNCTIONS[calc_type];
+  if (!fn) throw new Error(`نوع الحساب غير مدعوم. الأنواع المدعومة: ${Object.keys(CALC_FUNCTIONS).join(', ')}`);
+
+  const result = fn(input || {});
+
+  const store = loadStore();
+  const id = newId('CALC');
+  const record = { id, project_id, calc_type, input, result, actor, created_at: nowISO() };
+  store.surveyCalcs[id] = record;
+  audit(store, { action: 'calculate', entity: 'survey_calculation', entityId: id, projectId: project_id, actor, details: { calc_type } });
+  saveStore(store);
+
+  return { success: true, data: record };
+}
+
+function listSurveyCalculations({ project_id, calc_type, page = 1, pageSize = 50 } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.surveyCalcs);
+  if (project_id) items = items.filter((c) => c.project_id === project_id);
+  if (calc_type) items = items.filter((c) => c.calc_type === calc_type);
+  items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const total = items.length;
+  const start = (Number(page) - 1) * Number(pageSize);
+  const paged = items.slice(start, start + Number(pageSize));
+  return { success: true, data: paged, pagination: { total, page: Number(page), pageSize: Number(pageSize) } };
+}
+
 module.exports = {
   // أدوار
   ensureSurveyRolesSeeded,
@@ -697,6 +1114,22 @@ module.exports = {
   // تصدير
   exportProjectsToCSV,
   exportCoordinateSystemsToCSV,
+  // نقاط الرفع المساحي (الجزء 2/6)
+  createControlPoint,
+  getControlPoint,
+  listControlPoints,
+  updateControlPoint,
+  deleteControlPoint,
+  exportControlPointsToCSV,
+  // حسابات المساحة الأساسية (الجزء 2/6)
+  calcDistance,
+  calcBearing,
+  calcHorizontalAngle,
+  calcSlope,
+  calcClosedArea,
+  calcTraverseClosure,
+  runSurveyCalculation,
+  listSurveyCalculations,
   // مساعدات داخلية معروضة للاستخدام من الأجزاء اللاحقة لنفس القسم
   _internal: { loadStore, saveStore, audit, newId, nowISO, r2, r4, r6 },
 };
