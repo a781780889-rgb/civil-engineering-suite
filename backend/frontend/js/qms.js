@@ -119,7 +119,7 @@ async function qmsLoadDashboard() {
       <div class="result-card"><div class="label">عدد خطط الجودة</div><div class="value">${d.quality_plans_count}</div></div>
       <div class="result-card"><div class="label">عدد طلبات الفحص (IR)</div><div class="value">${d.inspection_requests_count}</div></div>
       <div class="result-card"><div class="label">عدد عمليات الفحص المنجزة</div><div class="value">${d.inspections_done_count}</div></div>
-      <div class="result-card"><div class="label">عدد الاختبارات</div><div class="value">${d.tests_count}<span class="unit">قريباً</span></div></div>
+      <div class="result-card"><div class="label">عدد الاختبارات</div><div class="value">${d.tests_count}</div></div>
       <div class="result-card"><div class="label">حالات عدم المطابقة (NCR)</div><div class="value">${d.ncr_count}<span class="unit">قريباً</span></div></div>
       <div class="result-card"><div class="label">طلبات اعتماد المواد (MAR)</div><div class="value">${d.material_approval_requests_count}<span class="unit">قريباً</span></div></div>
       <div class="result-card"><div class="label">طلبات اعتماد الرسومات (SDR)</div><div class="value">${d.shop_drawing_requests_count}<span class="unit">قريباً</span></div></div>
