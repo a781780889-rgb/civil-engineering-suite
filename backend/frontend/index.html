@@ -180,6 +180,16 @@
     <div class="nav-item" data-panel="hse-ai">
       <span class="nav-icon">🤖</span> المساعد الذكي للسلامة
     </div>
+    <div class="sidebar-title" style="margin-top:16px">القسم التاسع</div>
+    <div class="nav-item" data-panel="qms-dashboard">
+      <span class="nav-icon">▦</span> لوحة معلومات الجودة
+    </div>
+    <div class="nav-item" data-panel="qms-plans">
+      <span class="nav-icon">📘</span> إدارة خطة الجودة
+    </div>
+    <div class="nav-item" data-panel="qms-ir">
+      <span class="nav-icon">🧾</span> طلبات الفحص (IR)
+    </div>
   </nav>
 
   <main class="main-content">
@@ -2591,6 +2601,112 @@
       </div>
     </section>
 
+    <!-- ============ القسم التاسع: لوحة معلومات إدارة الجودة ============ -->
+    <section class="calc-panel" id="panel-qms-dashboard">
+      <div class="calc-card">
+        <h2>القسم التاسع — لوحة معلومات إدارة الجودة (QMS)</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-dash-project" placeholder="معرّف المشروع (اختياري)">
+          <button class="btn btn-primary" id="qms-btn-load-dashboard">تحديث اللوحة</button>
+        </div>
+        <div class="result-cards" id="qms-dash-cards"></div>
+        <h3 style="margin-top:20px">آخر عمليات الفحص المنجزة</h3>
+        <div class="pm-activity-log" id="qms-recent-inspections"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم التاسع: إدارة خطة الجودة ============ -->
+    <section class="calc-panel" id="panel-qms-plans">
+      <div class="calc-card" id="qms-plan-list-view">
+        <h2>القسم التاسع — إدارة خطة الجودة</h2>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <input type="text" id="qms-plan-search" placeholder="بحث بالعنوان أو الكود...">
+          <select id="qms-plan-filter-status"><option value="">كل الحالات</option></select>
+          <button class="btn btn-primary" id="qms-plan-btn-new">+ خطة جودة جديدة</button>
+        </div>
+        <div class="table-wrap">
+          <table class="detail-table">
+            <thead>
+              <tr><th>الكود</th><th>العنوان</th><th>المشروع</th><th>الإصدار</th><th>الحالة</th><th>إجراءات</th></tr>
+            </thead>
+            <tbody id="qms-plan-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="calc-card" id="qms-plan-form-view" style="display:none">
+        <h2 id="qms-plan-form-title">خطة جودة جديدة</h2>
+        <div id="qms-plan-form-alert"></div>
+        <div class="form-grid">
+          <div class="field"><label>معرّف المشروع *</label><input type="text" id="qms-plan-f-project"></div>
+          <div class="field"><label>عنوان الخطة *</label><input type="text" id="qms-plan-f-title"></div>
+          <div class="field"><label>أُعدت بواسطة</label><input type="text" id="qms-plan-f-prepared-by"></div>
+          <div class="field"><label>المعيار المرجعي</label><input type="text" id="qms-plan-f-reference-standard" placeholder="ISO 9001"></div>
+          <div class="field field-full"><label>أهداف الجودة (سطر لكل هدف)</label><textarea id="qms-plan-f-objectives" rows="3"></textarea></div>
+          <div class="field field-full"><label>سياسات الجودة (سطر لكل سياسة)</label><textarea id="qms-plan-f-policies" rows="3"></textarea></div>
+          <div class="field field-full"><label>إجراءات الجودة (سطر لكل إجراء)</label><textarea id="qms-plan-f-procedures" rows="3"></textarea></div>
+          <div class="field field-full"><label>تعليمات العمل (سطر لكل تعليمة)</label><textarea id="qms-plan-f-work-instructions" rows="3"></textarea></div>
+          <div class="field field-full"><label>معايير القبول (سطر لكل معيار)</label><textarea id="qms-plan-f-acceptance-criteria" rows="3"></textarea></div>
+          <div class="field field-full"><label>نقاط الفحص والاعتماد (سطر لكل نقطة)</label><textarea id="qms-plan-f-hold-points" rows="3"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="qms-plan-form-save">حفظ</button>
+          <button class="btn btn-outline" id="qms-plan-form-cancel">إلغاء</button>
+        </div>
+      </div>
+
+      <div class="calc-card" id="qms-plan-detail-view" style="display:none">
+        <button class="pm-link-btn" id="qms-plan-btn-back-from-detail">← رجوع للقائمة</button>
+        <div id="qms-plan-detail-box"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم التاسع: إدارة طلبات الفحص (IR) ============ -->
+    <section class="calc-panel" id="panel-qms-ir">
+      <div class="calc-card" id="qms-ir-list-view">
+        <h2>القسم التاسع — إدارة طلبات الفحص (Inspection Request)</h2>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <input type="text" id="qms-ir-search" placeholder="بحث بالعنصر أو الكود...">
+          <select id="qms-ir-filter-status"><option value="">كل الحالات</option></select>
+          <select id="qms-ir-filter-discipline"><option value="">كل التخصصات</option></select>
+          <button class="btn btn-primary" id="qms-ir-btn-new">+ طلب فحص جديد</button>
+        </div>
+        <div class="table-wrap">
+          <table class="detail-table">
+            <thead>
+              <tr><th>الكود</th><th>المشروع</th><th>العنصر</th><th>التخصص</th><th>الحالة</th><th>النتيجة</th><th>تاريخ الفحص</th><th>إجراءات</th></tr>
+            </thead>
+            <tbody id="qms-ir-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="calc-card" id="qms-ir-form-view" style="display:none">
+        <h2 id="qms-ir-form-title">طلب فحص جديد</h2>
+        <div id="qms-ir-form-alert"></div>
+        <div class="form-grid">
+          <div class="field"><label>معرّف المشروع *</label><input type="text" id="qms-ir-f-project"></div>
+          <div class="field"><label>المرحلة</label><input type="text" id="qms-ir-f-stage"></div>
+          <div class="field"><label>العنصر *</label><input type="text" id="qms-ir-f-element" placeholder="مثال: عمود C12"></div>
+          <div class="field"><label>الموقع</label><input type="text" id="qms-ir-f-location"></div>
+          <div class="field"><label>المقاول</label><input type="text" id="qms-ir-f-contractor"></div>
+          <div class="field"><label>الاستشاري</label><input type="text" id="qms-ir-f-consultant"></div>
+          <div class="field"><label>التخصص</label><select id="qms-ir-f-discipline"></select></div>
+          <div class="field"><label>تاريخ الطلب</label><input type="date" id="qms-ir-f-request-date"></div>
+          <div class="field field-full"><label>الملاحظات</label><textarea id="qms-ir-f-notes" rows="3"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="qms-ir-form-save">حفظ</button>
+          <button class="btn btn-outline" id="qms-ir-form-cancel">إلغاء</button>
+        </div>
+      </div>
+
+      <div class="calc-card" id="qms-ir-detail-view" style="display:none">
+        <button class="pm-link-btn" id="qms-ir-btn-back-from-detail">← رجوع للقائمة</button>
+        <div id="qms-ir-detail-box"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -2683,5 +2799,6 @@
 <script src="js/hseFireSafety.js"></script>
 <script src="js/hseViolations.js"></script>
 <script src="js/hseReportsAI.js"></script>
+<script src="js/qms.js"></script>
 </body>
 </html>
