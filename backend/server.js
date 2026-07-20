@@ -49,6 +49,7 @@ const HSE_FIRE = require('./utils/hseFireSafety');
 const HSE_VIOL = require('./utils/hseViolations');
 const HSE_REPORTS = require('./utils/hseReports');
 const HSE_AI = require('./utils/hseAI');
+const QMS = require('./utils/qmsManagement');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -3547,6 +3548,111 @@ const API_HANDLERS = {
     POST: async (body) => {
       if (!body.question) throw new Error('نص السؤال (question) مطلوب');
       return HSE_AI.askSafetyQuestion({ question: body.question, projectId: body.projectId || null });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم التاسع (الجزء 1/4) - إدارة الجودة (QMS):
+  // ===== لوحة التحكم، خطة الجودة، طلبات الفحص (Inspection Request - IR)
+  // ===================================================================
+
+  '/api/qms/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        quality_plan_statuses: QMS.QUALITY_PLAN_STATUSES,
+        quality_plan_status_labels: QMS.QUALITY_PLAN_STATUS_LABELS,
+        ir_statuses: QMS.IR_STATUSES,
+        ir_status_labels: QMS.IR_STATUS_LABELS,
+        ir_allowed_transitions: QMS.IR_ALLOWED_TRANSITIONS,
+        ir_results: QMS.IR_RESULTS,
+        ir_result_labels: QMS.IR_RESULT_LABELS,
+        ir_disciplines: QMS.IR_DISCIPLINES,
+        ir_discipline_labels: QMS.IR_DISCIPLINE_LABELS,
+      },
+    }),
+  },
+
+  '/api/qms/dashboard': {
+    GET: async (_body, query) => QMS.getDashboard(query?.projectId || null),
+  },
+
+  '/api/qms/quality-plans': {
+    GET: async (_body, query) => QMS.listQualityPlans({
+      projectId: query?.projectId, status: query?.status, search: query?.search,
+    }),
+    POST: async (body) => QMS.createQualityPlan(body),
+  },
+  '/api/qms/quality-plans/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الخطة (id) مطلوب');
+      return QMS.getQualityPlan(query.id);
+    },
+  },
+  '/api/qms/quality-plans/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الخطة (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateQualityPlan(id, rest);
+    },
+  },
+  '/api/qms/quality-plans/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الخطة (id) مطلوب');
+      return QMS.deleteQualityPlan(body.id);
+    },
+  },
+  '/api/qms/quality-plans/approve': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الخطة (id) مطلوب');
+      return QMS.approveQualityPlan(body.id, { approved_by: body.approved_by || null });
+    },
+  },
+
+  '/api/qms/inspection-requests': {
+    GET: async (_body, query) => QMS.listInspectionRequests({
+      projectId: query?.projectId, status: query?.status, result: query?.result,
+      discipline: query?.discipline, search: query?.search,
+    }),
+    POST: async (body) => QMS.createInspectionRequest(body),
+  },
+  '/api/qms/inspection-requests/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف طلب الفحص (id) مطلوب');
+      return QMS.getInspectionRequest(query.id);
+    },
+  },
+  '/api/qms/inspection-requests/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف طلب الفحص (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateInspectionRequest(id, rest);
+    },
+  },
+  '/api/qms/inspection-requests/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف طلب الفحص (id) مطلوب');
+      return QMS.deleteInspectionRequest(body.id);
+    },
+  },
+  '/api/qms/inspection-requests/transition': {
+    POST: async (body) => {
+      if (!body.id || !body.to_status) throw new Error('معرّف الطلب (id) والحالة الجديدة (to_status) مطلوبان');
+      return QMS.transitionInspectionRequest(body.id, { to_status: body.to_status, by: body.by || null });
+    },
+  },
+  '/api/qms/inspection-requests/record-result': {
+    POST: async (body) => {
+      if (!body.id || !body.result) throw new Error('معرّف الطلب (id) والنتيجة (result) مطلوبان');
+      return QMS.recordInspectionResult(body.id, {
+        result: body.result, notes: body.notes || '', inspected_by: body.inspected_by || null, photos: body.photos || [],
+      });
+    },
+  },
+  '/api/qms/inspection-requests/sign': {
+    POST: async (body) => {
+      if (!body.id || !body.party || !body.name) throw new Error('معرّف الطلب (id) والطرف (party) والاسم (name) مطلوبون');
+      return QMS.signInspectionRequest(body.id, { party: body.party, name: body.name, role: body.role || null });
     },
   },
 };
