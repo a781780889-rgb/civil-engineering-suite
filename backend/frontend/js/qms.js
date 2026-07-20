@@ -120,10 +120,12 @@ async function qmsLoadDashboard() {
       <div class="result-card"><div class="label">عدد طلبات الفحص (IR)</div><div class="value">${d.inspection_requests_count}</div></div>
       <div class="result-card"><div class="label">عدد عمليات الفحص المنجزة</div><div class="value">${d.inspections_done_count}</div></div>
       <div class="result-card"><div class="label">عدد الاختبارات</div><div class="value">${d.tests_count}</div></div>
-      <div class="result-card"><div class="label">حالات عدم المطابقة (NCR)</div><div class="value">${d.ncr_count}<span class="unit">قريباً</span></div></div>
+      <div class="result-card"><div class="label">حالات عدم المطابقة (NCR)</div><div class="value">${d.ncr_count}</div></div>
+      <div class="result-card"><div class="label">NCR مفتوحة</div><div class="value">${d.ncr_open_count}</div></div>
       <div class="result-card"><div class="label">طلبات اعتماد المواد (MAR)</div><div class="value">${d.material_approval_requests_count}<span class="unit">قريباً</span></div></div>
       <div class="result-card"><div class="label">طلبات اعتماد الرسومات (SDR)</div><div class="value">${d.shop_drawing_requests_count}<span class="unit">قريباً</span></div></div>
-      <div class="result-card"><div class="label">الإجراءات التصحيحية (CAPA)</div><div class="value">${d.capa_count}<span class="unit">قريباً</span></div></div>
+      <div class="result-card"><div class="label">الإجراءات التصحيحية (CAPA)</div><div class="value">${d.capa_count}</div></div>
+      <div class="result-card"><div class="label">CAPA متأخرة</div><div class="value">${d.capa_overdue_count}</div></div>
       <div class="result-card"><div class="label">نسبة الالتزام بالجودة</div><div class="value">${d.quality_compliance_rate}<span class="unit">%</span></div></div>
     `;
 
@@ -135,6 +137,18 @@ async function qmsLoadDashboard() {
         </div>
       `).join('')
       : `<div class="pm-empty-state">لا توجد عمليات فحص منجزة بعد</div>`;
+
+    const recentNcrEl = document.getElementById('qms-recent-ncrs');
+    if (recentNcrEl) {
+      recentNcrEl.innerHTML = (d.recent_ncrs && d.recent_ncrs.length)
+        ? d.recent_ncrs.map(n => `
+          <div class="pm-activity-item">
+            <span class="ts">${qmsFmtDateTime(n.created_at)}</span>
+            <span>${n.code} — ${qmsEsc(n.element)} — ${qmsEsc(n.severity)} — ${qmsEsc(n.status)}</span>
+          </div>
+        `).join('')
+        : `<div class="pm-empty-state">لا توجد حالات عدم مطابقة بعد</div>`;
+    }
   } catch (e) {
     qmsAlert(cardsEl, 'error', e.message);
   }
