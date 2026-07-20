@@ -78,6 +78,11 @@
       ],
       "ai": [
         "use"
+      ],
+      "qms": [
+        "view",
+        "view_reports",
+        "export_reports"
       ]
     }
   },
@@ -145,6 +150,13 @@
       "reports": [
         "view",
         "export"
+      ],
+      "qms": [
+        "view",
+        "create",
+        "update",
+        "view_reports",
+        "export_reports"
       ]
     }
   },
@@ -243,6 +255,12 @@
       ],
       "reports": [
         "view"
+      ],
+      "qms": [
+        "view",
+        "create",
+        "update",
+        "view_reports"
       ]
     }
   },
@@ -263,6 +281,11 @@
       ],
       "reports": [
         "view"
+      ],
+      "qms": [
+        "view",
+        "create",
+        "view_reports"
       ]
     }
   },
@@ -282,6 +305,9 @@
         "view"
       ],
       "equipment": [
+        "view"
+      ],
+      "qms": [
         "view"
       ]
     }
@@ -421,6 +447,92 @@
     "label": "العامل (صلاحيات محدودة - السلامة)",
     "permissions": {
       "safety": [
+        "view"
+      ]
+    }
+  },
+  "qa_qc_manager": {
+    "label": "مدير الجودة (QA/QC Manager)",
+    "permissions": {
+      "qms": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "approve",
+        "manage",
+        "view_reports",
+        "export_reports"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "ai": [
+        "use"
+      ]
+    }
+  },
+  "qa_engineer": {
+    "label": "مهندس الجودة (QA Engineer)",
+    "permissions": {
+      "qms": [
+        "view",
+        "create",
+        "update",
+        "view_reports",
+        "export_reports"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view"
+      ]
+    }
+  },
+  "qc_inspector": {
+    "label": "مفتش الجودة (QC Inspector)",
+    "permissions": {
+      "qms": [
+        "view",
+        "create",
+        "update",
+        "view_reports"
+      ],
+      "dashboard": [
+        "view"
+      ]
+    }
+  },
+  "consultant": {
+    "label": "الاستشاري",
+    "permissions": {
+      "qms": [
+        "view",
+        "approve",
+        "view_reports"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view"
+      ]
+    }
+  },
+  "contractor": {
+    "label": "المقاول",
+    "permissions": {
+      "qms": [
+        "view",
+        "create",
+        "view_reports"
+      ],
+      "dashboard": [
         "view"
       ]
     }
