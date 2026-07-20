@@ -95,12 +95,10 @@ body {
   letter-spacing: 0.3px;
 }
 .app-header .subtitle {
-  font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--blueprint-line);
-  letter-spacing: 1px;
-  text-transform: uppercase;
   margin-top: 2px;
+  direction: rtl;
 }
 
 .section-badge {
