@@ -1821,6 +1821,31 @@ function updateMar(id, changes) {
   return { success: true, data: record };
 }
 
+/**
+ * ربط طلب اعتماد مواد (MAR) بصنف مخزون فعلي (warehouse_item_id/name).
+ * دالة منفصلة عن updateMar لأنها: (أ) مسموحة حتى بعد اعتماد الطلب (الربط بالمخزون
+ * منطقي فقط بعد الاعتماد)، و(ب) لا تُدخل هذه الحقول ضمن نطاق قواعد تعديل محتوى
+ * الطلب نفسه (المادة/المواصفات...)، بل هي بيانات ربط تكاملي مع وحدة المخازن.
+ */
+function linkMarToWarehouseItem(id, { warehouse_item_id, warehouse_item_name = null } = {}) {
+  if (!warehouse_item_id) throw new Error('معرّف صنف المخزون (warehouse_item_id) مطلوب');
+  const store = loadStore();
+  const record = store.mars[id];
+  if (!record) throw new Error('طلب اعتماد المواد غير موجود');
+
+  record.warehouse_item_id = warehouse_item_id;
+  record.warehouse_item_name = warehouse_item_name;
+  record.updated_at = nowISO();
+  record.change_log.push({ ts: nowISO(), action: 'linked_to_warehouse_item', fields: ['warehouse_item_id', 'warehouse_item_name'] });
+  store.mars[id] = record;
+  audit(store, {
+    action: 'link_warehouse_item', entity: 'mar', entityId: id, projectId: record.project_id,
+    details: { warehouse_item_id },
+  });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
 function deleteMar(id) {
   const store = loadStore();
   const record = store.mars[id];
@@ -2147,6 +2172,7 @@ module.exports = {
 
   // اعتماد المواد MAR
   createMar, listMars, getMar, updateMar, deleteMar, transitionMar, addMarComment,
+  linkMarToWarehouseItem,
 
   // اعتماد الرسومات SDR
   createSdr, listSdrs, getSdr, updateSdr, deleteSdr,
