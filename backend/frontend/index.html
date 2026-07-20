@@ -236,6 +236,12 @@
     <div class="nav-item" data-panel="survey-coordinate-convert">
       <span class="nav-icon">🔄</span> تحويل الإحداثيات (UTM ⇄ جغرافي)
     </div>
+    <div class="nav-item" data-panel="survey-control-points">
+      <span class="nav-icon">📌</span> نقاط الرفع المساحي
+    </div>
+    <div class="nav-item" data-panel="survey-calculations">
+      <span class="nav-icon">🧮</span> حسابات المساحة
+    </div>
   </nav>
 
   <main class="main-content">
@@ -3416,6 +3422,164 @@
         </div>
         <div id="survey-conv-error" style="color:#c0392b;margin-top:8px"></div>
         <div class="result-cards" id="survey-conv-result"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم العاشر (الجزء 2/6): نقاط الرفع المساحي ============ -->
+    <section class="calc-panel" id="panel-survey-control-points">
+      <div class="calc-card" id="survey-cp-list-view">
+        <h2>القسم العاشر — نقاط الرفع المساحي</h2>
+        <div class="toolbar">
+          <input type="text" id="survey-cp-project-id" placeholder="معرّف المشروع المساحي (SRV-PRJ-...)">
+          <button class="btn" id="survey-btn-load-cp">عرض النقاط</button>
+        </div>
+        <div class="toolbar">
+          <input type="text" id="survey-cp-search" placeholder="بحث بالرقم/الاسم/الوصف...">
+          <select id="survey-cp-filter-type">
+            <option value="">كل الأنواع</option>
+            <option value="survey_point">نقطة رفع</option>
+            <option value="benchmark">نقطة مرجعية (Benchmark)</option>
+            <option value="control_point">نقطة تحكم</option>
+            <option value="network_point">نقطة شبكة</option>
+            <option value="boundary_point">نقطة حدود</option>
+            <option value="elevation_point">نقطة مناسيب</option>
+          </select>
+          <button class="btn btn-primary" id="survey-btn-new-cp">+ نقطة جديدة</button>
+          <button class="btn" id="survey-btn-export-cp">تصدير CSV</button>
+        </div>
+        <table class="data-table" id="survey-cp-table">
+          <thead>
+            <tr>
+              <th>رقم النقطة</th><th>الاسم</th><th>النوع</th><th>Easting</th><th>Northing</th>
+              <th>المنسوب</th><th>الجهاز</th><th>الدقة</th><th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="survey-cp-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card" id="survey-cp-form-view" style="display:none">
+        <h2 id="survey-cp-form-title">نقطة رفع جديدة</h2>
+        <input type="hidden" id="survey-cp-id">
+        <div class="form-grid">
+          <label>معرّف المشروع *<input type="text" id="survey-cp-f-project-id"></label>
+          <label>رقم النقطة (اختياري - يُولَّد تلقائياً)<input type="text" id="survey-cp-f-number"></label>
+          <label>الاسم<input type="text" id="survey-cp-f-name"></label>
+          <label>نوع النقطة *
+            <select id="survey-cp-f-type">
+              <option value="survey_point">نقطة رفع</option>
+              <option value="benchmark">نقطة مرجعية (Benchmark)</option>
+              <option value="control_point">نقطة تحكم</option>
+              <option value="network_point">نقطة شبكة</option>
+              <option value="boundary_point">نقطة حدود</option>
+              <option value="elevation_point">نقطة مناسيب</option>
+            </select>
+          </label>
+          <label>Easting *<input type="number" step="0.0001" id="survey-cp-f-easting"></label>
+          <label>Northing *<input type="number" step="0.0001" id="survey-cp-f-northing"></label>
+          <label>المنسوب (اختياري)<input type="number" step="0.0001" id="survey-cp-f-elevation"></label>
+          <label>دقة القياس (اختياري)<input type="number" step="0.0001" id="survey-cp-f-accuracy"></label>
+          <label>تاريخ القياس<input type="date" id="survey-cp-f-date"></label>
+          <label>الجهاز المستخدم<input type="text" id="survey-cp-f-device"></label>
+          <label style="grid-column:1/-1">الوصف<input type="text" id="survey-cp-f-description"></label>
+          <label style="grid-column:1/-1">ملاحظات<textarea id="survey-cp-f-notes"></textarea></label>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="survey-btn-save-cp">حفظ</button>
+          <button class="btn" id="survey-btn-cancel-cp">إلغاء</button>
+        </div>
+        <div id="survey-cp-form-error" style="color:#c0392b;margin-top:8px"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم العاشر (الجزء 2/6): حسابات المساحة الأساسية ============ -->
+    <section class="calc-panel" id="panel-survey-calculations">
+      <div class="calc-card">
+        <h2>القسم العاشر — حسابات المساحة الأساسية</h2>
+        <div class="toolbar">
+          <label>نوع الحساب
+            <select id="survey-calc-type">
+              <option value="distance">المسافة بين نقطتين</option>
+              <option value="bearing">الاتجاه (Bearing/Azimuth)</option>
+              <option value="horizontal_angle">الزاوية الأفقية (ثلاث نقاط)</option>
+              <option value="slope">الميل</option>
+              <option value="closed_area">مساحة مضلع مغلق</option>
+              <option value="traverse_closure">خطأ إغلاق المضلع (Traverse)</option>
+            </select>
+          </label>
+          <label>معرّف المشروع (اختياري - لحفظ الحساب مرتبطاً بمشروع)
+            <input type="text" id="survey-calc-project-id" placeholder="SRV-PRJ-...">
+          </label>
+        </div>
+
+        <!-- مسافة / اتجاه: نقطتان -->
+        <div id="survey-calc-2points" class="form-grid">
+          <div>
+            <h3>النقطة الأولى</h3>
+            <label>Easting<input type="number" step="0.0001" id="survey-calc-p1-e"></label>
+            <label>Northing<input type="number" step="0.0001" id="survey-calc-p1-n"></label>
+            <label>المنسوب (اختياري)<input type="number" step="0.0001" id="survey-calc-p1-z"></label>
+          </div>
+          <div>
+            <h3>النقطة الثانية</h3>
+            <label>Easting<input type="number" step="0.0001" id="survey-calc-p2-e"></label>
+            <label>Northing<input type="number" step="0.0001" id="survey-calc-p2-n"></label>
+            <label>المنسوب (اختياري)<input type="number" step="0.0001" id="survey-calc-p2-z"></label>
+          </div>
+        </div>
+
+        <!-- الزاوية الأفقية: ثلاث نقاط -->
+        <div id="survey-calc-3points" class="form-grid" style="display:none">
+          <div>
+            <h3>نقطة الخلفية (Backsight)</h3>
+            <label>Easting<input type="number" step="0.0001" id="survey-calc-back-e"></label>
+            <label>Northing<input type="number" step="0.0001" id="survey-calc-back-n"></label>
+          </div>
+          <div>
+            <h3>نقطة المحطة (Station)</h3>
+            <label>Easting<input type="number" step="0.0001" id="survey-calc-sta-e"></label>
+            <label>Northing<input type="number" step="0.0001" id="survey-calc-sta-n"></label>
+          </div>
+          <div>
+            <h3>نقطة الأمام (Foresight)</h3>
+            <label>Easting<input type="number" step="0.0001" id="survey-calc-fore-e"></label>
+            <label>Northing<input type="number" step="0.0001" id="survey-calc-fore-n"></label>
+          </div>
+        </div>
+
+        <!-- مساحة مغلقة: عدة نقاط -->
+        <div id="survey-calc-polygon" class="form-grid" style="display:none">
+          <label style="grid-column:1/-1">
+            نقاط المضلع (Easting,Northing لكل سطر — 3 نقاط على الأقل)
+            <textarea id="survey-calc-polygon-points" rows="6" placeholder="مثال:&#10;0,0&#10;10,0&#10;10,10&#10;0,10"></textarea>
+          </label>
+        </div>
+
+        <!-- إغلاق المضلع: نقطة بداية + أضلاع -->
+        <div id="survey-calc-traverse" class="form-grid" style="display:none">
+          <label>نقطة البداية — Easting<input type="number" step="0.0001" id="survey-calc-trav-start-e"></label>
+          <label>نقطة البداية — Northing<input type="number" step="0.0001" id="survey-calc-trav-start-n"></label>
+          <label style="grid-column:1/-1">
+            الأضلاع (مسافة,اتجاه بالدرجات لكل سطر — 3 أضلاع على الأقل)
+            <textarea id="survey-calc-traverse-legs" rows="6" placeholder="مثال:&#10;10,0&#10;10,90&#10;10,180&#10;10,270"></textarea>
+          </label>
+        </div>
+
+        <div class="toolbar">
+          <button class="btn btn-primary" id="survey-btn-run-calc">احسب</button>
+        </div>
+        <div id="survey-calc-error" style="color:#c0392b;margin-top:8px"></div>
+        <div class="result-cards" id="survey-calc-result"></div>
+        <div id="survey-calc-result-extra"></div>
+
+        <h3 style="margin-top:20px">سجل الحسابات المنفذة</h3>
+        <div class="toolbar">
+          <button class="btn" id="survey-btn-load-calc-history">تحديث السجل</button>
+        </div>
+        <table class="data-table" id="survey-calc-history-table">
+          <thead><tr><th>النوع</th><th>المشروع</th><th>التاريخ</th><th>ملخص النتيجة</th></tr></thead>
+          <tbody id="survey-calc-history-tbody"></tbody>
+        </table>
       </div>
     </section>
 
