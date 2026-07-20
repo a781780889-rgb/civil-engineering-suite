@@ -4760,6 +4760,61 @@ const API_HANDLERS = {
       return SURVEY.exportCoordinateSystemsToCSV(query);
     },
   },
+
+  // ============= القسم العاشر - تطبيق المساحة (الجزء 2/6): نقاط الرفع =============
+  '/api/survey/control-points': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.listControlPoints(query);
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      return SURVEY.createControlPoint(body);
+    },
+  },
+  '/api/survey/control-points/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY.getControlPoint(query.id) };
+    },
+  },
+  '/api/survey/control-points/update': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'update');
+      return SURVEY.updateControlPoint(body.id, body);
+    },
+  },
+  '/api/survey/control-points/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'delete');
+      return SURVEY.deleteControlPoint(body.id);
+    },
+  },
+  '/api/survey/control-points/export-csv': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.exportControlPointsToCSV(query);
+    },
+  },
+
+  // ===== القسم العاشر - تطبيق المساحة (الجزء 2/6): حسابات المساحة الأساسية =====
+  '/api/survey/calculations/run': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'survey', 'view');
+      return SURVEY.runSurveyCalculation({
+        project_id: body.project_id || null,
+        calc_type: body.calc_type,
+        input: body.input,
+        actor: token || null,
+      });
+    },
+  },
+  '/api/survey/calculations': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.listSurveyCalculations(query);
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
