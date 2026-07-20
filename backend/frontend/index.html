@@ -19,9 +19,32 @@
   <div class="section-badge">القسم 01 / حاسبة الخرسانة</div>
 </header>
 
-<div class="app-layout">
+<!-- ============ الصفحة الرئيسية: قائمة الأقسام ============ -->
+<div class="home-view active" id="home-view">
+  <div class="home-intro">
+    <h2>الأقسام الرئيسية</h2>
+    <p>اختر القسم للاطلاع على عناصره وأدواته</p>
+  </div>
+  <div class="home-grid" id="home-grid"></div>
+</div>
+
+<!-- ============ صفحة القسم: عناصر القسم المختار ============ -->
+<div class="section-view" id="section-view">
+  <div class="section-view-header">
+    <button class="btn-back" id="btn-back-home">
+      <span class="btn-back-arrow">→</span> رجوع للصفحة الرئيسية
+    </button>
+    <h2 id="section-view-title"></h2>
+  </div>
+  <div class="section-grid" id="section-grid"></div>
+</div>
+
+<div class="app-layout" id="app-layout">
   <nav class="sidebar" id="sidebar">
-    <div class="sidebar-title">عناصر إنشائية</div>
+    <button class="btn-back sidebar-back" id="btn-back-home-2">
+      <span class="btn-back-arrow">→</span> الصفحة الرئيسية
+    </button>
+    <div class="sidebar-title" data-section="s1">عناصر إنشائية</div>
     <div class="nav-item active" data-panel="footings">
       <span class="nav-icon">◇</span> القواعد (منفصلة / مشتركة / لبشة)
     </div>
@@ -46,25 +69,25 @@
     <div class="nav-item" data-panel="pools">
       <span class="nav-icon">◈</span> المسابح
     </div>
-    <div class="sidebar-title" style="margin-top:16px">القسم الثاني</div>
+    <div class="sidebar-title" style="margin-top:16px" data-section="s2">القسم الثاني — حاسبة حديد التسليح</div>
     <div class="nav-item" data-panel="rebar">
       <span class="nav-icon">⛓</span> حاسبة حديد التسليح
     </div>
-    <div class="sidebar-title" style="margin-top:16px">القسم الرابع</div>
+    <div class="sidebar-title" style="margin-top:16px" data-section="s4">القسم الرابع — إدارة المشاريع</div>
     <div class="nav-item" data-panel="pm-dashboard">
       <span class="nav-icon">▦</span> لوحة معلومات المشاريع
     </div>
     <div class="nav-item" data-panel="pm-projects">
       <span class="nav-icon">▣</span> إدارة المشاريع
     </div>
-    <div class="sidebar-title" style="margin-top:16px">القسم الخامس</div>
+    <div class="sidebar-title" style="margin-top:16px" data-section="s5">القسم الخامس — الجدول الزمني</div>
     <div class="nav-item" data-panel="schedule-dashboard">
       <span class="nav-icon">▦</span> لوحة الجدول الزمني
     </div>
     <div class="nav-item" data-panel="schedule-main">
       <span class="nav-icon">⏱</span> الجدول الزمني للمشاريع
     </div>
-    <div class="sidebar-title" style="margin-top:16px">القسم السابع</div>
+    <div class="sidebar-title" style="margin-top:16px" data-section="s7">القسم السابع — إدارة المعدات</div>
     <div class="nav-item" data-panel="eq-dashboard">
       <span class="nav-icon">▦</span> لوحة معلومات المعدات
     </div>
@@ -107,7 +130,7 @@
     <div class="nav-item" data-panel="eq-ai">
       <span class="nav-icon">🤖</span> الذكاء الاصطناعي والتكامل
     </div>
-    <div class="sidebar-title" style="margin-top:16px">القسم الثامن</div>
+    <div class="sidebar-title" style="margin-top:16px" data-section="s8">القسم الثامن — السلامة والصحة المهنية</div>
     <div class="nav-item" data-panel="hse-dashboard">
       <span class="nav-icon">▦</span> لوحة معلومات السلامة
     </div>
@@ -2683,5 +2706,6 @@
 <script src="js/hseFireSafety.js"></script>
 <script src="js/hseViolations.js"></script>
 <script src="js/hseReportsAI.js"></script>
+<script src="js/nav.js"></script>
 </body>
 </html>
