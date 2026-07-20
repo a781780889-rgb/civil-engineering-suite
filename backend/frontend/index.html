@@ -217,6 +217,12 @@
     <div class="nav-item" data-panel="qms-kpis">
       <span class="nav-icon">📊</span> مؤشرات الأداء (KPIs)
     </div>
+    <div class="nav-item" data-panel="qms-alerts">
+      <span class="nav-icon">🔔</span> التنبيهات الذكية
+    </div>
+    <div class="nav-item" data-panel="qms-reports">
+      <span class="nav-icon">📄</span> التقارير
+    </div>
   </nav>
 
   <main class="main-content">
@@ -3160,6 +3166,55 @@
       </div>
     </section>
 
+    <!-- ============ القسم التاسع: التنبيهات الذكية ============ -->
+    <section class="calc-panel" id="panel-qms-alerts">
+      <div class="calc-card">
+        <h2>القسم التاسع — التنبيهات الذكية (Smart Alerts)</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-alerts-project" placeholder="معرّف المشروع (اختياري)">
+          <button class="btn btn-primary" id="qms-alerts-btn-load">تحديث التنبيهات</button>
+        </div>
+        <div class="result-cards" id="qms-alerts-summary-cards"></div>
+        <h3 style="margin-top:20px">توزيع التنبيهات حسب الخطورة</h3>
+        <div id="qms-alerts-chart-severity" class="pm-bars"></div>
+        <h3 style="margin-top:20px">قائمة التنبيهات النشطة</h3>
+        <div id="qms-alerts-list" class="pm-activity-log"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم التاسع: التقارير ============ -->
+    <section class="calc-panel" id="panel-qms-reports">
+      <div class="calc-card">
+        <h2>القسم التاسع — التقارير</h2>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <select id="qms-report-type">
+            <option value="periodic_daily">التقرير اليومي</option>
+            <option value="periodic_weekly">التقرير الأسبوعي</option>
+            <option value="periodic_monthly">التقرير الشهري</option>
+            <option value="inspection_requests">تقرير طلبات الفحص</option>
+            <option value="material_tests">تقرير الاختبارات</option>
+            <option value="ncrs">تقرير NCR</option>
+            <option value="capas">تقرير CAPA</option>
+            <option value="lab">تقرير المختبر</option>
+            <option value="performance">تقرير أداء الجودة</option>
+            <option value="executive">التقرير التنفيذي</option>
+          </select>
+          <input type="text" id="qms-report-project" placeholder="معرّف المشروع (اختياري)">
+          <input type="date" id="qms-report-date-from" title="من تاريخ">
+          <input type="date" id="qms-report-date-to" title="إلى تاريخ">
+          <button class="btn btn-primary" id="qms-report-btn-generate">إنشاء التقرير</button>
+        </div>
+        <div class="toolbar" id="qms-report-export-toolbar" style="display:none">
+          <button class="btn" id="qms-report-btn-pdf">تصدير PDF</button>
+          <button class="btn" id="qms-report-btn-excel">تصدير Excel</button>
+          <button class="btn" id="qms-report-btn-csv">تصدير CSV</button>
+          <button class="btn" id="qms-report-btn-word">تصدير Word</button>
+          <button class="btn" id="qms-report-btn-print">طباعة مباشرة</button>
+        </div>
+        <div id="qms-report-preview" class="pm-activity-log" style="margin-top:16px"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -3257,5 +3312,6 @@
 <script src="js/qms-part3.js"></script>
 <script src="js/qms-part4.js"></script>
 <script src="js/qms-part5.js"></script>
+<script src="js/qms-part6.js"></script>
 </body>
 </html>
