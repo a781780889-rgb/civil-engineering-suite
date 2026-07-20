@@ -391,6 +391,31 @@ async function surveyConvertCoordinates() {
   }
 }
 
+async function surveyExportProjects() {
+  try {
+    const query = {
+      q: document.getElementById('survey-project-search').value || null,
+      status: document.getElementById('survey-project-filter-status').value || null,
+      project_type: document.getElementById('survey-project-filter-type').value || null,
+    };
+    const { data } = await surveyFetch('/projects/export-csv', { query });
+    window.open(data.url, '_blank');
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function surveyExportCoordinateSystems() {
+  const projectId = document.getElementById('survey-crs-project-id').value.trim();
+  if (!projectId) { alert('أدخل معرّف المشروع أولاً'); return; }
+  try {
+    const { data } = await surveyFetch('/coordinate-systems/export-csv', { query: { project_id: projectId } });
+    window.open(data.url, '_blank');
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
 // ============================================================
 // ربط الأحداث
 // ============================================================
@@ -400,6 +425,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const btnNewProject = document.getElementById('survey-btn-new-project');
   if (btnNewProject) btnNewProject.addEventListener('click', surveyNewProject);
+
+  const btnExportProjects = document.getElementById('survey-btn-export-projects');
+  if (btnExportProjects) btnExportProjects.addEventListener('click', surveyExportProjects);
+
+  const btnExportCrs = document.getElementById('survey-btn-export-crs');
+  if (btnExportCrs) btnExportCrs.addEventListener('click', surveyExportCoordinateSystems);
 
   const btnSaveProject = document.getElementById('survey-btn-save-project');
   if (btnSaveProject) btnSaveProject.addEventListener('click', surveySaveProject);
