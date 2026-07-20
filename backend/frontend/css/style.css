@@ -130,11 +130,11 @@ body {
 }
 
 .home-card {
-  background: #fffdf8;
-  border: 1px solid #d8cfb8;
+  background: var(--blueprint-navy);
+  border: 1px solid var(--blueprint-line);
+  border-right: 3px solid transparent;
   border-radius: var(--radius);
-  box-shadow: 0 1px 3px rgba(13,36,56,0.08);
-  padding: 18px 22px;
+  padding: 16px 20px;
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: right;
@@ -144,23 +144,24 @@ body {
   width: 100%;
 }
 .home-card:hover {
-  border-color: var(--accent-copper);
-  box-shadow: 0 4px 14px rgba(200,120,60,0.18);
-  transform: translateX(-2px);
+  background: rgba(200, 120, 60, 0.12);
+  border-right-color: var(--accent-copper);
 }
 .home-card .home-card-icon {
-  width: 42px; height: 42px;
-  border: 2px solid var(--accent-copper);
+  width: 40px; height: 40px;
+  border: 1px solid var(--accent-copper);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-family: var(--mono); color: var(--accent-copper-bright);
-  font-size: 16px;
+  font-size: 15px;
   flex-shrink: 0;
+  opacity: 0.9;
 }
 .home-card .home-card-text { flex: 1; }
-.home-card h3 { margin: 0 0 4px; font-size: 16px; color: var(--ink); }
+.home-card h3 { margin: 0 0 3px; font-size: 15px; color: #b8c9d6; font-weight: 500; }
+.home-card:hover h3 { color: var(--paper); }
 .home-card .home-card-count {
-  font-family: var(--mono); font-size: 11px; color: var(--ink-soft);
+  font-family: var(--mono); font-size: 10.5px; color: var(--blueprint-line);
 }
 
 .section-view-header {
@@ -196,30 +197,34 @@ body {
   gap: 12px;
 }
 .section-item-card {
-  background: #fffdf8;
-  border: 1px solid #d8cfb8;
+  background: var(--blueprint-navy);
+  border: 1px solid var(--blueprint-line);
+  border-right: 3px solid transparent;
   border-radius: var(--radius);
-  padding: 16px 20px;
+  padding: 14px 20px;
   cursor: pointer;
   display: flex; align-items: center; gap: 12px;
   transition: all 0.15s ease;
   width: 100%;
+  color: #b8c9d6;
+  font-size: 14.5px;
 }
 .section-item-card:hover {
-  border-color: var(--accent-copper);
-  box-shadow: 0 3px 10px rgba(200,120,60,0.15);
-  transform: translateX(-2px);
+  background: rgba(200, 120, 60, 0.12);
+  border-right-color: var(--accent-copper);
+  color: var(--paper);
 }
 .section-item-card .nav-icon {
-  font-family: var(--mono); font-size: 13px;
-  width: 30px; height: 30px;
-  border: 1px solid var(--accent-copper);
+  font-family: var(--mono); font-size: 12px;
+  width: 26px; height: 26px;
+  border: 1px solid currentColor;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   color: var(--accent-copper-bright);
   flex-shrink: 0;
+  opacity: 0.85;
 }
-.section-item-card span.label { font-size: 14.5px; color: var(--ink); }
+.section-item-card span.label { font-size: 14.5px; color: inherit; }
 
 .sidebar {
   width: 280px;
