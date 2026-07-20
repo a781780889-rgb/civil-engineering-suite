@@ -205,6 +205,12 @@
     <div class="nav-item" data-panel="qms-capa">
       <span class="nav-icon">🛠️</span> الإجراءات التصحيحية (CAPA)
     </div>
+    <div class="nav-item" data-panel="qms-mar">
+      <span class="nav-icon">📦</span> اعتماد المواد (MAR)
+    </div>
+    <div class="nav-item" data-panel="qms-sdr">
+      <span class="nav-icon">📐</span> اعتماد الرسومات (SDR)
+    </div>
   </nav>
 
   <main class="main-content">
@@ -2629,6 +2635,8 @@
         <div class="pm-activity-log" id="qms-recent-inspections"></div>
         <h3 style="margin-top:20px">آخر حالات عدم المطابقة (NCR)</h3>
         <div class="pm-activity-log" id="qms-recent-ncrs"></div>
+        <h3 style="margin-top:20px">آخر الاعتمادات (MAR / SDR)</h3>
+        <div class="pm-activity-log" id="qms-recent-approvals"></div>
       </div>
     </section>
 
@@ -2975,6 +2983,89 @@
       </div>
     </section>
 
+    <!-- ===== اعتماد المواد (Material Approval Request - MAR) ===== -->
+    <section class="calc-panel" id="panel-qms-mar">
+      <div class="calc-card" id="qms-mar-list-view">
+        <h2>طلبات اعتماد المواد (Material Approval Request - MAR)</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-mar-search" placeholder="بحث بالمادة أو المورد أو الكود...">
+          <select id="qms-mar-filter-status"><option value="">كل الحالات</option></select>
+          <select id="qms-mar-filter-discipline"><option value="">كل التخصصات</option></select>
+          <button class="btn btn-primary" id="qms-mar-btn-new">+ طلب اعتماد مواد جديد</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>الكود</th><th>المشروع</th><th>المادة</th><th>المورد</th><th>التخصص</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <tbody id="qms-mar-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card" id="qms-mar-form-view" style="display:none">
+        <h2 id="qms-mar-form-title">طلب اعتماد مواد جديد</h2>
+        <div id="qms-mar-form-alert"></div>
+        <div class="field-grid">
+          <div class="field"><label>معرّف المشروع *</label><input type="text" id="qms-mar-f-project"></div>
+          <div class="field"><label>اسم المادة *</label><input type="text" id="qms-mar-f-material-name"></div>
+          <div class="field"><label>التخصص</label><select id="qms-mar-f-discipline"></select></div>
+          <div class="field"><label>اسم المورد *</label><input type="text" id="qms-mar-f-supplier-name"></div>
+          <div class="field"><label>المصنّع</label><input type="text" id="qms-mar-f-manufacturer"></div>
+          <div class="field"><label>بلد المنشأ</label><input type="text" id="qms-mar-f-country-of-origin"></div>
+          <div class="field field-full"><label>مرجع المواصفة الفنية</label><input type="text" id="qms-mar-f-specification-reference"></div>
+          <div class="field field-full"><label>شهادات الجودة (كل شهادة في سطر: الاسم | رابط الملف)</label><textarea id="qms-mar-f-certificates" rows="3" placeholder="ISO 9001 | https://example.com/cert1.pdf"></textarea></div>
+          <div class="field field-full"><label>نتائج الاختبارات (كل نتيجة في سطر: الوصف | رابط الملف)</label><textarea id="qms-mar-f-test-results" rows="3" placeholder="اختبار مقاومة الضغط | https://example.com/test1.pdf"></textarea></div>
+          <div class="field field-full"><label>ملاحظات</label><textarea id="qms-mar-f-notes" rows="2"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="qms-mar-form-save">حفظ</button>
+          <button class="btn btn-outline" id="qms-mar-form-cancel">إلغاء</button>
+        </div>
+      </div>
+
+      <div class="calc-card" id="qms-mar-detail-view" style="display:none">
+        <button class="pm-link-btn" id="qms-mar-btn-back-from-detail">← رجوع للقائمة</button>
+        <div id="qms-mar-detail-box"></div>
+      </div>
+    </section>
+
+    <!-- ===== اعتماد الرسومات (Shop Drawing Approval - SDR) ===== -->
+    <section class="calc-panel" id="panel-qms-sdr">
+      <div class="calc-card" id="qms-sdr-list-view">
+        <h2>طلبات اعتماد الرسومات (Shop Drawing Approval - SDR)</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-sdr-search" placeholder="بحث بعنوان الرسم أو رقمه أو الكود...">
+          <select id="qms-sdr-filter-status"><option value="">كل الحالات</option></select>
+          <select id="qms-sdr-filter-discipline"><option value="">كل التخصصات</option></select>
+          <button class="btn btn-primary" id="qms-sdr-btn-new">+ طلب اعتماد رسم جديد</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>الكود</th><th>المشروع</th><th>عنوان الرسم</th><th>رقم الرسم</th><th>الإصدار الحالي</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <tbody id="qms-sdr-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card" id="qms-sdr-form-view" style="display:none">
+        <h2 id="qms-sdr-form-title">طلب اعتماد رسم جديد</h2>
+        <div id="qms-sdr-form-alert"></div>
+        <div class="field-grid">
+          <div class="field"><label>معرّف المشروع *</label><input type="text" id="qms-sdr-f-project"></div>
+          <div class="field"><label>عنوان الرسم *</label><input type="text" id="qms-sdr-f-drawing-title"></div>
+          <div class="field"><label>رقم الرسم *</label><input type="text" id="qms-sdr-f-drawing-number"></div>
+          <div class="field"><label>التخصص</label><select id="qms-sdr-f-discipline"></select></div>
+          <div class="field"><label>المقاول</label><input type="text" id="qms-sdr-f-contractor"></div>
+          <div class="field"><label>الاستشاري</label><input type="text" id="qms-sdr-f-consultant"></div>
+          <div class="field field-full"><label>رابط ملف الرسم (الإصدار الأول)</label><input type="text" id="qms-sdr-f-file-url" placeholder="https://example.com/drawing-v1.pdf"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="qms-sdr-form-save">حفظ</button>
+          <button class="btn btn-outline" id="qms-sdr-form-cancel">إلغاء</button>
+        </div>
+      </div>
+
+      <div class="calc-card" id="qms-sdr-detail-view" style="display:none">
+        <button class="pm-link-btn" id="qms-sdr-btn-back-from-detail">← رجوع للقائمة</button>
+        <div id="qms-sdr-detail-box"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -3070,5 +3161,6 @@
 <script src="js/qms.js"></script>
 <script src="js/qms-part2.js"></script>
 <script src="js/qms-part3.js"></script>
+<script src="js/qms-part4.js"></script>
 </body>
 </html>
