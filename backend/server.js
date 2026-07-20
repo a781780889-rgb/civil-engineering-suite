@@ -3833,6 +3833,116 @@ const API_HANDLERS = {
       return QMS.decideItpItem(body.id, { status: body.status, decided_by: body.decided_by || null, notes: body.notes || '' });
     },
   },
+
+  // ===================================================================
+  // ===== القسم التاسع (الجزء 3/4) - إدارة الجودة (QMS):
+  // ===== حالات عدم المطابقة (NCR) + الإجراءات التصحيحية والوقائية (CAPA)
+  // ===================================================================
+
+  '/api/qms/part3/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        ncr_statuses: QMS.NCR_STATUSES,
+        ncr_status_labels: QMS.NCR_STATUS_LABELS,
+        ncr_allowed_transitions: QMS.NCR_ALLOWED_TRANSITIONS,
+        ncr_severities: QMS.NCR_SEVERITIES,
+        ncr_severity_labels: QMS.NCR_SEVERITY_LABELS,
+        ncr_disciplines: QMS.NCR_DISCIPLINES,
+        ncr_discipline_labels: QMS.NCR_DISCIPLINE_LABELS,
+        capa_statuses: QMS.CAPA_STATUSES,
+        capa_status_labels: QMS.CAPA_STATUS_LABELS,
+        capa_allowed_transitions: QMS.CAPA_ALLOWED_TRANSITIONS,
+        capa_types: QMS.CAPA_TYPES,
+        capa_type_labels: QMS.CAPA_TYPE_LABELS,
+        capa_effectiveness: QMS.CAPA_EFFECTIVENESS,
+        capa_effectiveness_labels: QMS.CAPA_EFFECTIVENESS_LABELS,
+      },
+    }),
+  },
+
+  // ----- حالات عدم المطابقة (NCR) -----
+  '/api/qms/ncrs': {
+    GET: async (_body, query) => QMS.listNcrs({
+      projectId: query?.projectId, status: query?.status,
+      severity: query?.severity, discipline: query?.discipline, search: query?.search,
+    }),
+    POST: async (body) => QMS.createNcr(body),
+  },
+  '/api/qms/ncrs/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف حالة عدم المطابقة (id) مطلوب');
+      return QMS.getNcr(query.id);
+    },
+  },
+  '/api/qms/ncrs/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف حالة عدم المطابقة (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateNcr(id, rest);
+    },
+  },
+  '/api/qms/ncrs/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف حالة عدم المطابقة (id) مطلوب');
+      return QMS.deleteNcr(body.id);
+    },
+  },
+  '/api/qms/ncrs/transition': {
+    POST: async (body) => {
+      if (!body.id || !body.to_status) throw new Error('معرّف الحالة (id) والحالة الجديدة (to_status) مطلوبان');
+      return QMS.transitionNcr(body.id, { to_status: body.to_status, by: body.by || null, notes: body.notes || '' });
+    },
+  },
+
+  // ----- الإجراءات التصحيحية والوقائية (CAPA) -----
+  '/api/qms/capas': {
+    GET: async (_body, query) => QMS.listCapas({
+      projectId: query?.projectId, ncrId: query?.ncrId, status: query?.status,
+      type: query?.type, responsiblePerson: query?.responsiblePerson,
+      overdueOnly: query?.overdueOnly === 'true', search: query?.search,
+    }),
+    POST: async (body) => QMS.createCapa(body),
+  },
+  '/api/qms/capas/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الإجراء (id) مطلوب');
+      return QMS.getCapa(query.id);
+    },
+  },
+  '/api/qms/capas/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الإجراء (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateCapa(id, rest);
+    },
+  },
+  '/api/qms/capas/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الإجراء (id) مطلوب');
+      return QMS.deleteCapa(body.id);
+    },
+  },
+  '/api/qms/capas/transition': {
+    POST: async (body) => {
+      if (!body.id || !body.to_status) throw new Error('معرّف الإجراء (id) والحالة الجديدة (to_status) مطلوبان');
+      return QMS.transitionCapa(body.id, { to_status: body.to_status, by: body.by || null });
+    },
+  },
+  '/api/qms/capas/verify': {
+    POST: async (body) => {
+      if (!body.id || !body.verified_by) throw new Error('معرّف الإجراء (id) والجهة المتحقِّقة (verified_by) مطلوبان');
+      return QMS.verifyCapa(body.id, { verified_by: body.verified_by, notes: body.notes || '' });
+    },
+  },
+  '/api/qms/capas/evaluate-effectiveness': {
+    POST: async (body) => {
+      if (!body.id || !body.effectiveness) throw new Error('معرّف الإجراء (id) وتقييم الفاعلية (effectiveness) مطلوبان');
+      return QMS.evaluateCapaEffectiveness(body.id, {
+        effectiveness: body.effectiveness, evaluated_by: body.evaluated_by || null, notes: body.notes || '',
+      });
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
