@@ -3655,6 +3655,184 @@ const API_HANDLERS = {
       return QMS.signInspectionRequest(body.id, { party: body.party, name: body.name, role: body.role || null });
     },
   },
+
+  // ===== القسم التاسع (الجزء 2/4) - إدارة الجودة (QMS):
+  // ===== اختبارات المواد، إدارة المختبر (مختبرات/فنيون/أجهزة)، نقاط الفحص (ITP)
+  // ===================================================================
+
+  '/api/qms/part2/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        material_categories: QMS.MATERIAL_CATEGORIES,
+        material_category_labels: QMS.MATERIAL_CATEGORY_LABELS,
+        test_types_by_category: QMS.TEST_TYPES_BY_CATEGORY,
+        material_test_statuses: QMS.MATERIAL_TEST_STATUSES,
+        material_test_status_labels: QMS.MATERIAL_TEST_STATUS_LABELS,
+        material_test_results: QMS.MATERIAL_TEST_RESULTS,
+        material_test_result_labels: QMS.MATERIAL_TEST_RESULT_LABELS,
+        lab_equipment_statuses: QMS.LAB_EQUIPMENT_STATUSES,
+        lab_equipment_status_labels: QMS.LAB_EQUIPMENT_STATUS_LABELS,
+        itp_inspection_types: QMS.ITP_INSPECTION_TYPES,
+        itp_inspection_type_labels: QMS.ITP_INSPECTION_TYPE_LABELS,
+        itp_responsible_parties: QMS.ITP_RESPONSIBLE_PARTIES,
+        itp_responsible_party_labels: QMS.ITP_RESPONSIBLE_PARTY_LABELS,
+        itp_statuses: QMS.ITP_STATUSES,
+        itp_status_labels: QMS.ITP_STATUS_LABELS,
+      },
+    }),
+  },
+
+  // ----- اختبارات المواد -----
+  '/api/qms/material-tests': {
+    GET: async (_body, query) => QMS.listMaterialTests({
+      projectId: query?.projectId, materialCategory: query?.materialCategory,
+      status: query?.status, result: query?.result, labId: query?.labId, search: query?.search,
+    }),
+    POST: async (body) => QMS.createMaterialTest(body),
+  },
+  '/api/qms/material-tests/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الاختبار (id) مطلوب');
+      return QMS.getMaterialTest(query.id);
+    },
+  },
+  '/api/qms/material-tests/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الاختبار (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateMaterialTest(id, rest);
+    },
+  },
+  '/api/qms/material-tests/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الاختبار (id) مطلوب');
+      return QMS.deleteMaterialTest(body.id);
+    },
+  },
+  '/api/qms/material-tests/record-result': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الاختبار (id) مطلوب');
+      return QMS.recordMaterialTestResult(body.id, {
+        result_value: body.result_value != null ? body.result_value : null,
+        result: body.result || null, tested_by: body.tested_by || null,
+        test_date: body.test_date || null, notes: body.notes || '',
+      });
+    },
+  },
+  '/api/qms/material-tests/cancel': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الاختبار (id) مطلوب');
+      return QMS.cancelMaterialTest(body.id, { by: body.by || null, reason: body.reason || '' });
+    },
+  },
+
+  // ----- إدارة المختبر: المختبرات -----
+  '/api/qms/labs': {
+    GET: async (_body, query) => QMS.listLabs({ search: query?.search }),
+    POST: async (body) => QMS.createLab(body),
+  },
+  '/api/qms/labs/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف المختبر (id) مطلوب');
+      return QMS.getLab(query.id);
+    },
+  },
+  '/api/qms/labs/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المختبر (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateLab(id, rest);
+    },
+  },
+  '/api/qms/labs/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف المختبر (id) مطلوب');
+      return QMS.deleteLab(body.id);
+    },
+  },
+
+  // ----- إدارة المختبر: الفنيون -----
+  '/api/qms/lab-technicians': {
+    GET: async (_body, query) => QMS.listLabTechnicians({ labId: query?.labId }),
+    POST: async (body) => QMS.createLabTechnician(body),
+  },
+  '/api/qms/lab-technicians/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الفني (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateLabTechnician(id, rest);
+    },
+  },
+  '/api/qms/lab-technicians/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الفني (id) مطلوب');
+      return QMS.deleteLabTechnician(body.id);
+    },
+  },
+
+  // ----- إدارة المختبر: الأجهزة والمعايرة -----
+  '/api/qms/lab-equipment': {
+    GET: async (_body, query) => QMS.listLabEquipment({ labId: query?.labId, status: query?.status }),
+    POST: async (body) => QMS.createLabEquipment(body),
+  },
+  '/api/qms/lab-equipment/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الجهاز (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateLabEquipment(id, rest);
+    },
+  },
+  '/api/qms/lab-equipment/calibrate': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الجهاز (id) مطلوب');
+      return QMS.recordEquipmentCalibration(body.id, {
+        calibration_date: body.calibration_date || null,
+        next_calibration_date: body.next_calibration_date || null,
+        calibrated_by: body.calibrated_by || null,
+      });
+    },
+  },
+  '/api/qms/lab-equipment/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الجهاز (id) مطلوب');
+      return QMS.deleteLabEquipment(body.id);
+    },
+  },
+
+  // ----- نقاط الفحص (ITP) -----
+  '/api/qms/itp': {
+    GET: async (_body, query) => QMS.listItpItems({
+      projectId: query?.projectId, status: query?.status,
+      inspectionType: query?.inspectionType, responsibleParty: query?.responsibleParty, search: query?.search,
+    }),
+    POST: async (body) => QMS.createItpItem(body),
+  },
+  '/api/qms/itp/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف نقطة الفحص (id) مطلوب');
+      return QMS.getItpItem(query.id);
+    },
+  },
+  '/api/qms/itp/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف نقطة الفحص (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMS.updateItpItem(id, rest);
+    },
+  },
+  '/api/qms/itp/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف نقطة الفحص (id) مطلوب');
+      return QMS.deleteItpItem(body.id);
+    },
+  },
+  '/api/qms/itp/decide': {
+    POST: async (body) => {
+      if (!body.id || !body.status) throw new Error('معرّف نقطة الفحص (id) والنتيجة (status) مطلوبان');
+      return QMS.decideItpItem(body.id, { status: body.status, decided_by: body.decided_by || null, notes: body.notes || '' });
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
