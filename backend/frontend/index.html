@@ -223,6 +223,19 @@
     <div class="nav-item" data-panel="qms-reports">
       <span class="nav-icon">📄</span> التقارير
     </div>
+    <div class="sidebar-title" style="margin-top:16px">القسم العاشر</div>
+    <div class="nav-item" data-panel="survey-dashboard">
+      <span class="nav-icon">▦</span> لوحة معلومات المساحة
+    </div>
+    <div class="nav-item" data-panel="survey-projects">
+      <span class="nav-icon">🗺️</span> إدارة المشاريع المساحية
+    </div>
+    <div class="nav-item" data-panel="survey-coordinate-systems">
+      <span class="nav-icon">📍</span> أنظمة الإحداثيات
+    </div>
+    <div class="nav-item" data-panel="survey-coordinate-convert">
+      <span class="nav-icon">🔄</span> تحويل الإحداثيات (UTM ⇄ جغرافي)
+    </div>
   </nav>
 
   <main class="main-content">
@@ -3215,6 +3228,195 @@
       </div>
     </section>
 
+    <!-- ============ القسم العاشر: لوحة معلومات المساحة ============ -->
+    <section class="calc-panel" id="panel-survey-dashboard">
+      <div class="calc-card">
+        <h2>القسم العاشر — لوحة معلومات تطبيق المساحة</h2>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="survey-btn-load-dashboard">تحديث اللوحة</button>
+        </div>
+        <div class="result-cards" id="survey-dash-cards"></div>
+        <h3 style="margin-top:20px">آخر المشاريع المساحية</h3>
+        <div class="pm-activity-log" id="survey-recent-projects"></div>
+        <h3 style="margin-top:20px">آخر العمليات المسجّلة</h3>
+        <div class="pm-activity-log" id="survey-recent-activity"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم العاشر: إدارة المشاريع المساحية ============ -->
+    <section class="calc-panel" id="panel-survey-projects">
+      <div class="calc-card" id="survey-project-list-view">
+        <h2>القسم العاشر — إدارة المشاريع المساحية</h2>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <input type="text" id="survey-project-search" placeholder="بحث بالاسم أو رقم المشروع...">
+          <select id="survey-project-filter-status">
+            <option value="">كل الحالات</option>
+            <option value="planning">التخطيط</option>
+            <option value="active">جاري التنفيذ</option>
+            <option value="on_hold">متوقف</option>
+            <option value="completed">مكتمل</option>
+            <option value="cancelled">ملغى</option>
+          </select>
+          <select id="survey-project-filter-type">
+            <option value="">كل الأنواع</option>
+            <option value="land_survey">رفع أراضي</option>
+            <option value="road_survey">رفع طرق</option>
+            <option value="building_survey">رفع مباني</option>
+            <option value="bridge_survey">رفع جسور</option>
+            <option value="tunnel_survey">رفع أنفاق</option>
+            <option value="network_survey">رفع شبكات</option>
+            <option value="topographic">طبوغرافي</option>
+            <option value="boundary">حدود</option>
+            <option value="construction_layout">توقيع إنشائي</option>
+            <option value="other">أخرى</option>
+          </select>
+          <button class="btn btn-primary" id="survey-btn-new-project">+ مشروع جديد</button>
+        </div>
+        <table class="data-table" id="survey-projects-table">
+          <thead>
+            <tr>
+              <th>رقم المشروع</th><th>الاسم</th><th>النوع</th><th>الموقع</th>
+              <th>المهندس المسؤول</th><th>الحالة</th><th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="survey-projects-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card" id="survey-project-form-view" style="display:none">
+        <h2 id="survey-project-form-title">مشروع مساحي جديد</h2>
+        <input type="hidden" id="survey-project-id">
+        <div class="form-grid">
+          <label>اسم المشروع *<input type="text" id="survey-f-name"></label>
+          <label>نوع المشروع
+            <select id="survey-f-type">
+              <option value="land_survey">رفع أراضي</option>
+              <option value="road_survey">رفع طرق</option>
+              <option value="building_survey">رفع مباني</option>
+              <option value="bridge_survey">رفع جسور</option>
+              <option value="tunnel_survey">رفع أنفاق</option>
+              <option value="network_survey">رفع شبكات</option>
+              <option value="topographic">طبوغرافي</option>
+              <option value="boundary">حدود</option>
+              <option value="construction_layout">توقيع إنشائي</option>
+              <option value="other">أخرى</option>
+            </select>
+          </label>
+          <label>الموقع<input type="text" id="survey-f-location"></label>
+          <label>خط العرض (Latitude)<input type="number" step="0.000001" id="survey-f-lat"></label>
+          <label>خط الطول (Longitude)<input type="number" step="0.000001" id="survey-f-lon"></label>
+          <label>المدينة<input type="text" id="survey-f-city"></label>
+          <label>الدولة<input type="text" id="survey-f-country"></label>
+          <label>المهندس المسؤول<input type="text" id="survey-f-engineer"></label>
+          <label>تاريخ البداية<input type="date" id="survey-f-start"></label>
+          <label>تاريخ النهاية<input type="date" id="survey-f-end"></label>
+          <label>الحالة
+            <select id="survey-f-status">
+              <option value="planning">التخطيط</option>
+              <option value="active">جاري التنفيذ</option>
+              <option value="on_hold">متوقف</option>
+              <option value="completed">مكتمل</option>
+              <option value="cancelled">ملغى</option>
+            </select>
+          </label>
+          <label style="grid-column:1/-1">ملاحظات<textarea id="survey-f-notes"></textarea></label>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="survey-btn-save-project">حفظ</button>
+          <button class="btn" id="survey-btn-cancel-project">إلغاء</button>
+        </div>
+        <div id="survey-form-error" style="color:#c0392b;margin-top:8px"></div>
+      </div>
+
+      <div class="calc-card" id="survey-project-detail-view" style="display:none">
+        <button class="btn" id="survey-btn-back-to-list">← رجوع للقائمة</button>
+        <h2 id="survey-detail-title"></h2>
+        <div id="survey-detail-body"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم العاشر: أنظمة الإحداثيات ============ -->
+    <section class="calc-panel" id="panel-survey-coordinate-systems">
+      <div class="calc-card">
+        <h2>القسم العاشر — إدارة أنظمة الإحداثيات لكل مشروع</h2>
+        <div class="toolbar">
+          <input type="text" id="survey-crs-project-id" placeholder="معرّف المشروع المساحي (SRV-PRJ-...)">
+          <button class="btn" id="survey-btn-load-crs">عرض أنظمة الإحداثيات</button>
+        </div>
+        <table class="data-table" id="survey-crs-table">
+          <thead>
+            <tr><th>الاسم</th><th>النوع</th><th>Datum</th><th>المنطقة (Zone)</th><th>نصف الكرة</th><th>Projection</th><th>افتراضي</th><th>إجراءات</th></tr>
+          </thead>
+          <tbody id="survey-crs-tbody"></tbody>
+        </table>
+
+        <h3 style="margin-top:20px">إضافة نظام إحداثيات جديد</h3>
+        <div class="form-grid">
+          <label>نوع النظام
+            <select id="survey-crs-f-type">
+              <option value="UTM">UTM</option>
+              <option value="GEOGRAPHIC">إحداثيات جغرافية (Lat/Lon)</option>
+              <option value="LOCAL">نظام محلي</option>
+            </select>
+          </label>
+          <label>Datum
+            <select id="survey-crs-f-datum">
+              <option value="WGS84">WGS84</option>
+              <option value="LOCAL">محلي</option>
+            </select>
+          </label>
+          <label>رقم المنطقة (UTM Zone)<input type="number" id="survey-crs-f-zone" min="1" max="60"></label>
+          <label>نصف الكرة
+            <select id="survey-crs-f-hemisphere">
+              <option value="N">شمالي (N)</option>
+              <option value="S">جنوبي (S)</option>
+            </select>
+          </label>
+          <label>الاسم<input type="text" id="survey-crs-f-name"></label>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="survey-btn-add-crs">إضافة نظام الإحداثيات</button>
+        </div>
+        <div id="survey-crs-error" style="color:#c0392b;margin-top:8px"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم العاشر: تحويل الإحداثيات ============ -->
+    <section class="calc-panel" id="panel-survey-coordinate-convert">
+      <div class="calc-card">
+        <h2>القسم العاشر — تحويل الإحداثيات (UTM ⇄ جغرافي)</h2>
+        <div class="toolbar">
+          <select id="survey-conv-direction">
+            <option value="GEO_TO_UTM">من جغرافي (Lat/Lon) إلى UTM</option>
+            <option value="UTM_TO_GEO">من UTM إلى جغرافي (Lat/Lon)</option>
+          </select>
+        </div>
+
+        <div id="survey-conv-geo-inputs" class="form-grid">
+          <label>خط العرض (Latitude)<input type="number" step="0.000001" id="survey-conv-lat" placeholder="مثال: 24.7136"></label>
+          <label>خط الطول (Longitude)<input type="number" step="0.000001" id="survey-conv-lon" placeholder="مثال: 46.6753"></label>
+        </div>
+
+        <div id="survey-conv-utm-inputs" class="form-grid" style="display:none">
+          <label>Easting<input type="number" step="0.0001" id="survey-conv-easting"></label>
+          <label>Northing<input type="number" step="0.0001" id="survey-conv-northing"></label>
+          <label>منطقة UTM (Zone)<input type="number" id="survey-conv-zone" min="1" max="60"></label>
+          <label>نصف الكرة
+            <select id="survey-conv-hemisphere">
+              <option value="N">شمالي (N)</option>
+              <option value="S">جنوبي (S)</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="toolbar">
+          <button class="btn btn-primary" id="survey-btn-convert">تحويل</button>
+        </div>
+        <div id="survey-conv-error" style="color:#c0392b;margin-top:8px"></div>
+        <div class="result-cards" id="survey-conv-result"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -3313,5 +3515,6 @@
 <script src="js/qms-part4.js"></script>
 <script src="js/qms-part5.js"></script>
 <script src="js/qms-part6.js"></script>
+<script src="js/survey.js"></script>
 </body>
 </html>
