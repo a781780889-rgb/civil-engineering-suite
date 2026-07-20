@@ -6,7 +6,7 @@
 
 (function () {
   const SECTION_ICONS = {
-    s1: '◇', s2: '⛓', s4: '▦', s5: '⏱', s7: '⚙', s8: '🦺'
+    s1: '◇', s2: '⛓', s4: '▦', s5: '⏱', s7: '⚙', s8: '🦺', s9: '✅'
   };
 
   function buildSections() {
