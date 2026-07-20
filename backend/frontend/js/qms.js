@@ -122,8 +122,10 @@ async function qmsLoadDashboard() {
       <div class="result-card"><div class="label">عدد الاختبارات</div><div class="value">${d.tests_count}</div></div>
       <div class="result-card"><div class="label">حالات عدم المطابقة (NCR)</div><div class="value">${d.ncr_count}</div></div>
       <div class="result-card"><div class="label">NCR مفتوحة</div><div class="value">${d.ncr_open_count}</div></div>
-      <div class="result-card"><div class="label">طلبات اعتماد المواد (MAR)</div><div class="value">${d.material_approval_requests_count}<span class="unit">قريباً</span></div></div>
-      <div class="result-card"><div class="label">طلبات اعتماد الرسومات (SDR)</div><div class="value">${d.shop_drawing_requests_count}<span class="unit">قريباً</span></div></div>
+      <div class="result-card"><div class="label">طلبات اعتماد المواد (MAR)</div><div class="value">${d.material_approval_requests_count}</div></div>
+      <div class="result-card"><div class="label">MAR قيد المراجعة</div><div class="value">${d.material_approval_requests_pending_count}</div></div>
+      <div class="result-card"><div class="label">طلبات اعتماد الرسومات (SDR)</div><div class="value">${d.shop_drawing_requests_count}</div></div>
+      <div class="result-card"><div class="label">SDR قيد المراجعة</div><div class="value">${d.shop_drawing_requests_pending_count}</div></div>
       <div class="result-card"><div class="label">الإجراءات التصحيحية (CAPA)</div><div class="value">${d.capa_count}</div></div>
       <div class="result-card"><div class="label">CAPA متأخرة</div><div class="value">${d.capa_overdue_count}</div></div>
       <div class="result-card"><div class="label">نسبة الالتزام بالجودة</div><div class="value">${d.quality_compliance_rate}<span class="unit">%</span></div></div>
@@ -148,6 +150,18 @@ async function qmsLoadDashboard() {
           </div>
         `).join('')
         : `<div class="pm-empty-state">لا توجد حالات عدم مطابقة بعد</div>`;
+    }
+
+    const recentApprovalsEl = document.getElementById('qms-recent-approvals');
+    if (recentApprovalsEl) {
+      recentApprovalsEl.innerHTML = (d.recent_approvals && d.recent_approvals.length)
+        ? d.recent_approvals.map(a => `
+          <div class="pm-activity-item">
+            <span class="ts">${qmsFmtDateTime(a.ts)}</span>
+            <span>[${a.type}] ${a.code} — ${qmsEsc(a.title)} — ${qmsEsc(a.status)}</span>
+          </div>
+        `).join('')
+        : `<div class="pm-empty-state">لا توجد قرارات اعتماد بعد</div>`;
     }
   } catch (e) {
     qmsAlert(cardsEl, 'error', e.message);
