@@ -199,6 +199,12 @@
     <div class="nav-item" data-panel="qms-itp">
       <span class="nav-icon">✅</span> نقاط الفحص (ITP)
     </div>
+    <div class="nav-item" data-panel="qms-ncr">
+      <span class="nav-icon">⚠️</span> حالات عدم المطابقة (NCR)
+    </div>
+    <div class="nav-item" data-panel="qms-capa">
+      <span class="nav-icon">🛠️</span> الإجراءات التصحيحية (CAPA)
+    </div>
   </nav>
 
   <main class="main-content">
@@ -2621,6 +2627,8 @@
         <div class="result-cards" id="qms-dash-cards"></div>
         <h3 style="margin-top:20px">آخر عمليات الفحص المنجزة</h3>
         <div class="pm-activity-log" id="qms-recent-inspections"></div>
+        <h3 style="margin-top:20px">آخر حالات عدم المطابقة (NCR)</h3>
+        <div class="pm-activity-log" id="qms-recent-ncrs"></div>
       </div>
     </section>
 
@@ -2883,6 +2891,90 @@
       </div>
     </section>
 
+    <!-- ===== حالات عدم المطابقة (NCR) ===== -->
+    <section class="calc-panel" id="panel-qms-ncr">
+      <div class="calc-card" id="qms-ncr-list-view">
+        <h2>حالات عدم المطابقة (Non-Conformance Report - NCR)</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-ncr-search" placeholder="بحث بالعنصر أو الكود أو الوصف...">
+          <select id="qms-ncr-filter-status"><option value="">كل الحالات</option></select>
+          <select id="qms-ncr-filter-severity"><option value="">كل درجات الخطورة</option></select>
+          <button class="btn btn-primary" id="qms-ncr-btn-new">+ حالة عدم مطابقة جديدة</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>الكود</th><th>المشروع</th><th>العنصر</th><th>الخطورة</th><th>الحالة</th><th>تاريخ الإنشاء</th><th>إجراءات</th></tr></thead>
+          <tbody id="qms-ncr-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card" id="qms-ncr-form-view" style="display:none">
+        <h2 id="qms-ncr-form-title">حالة عدم مطابقة جديدة</h2>
+        <div id="qms-ncr-form-alert"></div>
+        <div class="field-grid">
+          <div class="field"><label>معرّف المشروع *</label><input type="text" id="qms-ncr-f-project"></div>
+          <div class="field"><label>العنصر *</label><input type="text" id="qms-ncr-f-element" placeholder="مثال: عمود C1"></div>
+          <div class="field"><label>الموقع</label><input type="text" id="qms-ncr-f-location"></div>
+          <div class="field"><label>التخصص</label><select id="qms-ncr-f-discipline"></select></div>
+          <div class="field"><label>نوع المخالفة</label><input type="text" id="qms-ncr-f-violation-type"></div>
+          <div class="field"><label>درجة الخطورة</label><select id="qms-ncr-f-severity"></select></div>
+          <div class="field"><label>المسؤول</label><input type="text" id="qms-ncr-f-responsible-party"></div>
+          <div class="field"><label>طلب فحص مرتبط (IR ID)</label><input type="text" id="qms-ncr-f-ir-id"></div>
+          <div class="field field-full"><label>وصف المخالفة *</label><textarea id="qms-ncr-f-description" rows="3"></textarea></div>
+          <div class="field field-full"><label>السبب الجذري (إن وُجد)</label><textarea id="qms-ncr-f-root-cause" rows="2"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="qms-ncr-form-save">حفظ</button>
+          <button class="btn btn-outline" id="qms-ncr-form-cancel">إلغاء</button>
+        </div>
+      </div>
+
+      <div class="calc-card" id="qms-ncr-detail-view" style="display:none">
+        <button class="pm-link-btn" id="qms-ncr-btn-back-from-detail">← رجوع للقائمة</button>
+        <div id="qms-ncr-detail-box"></div>
+      </div>
+    </section>
+
+    <!-- ===== الإجراءات التصحيحية والوقائية (CAPA) ===== -->
+    <section class="calc-panel" id="panel-qms-capa">
+      <div class="calc-card" id="qms-capa-list-view">
+        <h2>الإجراءات التصحيحية والوقائية (Corrective/Preventive Action - CAPA)</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-capa-search" placeholder="بحث بالوصف أو الكود...">
+          <select id="qms-capa-filter-status"><option value="">كل الحالات</option></select>
+          <select id="qms-capa-filter-type"><option value="">كل الأنواع</option></select>
+          <button class="btn btn-primary" id="qms-capa-btn-new">+ إجراء جديد</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>الكود</th><th>المشروع</th><th>النوع</th><th>المسؤول</th><th>تاريخ الاستحقاق</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <tbody id="qms-capa-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card" id="qms-capa-form-view" style="display:none">
+        <h2 id="qms-capa-form-title">إجراء تصحيحي/وقائي جديد</h2>
+        <div id="qms-capa-form-alert"></div>
+        <div class="field-grid">
+          <div class="field"><label>معرّف المشروع *</label><input type="text" id="qms-capa-f-project"></div>
+          <div class="field"><label>حالة عدم مطابقة مرتبطة (NCR ID)</label><input type="text" id="qms-capa-f-ncr-id" placeholder="اختياري"></div>
+          <div class="field"><label>نوع الإجراء</label><select id="qms-capa-f-type"></select></div>
+          <div class="field"><label>المسؤول عن التنفيذ *</label><input type="text" id="qms-capa-f-responsible-person"></div>
+          <div class="field"><label>تاريخ الاستحقاق</label><input type="date" id="qms-capa-f-due-date"></div>
+          <div class="field field-full"><label>وصف الإجراء *</label><textarea id="qms-capa-f-action-description" rows="2"></textarea></div>
+          <div class="field field-full"><label>السبب الجذري</label><textarea id="qms-capa-f-root-cause" rows="2"></textarea></div>
+          <div class="field field-full"><label>خطة المعالجة (مطلوبة قبل اعتماد الخطة)</label><textarea id="qms-capa-f-action-plan" rows="3"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="qms-capa-form-save">حفظ</button>
+          <button class="btn btn-outline" id="qms-capa-form-cancel">إلغاء</button>
+        </div>
+      </div>
+
+      <div class="calc-card" id="qms-capa-detail-view" style="display:none">
+        <button class="pm-link-btn" id="qms-capa-btn-back-from-detail">← رجوع للقائمة</button>
+        <div id="qms-capa-detail-box"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -2977,5 +3069,6 @@
 <script src="js/hseReportsAI.js"></script>
 <script src="js/qms.js"></script>
 <script src="js/qms-part2.js"></script>
+<script src="js/qms-part3.js"></script>
 </body>
 </html>
