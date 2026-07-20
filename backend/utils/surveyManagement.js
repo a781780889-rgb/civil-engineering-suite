@@ -26,8 +26,11 @@
 const fs = require('fs');
 const path = require('path');
 const SEC = require('./businessSecurity');
+const { generateCsv } = require('./csvWriter');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
+const REPORTS_DIR = path.join(__dirname, '..', '..', 'reports');
+if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 const DB_FILE = path.join(DATA_DIR, 'survey.json');
 
 // ===================== أدوات مساعدة عامة =====================
@@ -610,6 +613,63 @@ function ensureSurveyRolesSeeded() {
   return { success: true, data: { seeded_roles: Object.keys(SURVEY_ROLE_DEFINITIONS) } };
 }
 
+// ==================================================================================
+// ================================= تصدير البيانات (CSV) ===========================
+// ==================================================================================
+
+const PROJECT_TYPE_LABELS_AR = {
+  land_survey: 'رفع أراضي', road_survey: 'رفع طرق', building_survey: 'رفع مباني',
+  bridge_survey: 'رفع جسور', tunnel_survey: 'رفع أنفاق', network_survey: 'رفع شبكات',
+  topographic: 'طبوغرافي', boundary: 'حدود', construction_layout: 'توقيع إنشائي', other: 'أخرى',
+};
+const PROJECT_STATUS_LABELS_AR = {
+  planning: 'التخطيط', active: 'جاري التنفيذ', on_hold: 'متوقف', completed: 'مكتمل', cancelled: 'ملغى',
+};
+
+/** تصدير قائمة المشاريع المساحية إلى ملف CSV فعلي (متوافق مع Excel، يدعم العربية عبر BOM) */
+function exportProjectsToCSV(filters = {}) {
+  const { data: projects } = listProjects({ ...filters, pageSize: 100000, page: 1 });
+  const headers = ['رقم المشروع', 'الاسم', 'النوع', 'الموقع', 'المدينة', 'الدولة',
+    'المهندس المسؤول', 'تاريخ البداية', 'تاريخ النهاية', 'الحالة', 'خط العرض', 'خط الطول'];
+  const rows = projects.map((p) => [
+    p.project_number, p.name, PROJECT_TYPE_LABELS_AR[p.project_type] || p.project_type,
+    p.location || '', p.city || '', p.country || '', p.responsible_engineer || '',
+    p.start_date ? p.start_date.slice(0, 10) : '', p.end_date ? p.end_date.slice(0, 10) : '',
+    PROJECT_STATUS_LABELS_AR[p.status] || p.status, p.latitude ?? '', p.longitude ?? '',
+  ]);
+  const buffer = generateCsv(headers, rows);
+  const filename = `survey-projects-${Date.now()}.csv`;
+  const outputPath = path.join(REPORTS_DIR, filename);
+  fs.writeFileSync(outputPath, buffer);
+
+  const store = loadStore();
+  audit(store, { action: 'export_csv', entity: 'project', entityId: null, details: { count: projects.length } });
+  saveStore(store);
+
+  return { success: true, data: { url: `/reports/${filename}`, count: projects.length } };
+}
+
+/** تصدير أنظمة الإحداثيات الخاصة بمشروع معيّن إلى CSV */
+function exportCoordinateSystemsToCSV({ project_id }) {
+  if (!project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+  const { data: items } = listCoordinateSystems({ project_id });
+  const headers = ['الاسم', 'نوع النظام', 'Datum', 'منطقة UTM', 'نصف الكرة', 'Projection', 'افتراضي', 'تاريخ الإنشاء'];
+  const rows = items.map((c) => [
+    c.name, c.system_type, c.datum, c.zone ?? '', c.hemisphere ?? '', c.projection || '',
+    c.is_default ? 'نعم' : 'لا', c.created_at.slice(0, 10),
+  ]);
+  const buffer = generateCsv(headers, rows);
+  const filename = `survey-crs-${project_id}-${Date.now()}.csv`;
+  const outputPath = path.join(REPORTS_DIR, filename);
+  fs.writeFileSync(outputPath, buffer);
+
+  const store = loadStore();
+  audit(store, { action: 'export_csv', entity: 'coordinate_system', entityId: null, projectId: project_id, details: { count: items.length } });
+  saveStore(store);
+
+  return { success: true, data: { url: `/reports/${filename}`, count: items.length } };
+}
+
 module.exports = {
   // أدوار
   ensureSurveyRolesSeeded,
@@ -634,6 +694,9 @@ module.exports = {
   // لوحة التحكم والمرجع
   getDashboard,
   getReferenceData,
+  // تصدير
+  exportProjectsToCSV,
+  exportCoordinateSystemsToCSV,
   // مساعدات داخلية معروضة للاستخدام من الأجزاء اللاحقة لنفس القسم
   _internal: { loadStore, saveStore, audit, newId, nowISO, r2, r4, r6 },
 };
