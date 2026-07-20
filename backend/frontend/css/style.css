@@ -129,56 +129,56 @@ body {
 }
 
 .home-sections-col {
-  width: 420px;
+  width: 280px;
   flex-shrink: 0;
-  background: var(--paper);
-  border-left: 2px dashed var(--accent-copper-bright);
-  padding: 28px 30px;
+  background: var(--blueprint-navy);
+  border-left: 1px solid var(--blueprint-line);
+  padding: 20px 0;
   overflow-y: auto;
 }
+.home-intro { padding: 0 20px 14px; }
 
 .section-view { display: none; padding: 32px 36px; max-width: 1100px; margin: 0 auto; }
 .section-view.active { display: block; }
 
-.home-intro h2 { margin: 0 0 4px; font-size: 22px; color: var(--ink); }
-.home-intro p { margin: 0 0 24px; color: var(--ink-soft); font-family: var(--mono); font-size: 12.5px; }
+.home-intro h2 { margin: 0 0 4px; font-size: 16px; color: var(--paper); }
+.home-intro p { margin: 0; color: var(--blueprint-line); font-family: var(--mono); font-size: 10.5px; }
 
 .home-grid {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0;
 }
 
 .home-card {
-  background: var(--blueprint-navy);
-  border: 1px solid var(--blueprint-line);
+  background: transparent;
+  border: none;
   border-right: 3px solid transparent;
-  border-radius: var(--radius);
-  padding: 16px 20px;
+  padding: 12px 20px;
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: right;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   width: 100%;
 }
 .home-card:hover {
-  background: rgba(200, 120, 60, 0.12);
+  background: rgba(200, 120, 60, 0.08);
   border-right-color: var(--accent-copper);
 }
 .home-card .home-card-icon {
-  width: 40px; height: 40px;
-  border: 1px solid var(--accent-copper);
+  width: 24px; height: 24px;
+  border: 1px solid currentColor;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--mono); color: var(--accent-copper-bright);
-  font-size: 15px;
+  font-family: var(--mono); color: inherit;
+  font-size: 12px;
   flex-shrink: 0;
-  opacity: 0.9;
+  opacity: 0.8;
 }
 .home-card .home-card-text { flex: 1; }
-.home-card h3 { margin: 0 0 3px; font-size: 15px; color: #b8c9d6; font-weight: 500; }
+.home-card h3 { margin: 0 0 2px; font-size: 14.5px; color: #b8c9d6; font-weight: 400; }
 .home-card:hover h3 { color: var(--paper); }
 .home-card .home-card-count {
   font-family: var(--mono); font-size: 10.5px; color: var(--blueprint-line);
@@ -614,7 +614,7 @@ body {
   .main-content { padding: 18px; }
   .home-view { flex-direction: column; }
   .home-main-empty { display: none; }
-  .home-sections-col { width: 100%; border-left: none; border-top: 2px dashed var(--accent-copper-bright); }
+  .home-sections-col { width: 100%; border-left: none; }
 }
 
 /* Focus visibility */
