@@ -53,6 +53,10 @@ const QMS = require('./utils/qmsManagement');
 const QMSX = require('./utils/qmsDocsKpis');
 const QMS_ALERTS = require('./utils/qmsAlerts');
 const QMS_REPORTS = require('./utils/qmsReports');
+const QMS_CHARTS = require('./utils/qmsCharts');
+const QMS_AI = require('./utils/qmsAI');
+const QMS_APPROVALS = require('./utils/qmsApprovals');
+const QMS_SUPPLY = require('./utils/qmsSupplyLink');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -4258,6 +4262,211 @@ const API_HANDLERS = {
       requirePermission(req, 'qms', 'export_reports');
       const result = QMS_REPORTS.exportQmsReportToPrintableHTML(body.report, { projectName: body.projectName });
       return { success: true, ...result };
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم التاسع - البنود المتبقية: الرسوم البيانية ==============
+  // ===================================================================
+  '/api/qms/charts/all': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, data: QMS_CHARTS.getAllQualityCharts({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/charts/compliance-rate': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, data: QMS_CHARTS.buildComplianceRateChart({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/charts/test-results': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, data: QMS_CHARTS.buildTestResultsChart({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/charts/ncr-distribution': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, data: QMS_CHARTS.buildNcrDistributionChart({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/charts/supplier-performance': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, data: QMS_CHARTS.buildSupplierPerformanceChart({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/charts/contractor-performance': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, data: QMS_CHARTS.buildContractorPerformanceChart({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/charts/capa-progress': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, data: QMS_CHARTS.buildCapaProgressChart({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/charts/quality-kpis': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, data: QMS_CHARTS.buildQualityKpisChart({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/charts/cross-project': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, data: QMS_CHARTS.buildCrossProjectComparisonChart({ projectIds: body.projectIds || [] }) };
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم التاسع - البنود المتبقية: الذكاء الاصطناعي =============
+  // ===================================================================
+  '/api/qms/ai/available': {
+    GET: async () => ({ success: true, available: QMS_AI.isAIAvailable() }),
+  },
+  '/api/qms/ai/analyze-test-results': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS_AI.analyzeTestResults({ projectId: body.projectId || null, materialCategory: body.materialCategory || null });
+    },
+  },
+  '/api/qms/ai/predict-ncrs': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS_AI.predictNonConformances({ projectId: body.projectId || null });
+    },
+  },
+  '/api/qms/ai/suggest-capa': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'view');
+      if (!body.ncrId) throw new Error('معرّف حالة عدم المطابقة (ncrId) مطلوب');
+      return QMS_AI.suggestCapaActions({ ncrId: body.ncrId });
+    },
+  },
+  '/api/qms/ai/supplier-contractor-performance': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS_AI.analyzeSupplierContractorPerformance({ projectId: body.projectId || null });
+    },
+  },
+  '/api/qms/ai/review-quality-plan': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'view');
+      if (!body.planId) throw new Error('معرّف خطة الجودة (planId) مطلوب');
+      return QMS_AI.reviewQualityPlan({ planId: body.planId });
+    },
+  },
+  '/api/qms/ai/analytical-report': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return QMS_AI.generateAnalyticalReport({ projectId: body.projectId || null });
+    },
+  },
+  '/api/qms/ai/summarize': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'view');
+      if (!body.recordType || !body.recordId) throw new Error('نوع السجل (recordType) ومعرّفه (recordId) مطلوبان');
+      return QMS_AI.summarizeRecord({ recordType: body.recordType, recordId: body.recordId });
+    },
+  },
+  '/api/qms/ai/proactive-alert': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS_AI.proactiveQualityAlert({ projectId: body.projectId || null });
+    },
+  },
+  '/api/qms/ai/ask': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'view');
+      if (!body.question) throw new Error('نص السؤال (question) مطلوب');
+      return QMS_AI.askQualityQuestion({ question: body.question, projectId: body.projectId || null });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم التاسع - البنود المتبقية: الاعتماد الإلكتروني ==========
+  // ===================================================================
+  '/api/qms/approvals/record': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'approve');
+      return QMS_APPROVALS.recordApproval({
+        entityType: body.entityType,
+        entityId: body.entityId,
+        decision: body.decision,
+        signerName: body.signerName,
+        signerRole: body.signerRole,
+        comments: body.comments || '',
+        projectId: body.projectId || null,
+      });
+    },
+  },
+  '/api/qms/approvals/history': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      if (!query?.entityType || !query?.entityId) throw new Error('نوع الكيان (entityType) ومعرّفه (entityId) مطلوبان');
+      return QMS_APPROVALS.getApprovalHistory({ entityType: query.entityType, entityId: query.entityId });
+    },
+  },
+  '/api/qms/approvals/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS_APPROVALS.listApprovals({
+        projectId: query?.projectId || null,
+        entityType: query?.entityType || null,
+        decision: query?.decision || null,
+        signerName: query?.signerName || null,
+      });
+    },
+  },
+  '/api/qms/approvals/summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return QMS_APPROVALS.getApprovalsSummary({ projectId: query?.projectId || null });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم التاسع - البنود المتبقية: التكامل مع المخازن/المشتريات =
+  // ===================================================================
+  '/api/qms/supply/link-mar': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'manage');
+      if (!body.marId || !body.itemId) throw new Error('معرّف طلب اعتماد المواد (marId) ومعرّف صنف المخزون (itemId) مطلوبان');
+      return QMS_SUPPLY.linkMarToStockItem({ marId: body.marId, itemId: body.itemId });
+    },
+  },
+  '/api/qms/supply/receive-material': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'manage');
+      if (!body.marId || !body.quantity) throw new Error('معرّف طلب اعتماد المواد (marId) والكمية (quantity) مطلوبان');
+      return QMS_SUPPLY.receiveApprovedMaterialToStock({ marId: body.marId, quantity: body.quantity, unit: body.unit || null, note: body.note || '' });
+    },
+  },
+  '/api/qms/supply/quality-hold': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'manage');
+      if (!body.itemId) throw new Error('معرّف صنف المخزون (itemId) مطلوب');
+      return QMS_SUPPLY.placeQualityHoldOnStockItem({
+        itemId: body.itemId, reason: body.reason || '', relatedEntityType: body.relatedEntityType || null, relatedEntityId: body.relatedEntityId || null,
+      });
+    },
+  },
+  '/api/qms/supply/release-hold': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'manage');
+      if (!body.itemId) throw new Error('معرّف صنف المخزون (itemId) مطلوب');
+      return QMS_SUPPLY.releaseQualityHold({ itemId: body.itemId, releasedBy: body.releasedBy || null, notes: body.notes || '' });
+    },
+  },
+  '/api/qms/supply/stock-quality-status': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return QMS_SUPPLY.getStockQualityStatusReport({ projectId: query?.projectId || null });
     },
   },
 };
