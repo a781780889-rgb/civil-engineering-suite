@@ -211,6 +211,12 @@
     <div class="nav-item" data-panel="qms-sdr">
       <span class="nav-icon">📐</span> اعتماد الرسومات (SDR)
     </div>
+    <div class="nav-item" data-panel="qms-documents">
+      <span class="nav-icon">🗂️</span> إدارة الوثائق (مواصفات/أكواد/شهادات)
+    </div>
+    <div class="nav-item" data-panel="qms-kpis">
+      <span class="nav-icon">📊</span> مؤشرات الأداء (KPIs)
+    </div>
   </nav>
 
   <main class="main-content">
@@ -3066,6 +3072,94 @@
       </div>
     </section>
 
+    <!-- ===== القسم التاسع - إدارة الوثائق (مواصفات/أكواد/شهادات) ===== -->
+    <section class="calc-panel" id="panel-qms-documents">
+      <div class="calc-card" id="qms-doc-list-view">
+        <h2>إدارة الوثائق</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-doc-search" placeholder="بحث بالعنوان أو الرقم المرجعي أو الجهة المُصدرة...">
+          <select id="qms-doc-filter-type"><option value="">كل الأنواع</option></select>
+          <select id="qms-doc-filter-status"><option value="">كل الحالات</option></select>
+          <select id="qms-doc-filter-validity">
+            <option value="">كل حالات الصلاحية</option>
+            <option value="valid">سارية</option>
+            <option value="expiring_soon">تقترب من الانتهاء</option>
+            <option value="expired">منتهية</option>
+            <option value="no_expiry">بدون تاريخ انتهاء</option>
+          </select>
+          <button class="btn btn-primary" id="qms-doc-btn-new">+ وثيقة جديدة</button>
+        </div>
+        <div id="qms-doc-expiring-alert"></div>
+        <table class="pm-table">
+          <thead><tr><th>الكود</th><th>العنوان</th><th>النوع</th><th>الجهة المُصدرة</th><th>تاريخ الانتهاء</th><th>الحالة</th><th>الصلاحية</th><th></th></tr></thead>
+          <tbody id="qms-doc-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card" id="qms-doc-form-view" style="display:none">
+        <h2 id="qms-doc-form-title">وثيقة جديدة</h2>
+        <div id="qms-doc-form-alert"></div>
+        <div class="calc-form-grid">
+          <div class="field"><label>معرّف المشروع (اختياري)</label><input type="text" id="qms-doc-f-project"></div>
+          <div class="field"><label>عنوان الوثيقة *</label><input type="text" id="qms-doc-f-title"></div>
+          <div class="field"><label>نوع الوثيقة *</label><select id="qms-doc-f-type"></select></div>
+          <div class="field"><label>الرقم المرجعي</label><input type="text" id="qms-doc-f-reference-number" placeholder="مثال: ISO 9001:2015"></div>
+          <div class="field"><label>الجهة المُصدرة</label><input type="text" id="qms-doc-f-issuing-body"></div>
+          <div class="field"><label>تاريخ الإصدار</label><input type="date" id="qms-doc-f-issue-date"></div>
+          <div class="field"><label>تاريخ الانتهاء (للشهادات)</label><input type="date" id="qms-doc-f-expiry-date"></div>
+          <div class="field field-full"><label>الوسوم (Tags، مفصولة بفواصل)</label><input type="text" id="qms-doc-f-tags" placeholder="خرسانة, ISO, مورّد أ"></div>
+          <div class="field field-full"><label>رابط الملف (الإصدار الأول) *</label><input type="text" id="qms-doc-f-file-url" placeholder="https://example.com/spec-v1.pdf"></div>
+          <div class="field field-full"><label>ملاحظات</label><textarea id="qms-doc-f-notes" rows="2"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="qms-doc-form-save">حفظ</button>
+          <button class="btn btn-outline" id="qms-doc-form-cancel">إلغاء</button>
+        </div>
+      </div>
+
+      <div class="calc-card" id="qms-doc-detail-view" style="display:none">
+        <button class="pm-link-btn" id="qms-doc-btn-back-from-detail">← رجوع للقائمة</button>
+        <div id="qms-doc-detail-box"></div>
+      </div>
+    </section>
+
+    <!-- ===== القسم التاسع - مؤشرات الأداء (Quality KPIs) ===== -->
+    <section class="calc-panel" id="panel-qms-kpis">
+      <div class="calc-card">
+        <h2>مؤشرات الأداء (Quality KPIs)</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-kpi-project" placeholder="معرّف المشروع (اختياري)">
+          <button class="btn btn-primary" id="qms-kpi-btn-load">تحديث المؤشرات</button>
+        </div>
+        <div class="result-cards" id="qms-kpi-general-cards"></div>
+      </div>
+
+      <div class="calc-card">
+        <h3>معدل إغلاق حالات عدم المطابقة (NCR)</h3>
+        <div class="result-cards" id="qms-kpi-ncr-cards"></div>
+        <table class="pm-table">
+          <thead><tr><th>درجة الخطورة</th><th>عدد الحالات المغلقة</th><th>متوسط زمن الإغلاق (يوم)</th></tr></thead>
+          <tbody id="qms-kpi-ncr-severity-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card">
+        <h3>أداء الموردين</h3>
+        <table class="pm-table">
+          <thead><tr><th>المورّد</th><th>إجمالي الطلبات</th><th>معتمد</th><th>معتمد مع ملاحظات</th><th>مرفوض</th><th>نسبة الاعتماد %</th><th>نسبة الرفض %</th></tr></thead>
+          <tbody id="qms-kpi-supplier-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card">
+        <h3>أداء المقاولين</h3>
+        <table class="pm-table">
+          <thead><tr><th>المقاول</th><th>إجمالي الفحوصات</th><th>مقبول</th><th>مشروط</th><th>مرفوض</th><th>نسبة النجاح %</th><th>عدد NCR</th><th>NCR حرجة</th></tr></thead>
+          <tbody id="qms-kpi-contractor-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -3162,5 +3256,6 @@
 <script src="js/qms-part2.js"></script>
 <script src="js/qms-part3.js"></script>
 <script src="js/qms-part4.js"></script>
+<script src="js/qms-part5.js"></script>
 </body>
 </html>
