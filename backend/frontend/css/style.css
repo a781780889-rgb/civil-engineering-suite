@@ -127,6 +127,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 16px;
+  direction: rtl;
 }
 
 .home-card {
@@ -188,6 +189,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 14px;
+  direction: rtl;
 }
 .section-item-card {
   background: #fffdf8;
