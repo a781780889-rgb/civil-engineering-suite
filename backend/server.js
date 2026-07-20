@@ -4748,6 +4748,18 @@ const API_HANDLERS = {
       return { success: true, data: result };
     },
   },
+  '/api/survey/projects/export-csv': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.exportProjectsToCSV(query);
+    },
+  },
+  '/api/survey/coordinate-systems/export-csv': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.exportCoordinateSystemsToCSV(query);
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
