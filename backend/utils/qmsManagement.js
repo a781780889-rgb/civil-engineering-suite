@@ -25,13 +25,58 @@
  *  - لوحة التحكم تحسب المؤشرات فعلياً من البيانات المخزَّنة (لا أرقام وهمية):
  *    نسبة الالتزام بالجودة = طلبات الفحص المقبولة ÷ إجمالي طلبات الفحص المُنجزة.
  *  - سجل تدقيق (Audit Log) فعلي لكل عملية إنشاء/تعديل/حذف/اعتماد.
+ *  - تشفير حقيقي (AES-256-GCM عبر businessSecurity.js) للحقول الحسّاسة قبل كتابتها
+ *    على القرص: أرقام هواتف المختبرات وفنيّيها، وأرقام شهادات فنيّي المختبر. تُفَك
+ *    تشفيرها تلقائياً وشفافياً عند القراءة (list/get) بحيث لا يتأثر أي منطق قائم.
  */
 
 const fs = require('fs');
 const path = require('path');
+const SEC = require('./businessSecurity');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const DB_FILE = path.join(DATA_DIR, 'qms.json');
+
+// ===================== تشفير الحقول الحسّاسة =====================
+const ENCRYPTED_FIELDS_BY_ENTITY = {
+  labs: ['phone'],
+  labTechnicians: ['phone', 'certificate_number'],
+};
+const ENC_PREFIX = 'ENC1:';
+
+function encryptSensitiveField(value) {
+  if (value === null || value === undefined || value === '') return value;
+  return ENC_PREFIX + SEC.encryptField(String(value));
+}
+
+function decryptSensitiveField(value) {
+  if (value === null || value === undefined || value === '') return value;
+  if (typeof value !== 'string' || !value.startsWith(ENC_PREFIX)) return value;
+  try {
+    return SEC.decryptField(value.slice(ENC_PREFIX.length));
+  } catch (e) {
+    return null;
+  }
+}
+
+function encryptEntityFields(entityKey, obj) {
+  const fields = ENCRYPTED_FIELDS_BY_ENTITY[entityKey];
+  if (!fields || !obj) return obj;
+  for (const f of fields) {
+    if (obj[f] !== undefined) obj[f] = encryptSensitiveField(obj[f]);
+  }
+  return obj;
+}
+
+function decryptEntityFields(entityKey, record) {
+  const fields = ENCRYPTED_FIELDS_BY_ENTITY[entityKey];
+  if (!fields || !record) return record;
+  const out = { ...record };
+  for (const f of fields) {
+    if (out[f] !== undefined) out[f] = decryptSensitiveField(out[f]);
+  }
+  return out;
+}
 
 function r2(v) { return Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100; }
 function nowISO() { return new Date().toISOString(); }
@@ -89,10 +134,111 @@ function saveStore(store) {
   fs.writeFileSync(DB_FILE, JSON.stringify(store, null, 2), 'utf-8');
 }
 
-function audit(store, { action, entity, entityId, projectId = null, details = {} }) {
+// ===================== نسخ احتياطي واستعادة خاصة بقسم الجودة =====================
+// منفصلة عن النسخ الاحتياطي العام للمنصة (SEC.createBackup يشمل كل ملفات data/*.json
+// بما فيها qms.json ضمنياً)، لتغطية متطلب نسخ احتياطي/استعادة "لبيانات الجودة وحدها"
+// دون الحاجة لاستعادة كامل بيانات المنصة (المشاريع، الموارد البشرية...) معها.
+const QMS_BACKUPS_DIR = path.join(DATA_DIR, 'backups', 'qms');
+
+function ensureQmsBackupsDir() {
+  if (!fs.existsSync(QMS_BACKUPS_DIR)) fs.mkdirSync(QMS_BACKUPS_DIR, { recursive: true });
+}
+
+/** ينشئ نسخة احتياطية فعلية (ملف JSON على القرص) تضم قاعدة بيانات QMS بأكملها فقط */
+function createQmsBackup({ label = null, by = null } = {}) {
+  ensureQmsBackupsDir();
+  const store = loadStore(); // يضمن قراءة الملف الحالي فعلياً (وليس نسخة وهمية)
+  const snapshot = {
+    created_at: nowISO(),
+    label: label || null,
+    source_file: 'qms.json',
+    data: store,
+  };
+  const fileName = `qms-backup-${Date.now()}.json`;
+  const outputPath = path.join(QMS_BACKUPS_DIR, fileName);
+  fs.writeFileSync(outputPath, JSON.stringify(snapshot), 'utf-8');
+
+  audit(store, { action: 'backup_create', entity: 'qms_backup', entityId: fileName, by });
+  saveStore(store); // لحفظ سجل التدقيق الخاص بعملية النسخ نفسها
+
+  return {
+    success: true,
+    data: {
+      fileName,
+      created_at: snapshot.created_at,
+      entitiesCount: Object.keys(store).filter(k => k !== 'auditLog' && k !== 'seq').reduce((sum, k) => sum + (store[k] && typeof store[k] === 'object' ? Object.keys(store[k]).length : 0), 0),
+    },
+  };
+}
+
+/** يسرد النسخ الاحتياطية المتوفرة الخاصة بقسم الجودة فقط */
+function listQmsBackups() {
+  ensureQmsBackupsDir();
+  const files = fs.readdirSync(QMS_BACKUPS_DIR).filter(f => f.endsWith('.json'));
+  const data = files.map(f => {
+    const full = path.join(QMS_BACKUPS_DIR, f);
+    const stat = fs.statSync(full);
+    return { fileName: f, size: stat.size, created_at: stat.mtime.toISOString() };
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  return { success: true, data };
+}
+
+/** يستعيد قاعدة بيانات QMS بالكامل من نسخة احتياطية محددة، مع أخذ نسخة أمان تلقائية قبل الاستبدال */
+function restoreQmsBackup(fileName, { by = null } = {}) {
+  ensureQmsBackupsDir();
+  const full = path.join(QMS_BACKUPS_DIR, fileName);
+  if (!full.startsWith(QMS_BACKUPS_DIR) || !fs.existsSync(full)) {
+    throw new Error('ملف النسخة الاحتياطية غير موجود');
+  }
+  const snapshot = JSON.parse(fs.readFileSync(full, 'utf-8'));
+  if (!snapshot.data) throw new Error('ملف النسخة الاحتياطية تالف أو بصيغة غير صحيحة');
+
+  // أمان إضافي: نسخة تلقائية للحالة الحالية قبل الاستبدال، حتى يمكن التراجع
+  createQmsBackup({ label: 'auto-before-restore', by });
+
+  saveStore(snapshot.data);
+  const restoredStore = loadStore();
+  audit(restoredStore, { action: 'backup_restore', entity: 'qms_backup', entityId: fileName, by });
+  saveStore(restoredStore);
+
+  return { success: true, data: { restoredFrom: fileName, restored_at: nowISO() } };
+}
+
+function audit(store, { action, entity, entityId, projectId = null, details = {}, by = null }) {
   if (!store.auditLog) store.auditLog = [];
-  store.auditLog.push({ ts: nowISO(), action, entity, entityId, projectId, details });
+  const entry = { ts: nowISO(), action, entity, entityId, projectId, details, by };
+  store.auditLog.push(entry);
   if (store.auditLog.length > 5000) store.auditLog = store.auditLog.slice(-5000);
+  // توحيد مع سجل التدقيق العام لكل المنصة (global_audit_log.json)، بحيث يمكن رؤية
+  // عمليات الجودة ضمن تدقيق النظام الشامل، دون التخلي عن سجل QMS المحلي المتخصص
+  // (الذي يبقى مصدر الحقيقة لواجهة "سجل تدقيق الجودة" المخصصة).
+  try {
+    SEC.recordGlobalAudit({
+      module: 'qms',
+      action: `${entity}:${action}`,
+      target_id: entityId || null,
+      summary: `${action} ${entity}${projectId ? ' (مشروع: ' + projectId + ')' : ''}`,
+      username: by || null,
+    });
+  } catch (e) {
+    // لا نكسر عملية الجودة نفسها إن تعذّر التسجيل في السجل العام لأي سبب
+  }
+}
+
+/**
+ * استعلام سجل تدقيق الجودة المحلي (auditLog داخل qms.json)، مع فلاتر اختيارية
+ * حسب المشروع/الكيان/نوع العملية، وترتيب تنازلي حسب التوقيت (الأحدث أولاً).
+ */
+function getAuditLog({ projectId, entity, action, entityId, limit = 200 } = {}) {
+  const store = loadStore();
+  let items = Array.isArray(store.auditLog) ? [...store.auditLog] : [];
+  if (projectId) items = items.filter(a => a.projectId === projectId);
+  if (entity) items = items.filter(a => a.entity === entity);
+  if (action) items = items.filter(a => a.action === action);
+  if (entityId) items = items.filter(a => a.entityId === entityId);
+  items.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  const ps = Math.min(Number(limit) || 200, 2000);
+  return { success: true, data: items.slice(0, ps), total: items.length };
 }
 
 function generateCode(store, prefix) {
@@ -101,6 +247,53 @@ function generateCode(store, prefix) {
 }
 
 // ===================== ثوابت =====================
+
+// ===================== المرجعية المعيارية: ISO 9001:2015 =====================
+// خريطة فعلية تربط كل كيان رئيسي في القسم ببند (أو بنود) ISO 9001:2015 المقابل له،
+// بحيث يمكن للمستخدم (ومهندس الجودة تحديداً) معرفة أي متطلب معياري تُغطّيه كل
+// شاشة/كيان في النظام - وليست مجرد اسم "ISO 9001" مذكور بلا محتوى فعلي خلفه.
+const ISO_9001_CLAUSES = {
+  '4.4': 'نظام إدارة الجودة وعملياته',
+  '5.2': 'سياسة الجودة',
+  '6.2': 'أهداف الجودة وخطط تحقيقها',
+  '7.1.5': 'موارد المراقبة والقياس (المختبرات، الأجهزة، المعايرة)',
+  '7.1.6': 'المعرفة التنظيمية (الوثائق والمواصفات الفنية)',
+  '7.5': 'المعلومات الموثّقة (الوثائق، الإصدارات، الأرشفة)',
+  '8.1': 'تخطيط وضبط التشغيل (خطة الجودة، ITP)',
+  '8.4': 'الرقابة على العمليات/المنتجات المقدَّمة من جهات خارجية (اعتماد المواد MAR، أداء الموردين)',
+  '8.5.1': 'ضبط عمليات الإنتاج وتقديم الخدمة (طلبات الفحص IR، اعتماد الرسومات SDR)',
+  '8.6': 'إطلاق المنتجات والخدمات (نقاط الفحص/التوقف ITP، التوقيع والاعتماد الإلكتروني)',
+  '8.7': 'ضبط المخرجات غير المطابقة (حالات عدم المطابقة NCR)',
+  '9.1': 'المراقبة والقياس والتحليل والتقييم (مؤشرات الأداء KPIs، التقارير)',
+  '9.2': 'التدقيق الداخلي (سجل التدقيق Audit Log)',
+  '10.2': 'عدم المطابقة والإجراء التصحيحي (CAPA)',
+  '10.3': 'التحسين المستمر (تقييم فاعلية CAPA، التقارير التحليلية بالذكاء الاصطناعي)',
+};
+
+/** يربط كل كيان في QMS ببند/بنود ISO 9001:2015 المقابلة له فعلياً */
+const ISO_9001_ENTITY_MAPPING = {
+  quality_plan: ['4.4', '5.2', '6.2', '8.1'],
+  inspection_request: ['8.5.1', '8.6'],
+  material_test: ['7.1.5', '8.6'],
+  lab: ['7.1.5'],
+  itp: ['8.1', '8.6'],
+  ncr: ['8.7', '10.2'],
+  capa: ['10.2', '10.3'],
+  mar: ['8.4'],
+  sdr: ['8.5.1'],
+  document: ['7.1.6', '7.5'],
+  audit_log: ['9.2'],
+  kpi: ['9.1'],
+};
+
+/** يعيد خريطة الامتثال المرجعية كاملة (تُستخدَم من واجهة API مباشرة) */
+function getIso9001Reference() {
+  return {
+    standard: 'ISO 9001:2015',
+    clauses: ISO_9001_CLAUSES,
+    entity_mapping: ISO_9001_ENTITY_MAPPING,
+  };
+}
 
 // ----- خطة الجودة -----
 const QUALITY_PLAN_STATUSES = ['draft', 'under_review', 'approved', 'archived'];
@@ -476,7 +669,8 @@ function createQualityPlan(payload) {
     work_instructions: Array.isArray(payload.work_instructions) ? payload.work_instructions : [],
     acceptance_criteria: Array.isArray(payload.acceptance_criteria) ? payload.acceptance_criteria : [],
     inspection_hold_points: Array.isArray(payload.inspection_hold_points) ? payload.inspection_hold_points : [],
-    reference_standard: payload.reference_standard || 'ISO 9001',
+    reference_standard: payload.reference_standard || 'ISO 9001:2015',
+    iso_clauses: ISO_9001_ENTITY_MAPPING.quality_plan, // البنود المرجعية المرتبطة فعلياً بخطة الجودة
     prepared_by: payload.prepared_by || null,
     approved_by: null,
     approved_at: null,
@@ -1021,10 +1215,11 @@ function createLab(payload) {
     created_at: nowISO(),
     updated_at: nowISO(),
   };
+  encryptEntityFields('labs', record);
   store.labs[id] = record;
   audit(store, { action: 'create', entity: 'lab', entityId: id });
   saveStore(store);
-  return { success: true, data: record };
+  return { success: true, data: decryptEntityFields('labs', record) };
 }
 
 function listLabs({ search } = {}) {
@@ -1035,14 +1230,14 @@ function listLabs({ search } = {}) {
     items = items.filter(l => (l.name || '').toLowerCase().includes(q) || (l.code || '').toLowerCase().includes(q));
   }
   items.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-  return { success: true, data: items };
+  return { success: true, data: items.map(l => decryptEntityFields('labs', l)) };
 }
 
 function getLab(id) {
   const store = loadStore();
   const record = store.labs[id];
   if (!record) throw new Error('المختبر غير موجود');
-  return { success: true, data: record };
+  return { success: true, data: decryptEntityFields('labs', record) };
 }
 
 function updateLab(id, changes) {
@@ -1052,11 +1247,12 @@ function updateLab(id, changes) {
   validateLabPayload({ ...record, ...changes }, { partial: true });
   const updatable = ['name', 'accreditation_body', 'accreditation_number', 'location', 'contact_person', 'phone', 'is_external', 'notes'];
   for (const f of updatable) if (changes[f] !== undefined) record[f] = changes[f];
+  encryptEntityFields('labs', record);
   record.updated_at = nowISO();
   store.labs[id] = record;
-  audit(store, { action: 'update', entity: 'lab', entityId: id, details: changes });
+  audit(store, { action: 'update', entity: 'lab', entityId: id, details: { fields: Object.keys(changes) } });
   saveStore(store);
-  return { success: true, data: record };
+  return { success: true, data: decryptEntityFields('labs', record) };
 }
 
 function deleteLab(id) {
@@ -1089,10 +1285,11 @@ function createLabTechnician(payload) {
     created_at: nowISO(),
     updated_at: nowISO(),
   };
+  encryptEntityFields('labTechnicians', record);
   store.labTechnicians[id] = record;
   audit(store, { action: 'create', entity: 'lab_technician', entityId: id });
   saveStore(store);
-  return { success: true, data: record };
+  return { success: true, data: decryptEntityFields('labTechnicians', record) };
 }
 
 function listLabTechnicians({ labId } = {}) {
@@ -1100,7 +1297,7 @@ function listLabTechnicians({ labId } = {}) {
   let items = Object.values(store.labTechnicians);
   if (labId) items = items.filter(t => t.lab_id === labId);
   items.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-  return { success: true, data: items };
+  return { success: true, data: items.map(t => decryptEntityFields('labTechnicians', t)) };
 }
 
 function updateLabTechnician(id, changes) {
@@ -1109,11 +1306,12 @@ function updateLabTechnician(id, changes) {
   if (!record) throw new Error('الفني غير موجود');
   const updatable = ['name', 'lab_id', 'qualification', 'certificate_number', 'certificate_expiry', 'phone'];
   for (const f of updatable) if (changes[f] !== undefined) record[f] = changes[f];
+  encryptEntityFields('labTechnicians', record);
   record.updated_at = nowISO();
   store.labTechnicians[id] = record;
-  audit(store, { action: 'update', entity: 'lab_technician', entityId: id, details: changes });
+  audit(store, { action: 'update', entity: 'lab_technician', entityId: id, details: { fields: Object.keys(changes) } });
   saveStore(store);
-  return { success: true, data: record };
+  return { success: true, data: decryptEntityFields('labTechnicians', record) };
 }
 
 function deleteLabTechnician(id) {
@@ -2105,6 +2303,15 @@ function transitionSdr(id, { to_status, by = null, comment = '' } = {}) {
 }
 
 module.exports = {
+  // سجل تدقيق الجودة (محلي + موحَّد مع السجل العام)
+  getAuditLog,
+
+  // نسخ احتياطي واستعادة خاصة بقسم الجودة
+  createQmsBackup, listQmsBackups, restoreQmsBackup,
+
+  // المرجعية المعيارية ISO 9001:2015
+  getIso9001Reference,
+
   // ثوابت - الجزء 1
   QUALITY_PLAN_STATUSES, QUALITY_PLAN_STATUS_LABELS,
   IR_STATUSES, IR_STATUS_LABELS, IR_ALLOWED_TRANSITIONS,
