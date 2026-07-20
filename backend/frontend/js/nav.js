@@ -44,8 +44,10 @@
     grid.innerHTML = SECTIONS.map(sec => `
       <div class="home-card" data-section="${sec.id}">
         <div class="home-card-icon">${SECTION_ICONS[sec.id] || '◆'}</div>
-        <h3>${sec.title}</h3>
-        <div class="home-card-count">${sec.items.length} عنصر</div>
+        <div class="home-card-text">
+          <h3>${sec.title}</h3>
+          <div class="home-card-count">${sec.items.length} عنصر</div>
+        </div>
       </div>
     `).join('');
 
