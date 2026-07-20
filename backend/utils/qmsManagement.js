@@ -51,6 +51,8 @@ function ensureStore() {
       labTechnicians: {},      // { id: technicianRecord }          (فنيو المختبر - الجزء 2)
       labEquipment: {},        // { id: equipmentRecord }           (أجهزة المختبر - الجزء 2)
       itpItems: {},            // { id: itpRecord }                 (نقاط الفحص ITP - الجزء 2)
+      ncrs: {},                // { id: ncrRecord }                 (حالات عدم المطابقة NCR - الجزء 3)
+      capas: {},               // { id: capaRecord }                (الإجراءات التصحيحية/الوقائية CAPA - الجزء 3)
       auditLog: [],
       seq: 0,
     };
@@ -70,6 +72,7 @@ function loadStore() {
   for (const key of [
     'qualityPlans', 'qualityPlanVersions', 'inspectionRequests',
     'materialTests', 'labs', 'labTechnicians', 'labEquipment', 'itpItems',
+    'ncrs', 'capas',
   ]) {
     if (!store[key]) { store[key] = {}; migrated = true; }
   }
@@ -212,6 +215,66 @@ const ITP_STATUS_LABELS = {
   pending: 'قيد الانتظار', passed: 'مجتاز', failed: 'غير مجتاز', waived: 'مستثنى (Waived)',
 };
 
+// ----- حالات عدم المطابقة (NCR) (الجزء 3) -----
+// دورة حياة حقيقية: مفتوحة → قيد المعالجة (بعد ربط إجراء تصحيحي CAPA) →
+// معلّقة للتحقق (بعد تنفيذ الإجراء) → مغلقة (بعد التحقق والاعتماد) | مرفوضة
+const NCR_STATUSES = ['open', 'in_progress', 'pending_verification', 'closed', 'rejected'];
+const NCR_STATUS_LABELS = {
+  open: 'مفتوحة',
+  in_progress: 'قيد المعالجة',
+  pending_verification: 'معلّقة للتحقق',
+  closed: 'مغلقة',
+  rejected: 'مرفوضة',
+};
+// الانتقالات المسموحة بين حالات NCR
+const NCR_ALLOWED_TRANSITIONS = {
+  open: ['in_progress', 'rejected'],
+  in_progress: ['pending_verification', 'rejected'],
+  pending_verification: ['closed', 'in_progress'],
+  closed: [],
+  rejected: [],
+};
+
+const NCR_SEVERITIES = ['minor', 'major', 'critical'];
+const NCR_SEVERITY_LABELS = { minor: 'بسيطة', major: 'جسيمة', critical: 'حرجة' };
+
+const NCR_DISCIPLINES = [
+  'concrete', 'rebar', 'formwork', 'masonry', 'finishing', 'mep', 'earthwork', 'asphalt', 'other',
+];
+const NCR_DISCIPLINE_LABELS = {
+  concrete: 'خرسانة', rebar: 'حديد تسليح', formwork: 'شدة خشبية', masonry: 'مباني (طوب/بلوك)',
+  finishing: 'تشطيبات', mep: 'كهروميكانيكال', earthwork: 'أعمال ترابية', asphalt: 'أسفلت', other: 'أخرى',
+};
+
+// ----- الإجراءات التصحيحية والوقائية (CAPA) (الجزء 3) -----
+// دورة حياة حقيقية: مفتوح → خطة معتمدة → قيد التنفيذ → تم التحقق → مغلق (بعد تقييم الفاعلية)
+const CAPA_STATUSES = ['open', 'plan_approved', 'in_progress', 'verified', 'closed'];
+const CAPA_STATUS_LABELS = {
+  open: 'مفتوح',
+  plan_approved: 'خطة معتمدة',
+  in_progress: 'قيد التنفيذ',
+  verified: 'تم التحقق من التنفيذ',
+  closed: 'مغلق',
+};
+const CAPA_ALLOWED_TRANSITIONS = {
+  open: ['plan_approved'],
+  plan_approved: ['in_progress'],
+  in_progress: ['verified'],
+  verified: ['closed'],
+  closed: [],
+};
+
+const CAPA_TYPES = ['corrective', 'preventive'];
+const CAPA_TYPE_LABELS = { corrective: 'إجراء تصحيحي', preventive: 'إجراء وقائي' };
+
+const CAPA_EFFECTIVENESS = ['not_evaluated', 'effective', 'partially_effective', 'ineffective'];
+const CAPA_EFFECTIVENESS_LABELS = {
+  not_evaluated: 'لم يُقيَّم بعد',
+  effective: 'فعّال',
+  partially_effective: 'فعّال جزئياً',
+  ineffective: 'غير فعّال',
+};
+
 // ===================== لوحة التحكم (Dashboard) =====================
 
 function getDashboard(projectId = null) {
@@ -242,6 +305,33 @@ function getDashboard(projectId = null) {
       status: r.status, result: r.result, inspection_date: r.inspection_date,
     }));
 
+  // ----- حالات عدم المطابقة (NCR) - مؤشرات فعلية من البيانات المخزَّنة -----
+  const ncrs = Object.values(store.ncrs).filter(n => !projectId || n.project_id === projectId);
+  const openNcrs = ncrs.filter(n => !['closed', 'rejected'].includes(n.status));
+  const closedNcrs = ncrs.filter(n => n.status === 'closed');
+  const avgNcrClosureDays = closedNcrs.length > 0
+    ? r2(closedNcrs.reduce((sum, n) => {
+        const opened = new Date(n.created_at);
+        const closed = new Date(n.closed_at || n.updated_at);
+        return sum + Math.max(0, (closed - opened) / (1000 * 60 * 60 * 24));
+      }, 0) / closedNcrs.length)
+    : 0;
+
+  const recentNcrs = [...ncrs]
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    .slice(0, 10)
+    .map(n => ({
+      id: n.id, code: n.code, project_id: n.project_id, element: n.element,
+      severity: n.severity, status: n.status, created_at: n.created_at,
+    }));
+
+  // ----- الإجراءات التصحيحية والوقائية (CAPA) - مؤشرات فعلية -----
+  const capas = Object.values(store.capas).filter(c => !projectId || c.project_id === projectId);
+  const openCapas = capas.filter(c => c.status !== 'closed');
+  const overdueCapas = capas.filter(c =>
+    c.status !== 'closed' && c.due_date && new Date(c.due_date) < new Date()
+  );
+
   return {
     success: true,
     data: {
@@ -251,15 +341,20 @@ function getDashboard(projectId = null) {
       inspection_requests_count: irs.length,
       inspections_done_count: inspectedIrs.length,
       tests_count: tests.length,
-      // العناصر التالية تُفعَّل فعلياً في الأجزاء 3/4 وتُعرض هنا كأصفار حقيقية
-      // (وليست قيماً وهمية) لحين بناء الوحدات المرتبطة بها:
-      ncr_count: 0,
+      ncr_count: ncrs.length,
+      ncr_open_count: openNcrs.length,
+      ncr_closed_count: closedNcrs.length,
+      ncr_avg_closure_days: avgNcrClosureDays,
+      // العناصر التالية (MAR/SDR) لم تُبنَ بعد وتُعرض كأصفار حقيقية لحين تنفيذها
+      // في جزء لاحق (اعتماد المواد واعتماد الرسومات):
       material_approval_requests_count: 0,
       shop_drawing_requests_count: 0,
-      capa_count: 0,
+      capa_count: capas.length,
+      capa_open_count: openCapas.length,
+      capa_overdue_count: overdueCapas.length,
       quality_compliance_rate: complianceRate,
       recent_inspections: recentInspections,
-      recent_ncrs: [],
+      recent_ncrs: recentNcrs,
       recent_approvals: [],
       recent_reports: [],
     },
@@ -1159,6 +1254,390 @@ function decideItpItem(id, { status, decided_by = null, notes = '' } = {}) {
   return { success: true, data: record };
 }
 
+// ===================== حالات عدم المطابقة (Non-Conformance Report - NCR) =====================
+// (القسم التاسع - الجزء 3/4)
+
+function validateNcrPayload(payload, { partial = false } = {}) {
+  const required = ['project_id', 'element', 'description'];
+  if (!partial) {
+    for (const f of required) {
+      if (!payload[f] || String(payload[f]).trim() === '') {
+        throw new Error(`الحقل "${f}" مطلوب لإنشاء حالة عدم مطابقة (NCR)`);
+      }
+    }
+  }
+  if (payload.severity && !NCR_SEVERITIES.includes(payload.severity)) {
+    throw new Error(`درجة خطورة غير صالحة: ${payload.severity}`);
+  }
+  if (payload.discipline && !NCR_DISCIPLINES.includes(payload.discipline)) {
+    throw new Error(`تخصص غير صالح: ${payload.discipline}`);
+  }
+}
+
+function createNcr(payload) {
+  validateNcrPayload(payload);
+  const store = loadStore();
+  const id = newId('NCR');
+  const code = generateCode(store, 'NCR');
+  const record = {
+    id,
+    code,
+    project_id: payload.project_id,
+    element: payload.element,
+    location: payload.location || null,
+    discipline: payload.discipline || 'other',
+    violation_type: payload.violation_type || null,
+    description: payload.description,
+    severity: payload.severity || 'minor',
+    root_cause: payload.root_cause || null,
+    photos: Array.isArray(payload.photos) ? payload.photos : [],
+    documents: Array.isArray(payload.documents) ? payload.documents : [],
+    responsible_party: payload.responsible_party || null,
+    ir_id: payload.ir_id || null,
+    status: 'open',
+    capa_ids: [],
+    closed_by: null,
+    closed_at: null,
+    change_log: [{ ts: nowISO(), action: 'created', by: payload.created_by || null }],
+    created_by: payload.created_by || null,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+  store.ncrs[id] = record;
+  audit(store, { action: 'create', entity: 'ncr', entityId: id, projectId: record.project_id });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listNcrs({ projectId, status, severity, discipline, search } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.ncrs);
+  if (projectId) items = items.filter(n => n.project_id === projectId);
+  if (status) items = items.filter(n => n.status === status);
+  if (severity) items = items.filter(n => n.severity === severity);
+  if (discipline) items = items.filter(n => n.discipline === discipline);
+  if (search) {
+    const q = String(search).toLowerCase();
+    items = items.filter(n =>
+      (n.element || '').toLowerCase().includes(q) ||
+      (n.code || '').toLowerCase().includes(q) ||
+      (n.description || '').toLowerCase().includes(q)
+    );
+  }
+  items.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+  return { success: true, data: items };
+}
+
+function getNcr(id) {
+  const store = loadStore();
+  const record = store.ncrs[id];
+  if (!record) throw new Error('حالة عدم المطابقة غير موجودة');
+  const capas = Object.values(store.capas).filter(c => (record.capa_ids || []).includes(c.id));
+  return { success: true, data: { ...record, capas } };
+}
+
+function updateNcr(id, changes) {
+  const store = loadStore();
+  const record = store.ncrs[id];
+  if (!record) throw new Error('حالة عدم المطابقة غير موجودة');
+  if (['closed', 'rejected'].includes(record.status)) {
+    throw new Error('لا يمكن تعديل حالة عدم مطابقة مغلقة أو مرفوضة');
+  }
+  validateNcrPayload({ ...record, ...changes }, { partial: true });
+
+  const updatable = [
+    'element', 'location', 'discipline', 'violation_type', 'description', 'severity',
+    'root_cause', 'photos', 'documents', 'responsible_party',
+  ];
+  for (const f of updatable) {
+    if (changes[f] !== undefined) record[f] = changes[f];
+  }
+  record.change_log.push({ ts: nowISO(), action: 'updated', by: changes.updated_by || null, fields: Object.keys(changes) });
+  record.updated_at = nowISO();
+  store.ncrs[id] = record;
+  audit(store, { action: 'update', entity: 'ncr', entityId: id, projectId: record.project_id, details: changes });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function deleteNcr(id) {
+  const store = loadStore();
+  const record = store.ncrs[id];
+  if (!record) throw new Error('حالة عدم المطابقة غير موجودة');
+  if (record.status !== 'open') {
+    throw new Error('لا يمكن حذف حالة عدم مطابقة إلا وهي في حالة "مفتوحة"؛ استخدم الرفض بدلاً من ذلك بعد بدء المعالجة');
+  }
+  if ((record.capa_ids || []).length > 0) {
+    throw new Error('لا يمكن حذف حالة عدم مطابقة مرتبطة بإجراءات تصحيحية/وقائية');
+  }
+  delete store.ncrs[id];
+  audit(store, { action: 'delete', entity: 'ncr', entityId: id, projectId: record.project_id });
+  saveStore(store);
+  return { success: true, data: { id } };
+}
+
+// انتقال حالة NCR وفق دورة حياة حقيقية ومقيَّدة
+function transitionNcr(id, { to_status, by = null, notes = '' } = {}) {
+  const store = loadStore();
+  const record = store.ncrs[id];
+  if (!record) throw new Error('حالة عدم المطابقة غير موجودة');
+  if (!NCR_STATUSES.includes(to_status)) throw new Error(`حالة غير صالحة: ${to_status}`);
+
+  const allowed = NCR_ALLOWED_TRANSITIONS[record.status] || [];
+  if (!allowed.includes(to_status)) {
+    throw new Error(`لا يمكن الانتقال من الحالة "${NCR_STATUS_LABELS[record.status]}" إلى "${NCR_STATUS_LABELS[to_status]}"`);
+  }
+
+  // تحقق فعلي: لا يمكن الانتقال إلى "قيد المعالجة" بدون ربط إجراء تصحيحي واحد على الأقل
+  if (to_status === 'in_progress' && (record.capa_ids || []).length === 0) {
+    throw new Error('لا يمكن نقل الحالة إلى "قيد المعالجة" قبل ربط إجراء تصحيحي/وقائي واحد على الأقل (CAPA)');
+  }
+  // تحقق فعلي: لا يمكن الإغلاق إلا بعد أن تكون كل إجراءات CAPA المرتبطة "مغلقة"
+  if (to_status === 'closed') {
+    const linkedCapas = Object.values(store.capas).filter(c => (record.capa_ids || []).includes(c.id));
+    const unclosed = linkedCapas.filter(c => c.status !== 'closed');
+    if (unclosed.length > 0) {
+      throw new Error('لا يمكن إغلاق حالة عدم المطابقة قبل إغلاق جميع الإجراءات التصحيحية/الوقائية المرتبطة بها');
+    }
+  }
+
+  record.status = to_status;
+  if (to_status === 'closed') {
+    record.closed_by = by;
+    record.closed_at = nowISO();
+  }
+  if (notes) record.root_cause = record.root_cause || notes;
+  record.change_log.push({ ts: nowISO(), action: `transition_${to_status}`, by, notes });
+  record.updated_at = nowISO();
+  store.ncrs[id] = record;
+  audit(store, { action: 'transition', entity: 'ncr', entityId: id, projectId: record.project_id, details: { to_status, by } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// ===================== الإجراءات التصحيحية والوقائية (Corrective/Preventive Action - CAPA) =====================
+// (القسم التاسع - الجزء 3/4)
+
+function validateCapaPayload(payload, { partial = false } = {}) {
+  const required = ['project_id', 'action_description', 'responsible_person'];
+  if (!partial) {
+    for (const f of required) {
+      if (!payload[f] || String(payload[f]).trim() === '') {
+        throw new Error(`الحقل "${f}" مطلوب لإنشاء إجراء تصحيحي/وقائي (CAPA)`);
+      }
+    }
+  }
+  if (payload.type && !CAPA_TYPES.includes(payload.type)) {
+    throw new Error(`نوع إجراء غير صالح: ${payload.type}`);
+  }
+  if (payload.effectiveness && !CAPA_EFFECTIVENESS.includes(payload.effectiveness)) {
+    throw new Error(`تقييم فاعلية غير صالح: ${payload.effectiveness}`);
+  }
+}
+
+function createCapa(payload) {
+  validateCapaPayload(payload);
+  const store = loadStore();
+
+  // إن كان الإجراء مرتبطاً بـ NCR، تحقق من وجودها فعلياً وحدّث ربطها
+  let linkedNcr = null;
+  if (payload.ncr_id) {
+    linkedNcr = store.ncrs[payload.ncr_id];
+    if (!linkedNcr) throw new Error('حالة عدم المطابقة (NCR) المرتبطة غير موجودة');
+    if (['closed', 'rejected'].includes(linkedNcr.status)) {
+      throw new Error('لا يمكن ربط إجراء تصحيحي بحالة عدم مطابقة مغلقة أو مرفوضة');
+    }
+  }
+
+  const id = newId('CAPA');
+  const code = generateCode(store, 'CAPA');
+  const record = {
+    id,
+    code,
+    project_id: payload.project_id,
+    ncr_id: payload.ncr_id || null,
+    type: payload.type || 'corrective',
+    root_cause: payload.root_cause || null,
+    action_description: payload.action_description,
+    action_plan: payload.action_plan || null,
+    responsible_person: payload.responsible_person,
+    due_date: payload.due_date || null,
+    status: 'open',
+    verified_by: null,
+    verified_at: null,
+    verification_notes: null,
+    effectiveness: 'not_evaluated',
+    effectiveness_notes: null,
+    documents: Array.isArray(payload.documents) ? payload.documents : [],
+    change_log: [{ ts: nowISO(), action: 'created', by: payload.created_by || null }],
+    created_by: payload.created_by || null,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+  store.capas[id] = record;
+
+  if (linkedNcr) {
+    linkedNcr.capa_ids = Array.isArray(linkedNcr.capa_ids) ? linkedNcr.capa_ids : [];
+    linkedNcr.capa_ids.push(id);
+    linkedNcr.updated_at = nowISO();
+    store.ncrs[linkedNcr.id] = linkedNcr;
+  }
+
+  audit(store, { action: 'create', entity: 'capa', entityId: id, projectId: record.project_id, details: { ncr_id: record.ncr_id } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function listCapas({ projectId, ncrId, status, type, responsiblePerson, overdueOnly, search } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.capas);
+  if (projectId) items = items.filter(c => c.project_id === projectId);
+  if (ncrId) items = items.filter(c => c.ncr_id === ncrId);
+  if (status) items = items.filter(c => c.status === status);
+  if (type) items = items.filter(c => c.type === type);
+  if (responsiblePerson) {
+    const q = String(responsiblePerson).toLowerCase();
+    items = items.filter(c => (c.responsible_person || '').toLowerCase().includes(q));
+  }
+  if (overdueOnly) {
+    const now = new Date();
+    items = items.filter(c => c.status !== 'closed' && c.due_date && new Date(c.due_date) < now);
+  }
+  if (search) {
+    const q = String(search).toLowerCase();
+    items = items.filter(c =>
+      (c.action_description || '').toLowerCase().includes(q) ||
+      (c.code || '').toLowerCase().includes(q)
+    );
+  }
+  items.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+  return { success: true, data: items };
+}
+
+function getCapa(id) {
+  const store = loadStore();
+  const record = store.capas[id];
+  if (!record) throw new Error('الإجراء التصحيحي/الوقائي غير موجود');
+  const ncr = record.ncr_id ? store.ncrs[record.ncr_id] || null : null;
+  return { success: true, data: { ...record, ncr } };
+}
+
+function updateCapa(id, changes) {
+  const store = loadStore();
+  const record = store.capas[id];
+  if (!record) throw new Error('الإجراء التصحيحي/الوقائي غير موجود');
+  if (record.status === 'closed') {
+    throw new Error('لا يمكن تعديل إجراء تصحيحي/وقائي مغلق');
+  }
+  validateCapaPayload({ ...record, ...changes }, { partial: true });
+
+  const updatable = [
+    'type', 'root_cause', 'action_description', 'action_plan',
+    'responsible_person', 'due_date', 'documents',
+  ];
+  for (const f of updatable) {
+    if (changes[f] !== undefined) record[f] = changes[f];
+  }
+  record.change_log.push({ ts: nowISO(), action: 'updated', by: changes.updated_by || null, fields: Object.keys(changes) });
+  record.updated_at = nowISO();
+  store.capas[id] = record;
+  audit(store, { action: 'update', entity: 'capa', entityId: id, projectId: record.project_id, details: changes });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function deleteCapa(id) {
+  const store = loadStore();
+  const record = store.capas[id];
+  if (!record) throw new Error('الإجراء التصحيحي/الوقائي غير موجود');
+  if (record.status !== 'open') {
+    throw new Error('لا يمكن حذف إجراء تصحيحي/وقائي إلا وهو في حالة "مفتوح"');
+  }
+  delete store.capas[id];
+
+  if (record.ncr_id && store.ncrs[record.ncr_id]) {
+    const ncr = store.ncrs[record.ncr_id];
+    ncr.capa_ids = (ncr.capa_ids || []).filter(cid => cid !== id);
+    ncr.updated_at = nowISO();
+    store.ncrs[record.ncr_id] = ncr;
+  }
+
+  audit(store, { action: 'delete', entity: 'capa', entityId: id, projectId: record.project_id });
+  saveStore(store);
+  return { success: true, data: { id } };
+}
+
+// انتقال حالة CAPA وفق دورة حياة حقيقية ومقيَّدة
+function transitionCapa(id, { to_status, by = null } = {}) {
+  const store = loadStore();
+  const record = store.capas[id];
+  if (!record) throw new Error('الإجراء التصحيحي/الوقائي غير موجود');
+  if (!CAPA_STATUSES.includes(to_status)) throw new Error(`حالة غير صالحة: ${to_status}`);
+
+  const allowed = CAPA_ALLOWED_TRANSITIONS[record.status] || [];
+  if (!allowed.includes(to_status)) {
+    throw new Error(`لا يمكن الانتقال من الحالة "${CAPA_STATUS_LABELS[record.status]}" إلى "${CAPA_STATUS_LABELS[to_status]}"`);
+  }
+
+  // تحقق فعلي: لا يمكن اعتماد الخطة بدون خطة تنفيذ مكتوبة فعلياً
+  if (to_status === 'plan_approved' && (!record.action_plan || String(record.action_plan).trim() === '')) {
+    throw new Error('لا يمكن اعتماد خطة الإجراء بدون تحديد خطة معالجة (action_plan) فعلية');
+  }
+
+  record.status = to_status;
+  record.change_log.push({ ts: nowISO(), action: `transition_${to_status}`, by });
+  record.updated_at = nowISO();
+  store.capas[id] = record;
+  audit(store, { action: 'transition', entity: 'capa', entityId: id, projectId: record.project_id, details: { to_status, by } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// تسجيل التحقق الفعلي من تنفيذ الإجراء (لا يمكن التحقق قبل أن يكون قيد التنفيذ)
+function verifyCapa(id, { verified_by = null, notes = '' } = {}) {
+  const store = loadStore();
+  const record = store.capas[id];
+  if (!record) throw new Error('الإجراء التصحيحي/الوقائي غير موجود');
+  if (record.status !== 'in_progress') {
+    throw new Error('لا يمكن التحقق من إجراء إلا وهو في حالة "قيد التنفيذ"');
+  }
+  if (!verified_by) throw new Error('اسم الجهة المتحقِّقة (verified_by) مطلوب لتسجيل التحقق');
+
+  record.status = 'verified';
+  record.verified_by = verified_by;
+  record.verified_at = nowISO();
+  record.verification_notes = notes || null;
+  record.change_log.push({ ts: nowISO(), action: 'verified', by: verified_by, notes });
+  record.updated_at = nowISO();
+  store.capas[id] = record;
+  audit(store, { action: 'verify', entity: 'capa', entityId: id, projectId: record.project_id, details: { verified_by } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+// تقييم فاعلية الإجراء واعتماد إغلاقه فعلياً (لا يُغلق إلا بعد التحقق وتقييم الفاعلية)
+function evaluateCapaEffectiveness(id, { effectiveness, evaluated_by = null, notes = '' } = {}) {
+  const store = loadStore();
+  const record = store.capas[id];
+  if (!record) throw new Error('الإجراء التصحيحي/الوقائي غير موجود');
+  if (record.status !== 'verified') {
+    throw new Error('لا يمكن تقييم الفاعلية إلا بعد التحقق من تنفيذ الإجراء');
+  }
+  if (!CAPA_EFFECTIVENESS.includes(effectiveness) || effectiveness === 'not_evaluated') {
+    throw new Error('يجب تحديد تقييم فاعلية صالح: فعّال / فعّال جزئياً / غير فعّال');
+  }
+
+  record.effectiveness = effectiveness;
+  record.effectiveness_notes = notes || null;
+  record.status = 'closed';
+  record.change_log.push({ ts: nowISO(), action: 'effectiveness_evaluated', by: evaluated_by, details: { effectiveness } });
+  record.updated_at = nowISO();
+  store.capas[id] = record;
+  audit(store, { action: 'evaluate_effectiveness', entity: 'capa', entityId: id, projectId: record.project_id, details: { effectiveness, evaluated_by } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
 module.exports = {
   // ثوابت - الجزء 1
   QUALITY_PLAN_STATUSES, QUALITY_PLAN_STATUS_LABELS,
@@ -1174,6 +1653,14 @@ module.exports = {
   ITP_INSPECTION_TYPES, ITP_INSPECTION_TYPE_LABELS,
   ITP_RESPONSIBLE_PARTIES, ITP_RESPONSIBLE_PARTY_LABELS,
   ITP_STATUSES, ITP_STATUS_LABELS,
+
+  // ثوابت - الجزء 3 (NCR / CAPA)
+  NCR_STATUSES, NCR_STATUS_LABELS, NCR_ALLOWED_TRANSITIONS,
+  NCR_SEVERITIES, NCR_SEVERITY_LABELS,
+  NCR_DISCIPLINES, NCR_DISCIPLINE_LABELS,
+  CAPA_STATUSES, CAPA_STATUS_LABELS, CAPA_ALLOWED_TRANSITIONS,
+  CAPA_TYPES, CAPA_TYPE_LABELS,
+  CAPA_EFFECTIVENESS, CAPA_EFFECTIVENESS_LABELS,
 
   // لوحة التحكم
   getDashboard,
@@ -1204,6 +1691,13 @@ module.exports = {
   // نقاط الفحص ITP
   createItpItem, listItpItems, getItpItem, updateItpItem, deleteItpItem, decideItpItem,
 
-  // للاستخدام الداخلي من أجزاء لاحقة (3/4)
+  // حالات عدم المطابقة NCR
+  createNcr, listNcrs, getNcr, updateNcr, deleteNcr, transitionNcr,
+
+  // الإجراءات التصحيحية والوقائية CAPA
+  createCapa, listCapas, getCapa, updateCapa, deleteCapa,
+  transitionCapa, verifyCapa, evaluateCapaEffectiveness,
+
+  // للاستخدام الداخلي من أجزاء لاحقة (4/4)
   loadStore, saveStore, audit, generateCode, newId, nowISO, r2,
 };
