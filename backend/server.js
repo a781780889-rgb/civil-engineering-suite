@@ -50,6 +50,7 @@ const HSE_VIOL = require('./utils/hseViolations');
 const HSE_REPORTS = require('./utils/hseReports');
 const HSE_AI = require('./utils/hseAI');
 const QMS = require('./utils/qmsManagement');
+const QMSX = require('./utils/qmsDocsKpis');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -4052,6 +4053,77 @@ const API_HANDLERS = {
       if (!body.id || !body.to_status) throw new Error('معرّف الطلب (id) والحالة الجديدة (to_status) مطلوبان');
       return QMS.transitionSdr(body.id, { to_status: body.to_status, by: body.by || null, comment: body.comment || '' });
     },
+  },
+
+  // ===================================================================
+  // ===== القسم التاسع (الجزء 5) - إدارة الجودة (QMS):
+  // ===== إدارة الوثائق (مواصفات/أكواد/شهادات) + مؤشرات الأداء (KPIs)
+  // ===================================================================
+
+  '/api/qms/part5/reference-data': {
+    GET: async () => ({
+      success: true,
+      data: {
+        document_types: QMSX.DOCUMENT_TYPES,
+        document_type_labels: QMSX.DOCUMENT_TYPE_LABELS,
+        document_statuses: QMSX.DOCUMENT_STATUSES,
+        document_status_labels: QMSX.DOCUMENT_STATUS_LABELS,
+        validity_state_labels: QMSX.VALIDITY_STATE_LABELS,
+      },
+    }),
+  },
+
+  // ----- إدارة الوثائق -----
+  '/api/qms/documents': {
+    GET: async (_body, query) => QMSX.listDocuments({
+      projectId: query?.projectId, docType: query?.docType, status: query?.status,
+      validityState: query?.validityState, search: query?.search,
+    }),
+    POST: async (body) => QMSX.createDocument(body),
+  },
+  '/api/qms/documents/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف الوثيقة (id) مطلوب');
+      return QMSX.getDocument(query.id);
+    },
+  },
+  '/api/qms/documents/update': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الوثيقة (id) مطلوب');
+      const { id, ...rest } = body;
+      return QMSX.updateDocument(id, rest);
+    },
+  },
+  '/api/qms/documents/delete': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الوثيقة (id) مطلوب');
+      return QMSX.deleteDocument(body.id);
+    },
+  },
+  '/api/qms/documents/upload-version': {
+    POST: async (body) => {
+      if (!body.id || !body.file_url) throw new Error('معرّف الوثيقة (id) ورابط الملف (file_url) مطلوبان');
+      return QMSX.uploadDocumentVersion(body.id, {
+        file_url: body.file_url, uploaded_by: body.uploaded_by || null, notes: body.notes || null,
+      });
+    },
+  },
+  '/api/qms/documents/archive': {
+    POST: async (body) => {
+      if (!body.id) throw new Error('معرّف الوثيقة (id) مطلوب');
+      return QMSX.archiveDocument(body.id, { by: body.by || null });
+    },
+  },
+  '/api/qms/documents/expiring': {
+    GET: async (_body, query) => QMSX.getExpiringDocuments({
+      projectId: query?.projectId,
+      withinDays: query?.withinDays ? Number(query.withinDays) : 30,
+    }),
+  },
+
+  // ----- مؤشرات الأداء (KPIs) -----
+  '/api/qms/kpis': {
+    GET: async (_body, query) => QMSX.getQualityKpis({ projectId: query?.projectId }),
   },
 };
 
