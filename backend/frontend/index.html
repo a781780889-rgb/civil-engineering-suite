@@ -190,6 +190,15 @@
     <div class="nav-item" data-panel="qms-ir">
       <span class="nav-icon">🧾</span> طلبات الفحص (IR)
     </div>
+    <div class="nav-item" data-panel="qms-tests">
+      <span class="nav-icon">🧪</span> اختبارات المواد
+    </div>
+    <div class="nav-item" data-panel="qms-lab">
+      <span class="nav-icon">🔬</span> إدارة المختبر
+    </div>
+    <div class="nav-item" data-panel="qms-itp">
+      <span class="nav-icon">✅</span> نقاط الفحص (ITP)
+    </div>
   </nav>
 
   <main class="main-content">
@@ -2707,6 +2716,173 @@
       </div>
     </section>
 
+    <!-- ============ القسم التاسع (الجزء 2/4): اختبارات المواد ============ -->
+    <section class="calc-panel" id="panel-qms-tests">
+      <div class="calc-card" id="qms-test-list-view">
+        <h2>اختبارات المواد</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-test-search" placeholder="بحث بالعنصر أو الكود أو مرجع العينة...">
+          <select id="qms-test-filter-category"><option value="">كل فئات المواد</option></select>
+          <select id="qms-test-filter-status"><option value="">كل الحالات</option></select>
+          <button class="btn btn-primary" id="qms-test-btn-new">+ اختبار مادة جديد</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>الكود</th><th>الفئة</th><th>نوع الاختبار</th><th>العنصر</th><th>الحالة</th><th>النتيجة</th><th>إجراءات</th></tr></thead>
+          <tbody id="qms-test-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card" id="qms-test-form-view" style="display:none">
+        <h2 id="qms-test-form-title">اختبار مادة جديد</h2>
+        <div id="qms-test-form-alert"></div>
+        <div class="field-grid">
+          <div class="field"><label>معرّف المشروع *</label><input type="text" id="qms-test-f-project"></div>
+          <div class="field"><label>فئة المادة *</label><select id="qms-test-f-category"></select></div>
+          <div class="field"><label>نوع الاختبار *</label><select id="qms-test-f-type"></select></div>
+          <div class="field"><label>المختبر</label><select id="qms-test-f-lab"></select></div>
+          <div class="field"><label>العنصر</label><input type="text" id="qms-test-f-element" placeholder="مثال: عمود C1"></div>
+          <div class="field"><label>الموقع</label><input type="text" id="qms-test-f-location"></div>
+          <div class="field"><label>مرجع العينة</label><input type="text" id="qms-test-f-sample-reference"></div>
+          <div class="field"><label>تاريخ أخذ العينة</label><input type="date" id="qms-test-f-sample-date"></div>
+          <div class="field field-full"><label>معيار القبول (مثال: &gt;=25 أو 20-30)</label><input type="text" id="qms-test-f-acceptance-criteria"></div>
+          <div class="field field-full"><label>الملاحظات</label><textarea id="qms-test-f-notes" rows="3"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="qms-test-form-save">حفظ</button>
+          <button class="btn btn-outline" id="qms-test-form-cancel">إلغاء</button>
+        </div>
+      </div>
+
+      <div class="calc-card" id="qms-test-detail-view" style="display:none">
+        <button class="pm-link-btn" id="qms-test-btn-back-from-detail">← رجوع للقائمة</button>
+        <div id="qms-test-detail-box"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم التاسع (الجزء 2/4): إدارة المختبر ============ -->
+    <section class="calc-panel" id="panel-qms-lab">
+      <div class="calc-card">
+        <h2>المختبرات</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-lab-search" placeholder="بحث باسم المختبر أو الكود...">
+          <button class="btn btn-primary" id="qms-lab-btn-new">+ مختبر جديد</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>الكود</th><th>الاسم</th><th>جهة الاعتماد</th><th>الموقع</th><th>النوع</th><th>إجراءات</th></tr></thead>
+          <tbody id="qms-lab-tbody"></tbody>
+        </table>
+
+        <div class="calc-card" id="qms-lab-form-view" style="display:none; margin-top:16px">
+          <h3 id="qms-lab-form-title">مختبر جديد</h3>
+          <div id="qms-lab-form-alert"></div>
+          <div class="field-grid">
+            <div class="field"><label>اسم المختبر *</label><input type="text" id="qms-lab-f-name"></div>
+            <div class="field"><label>جهة الاعتماد</label><input type="text" id="qms-lab-f-accreditation-body"></div>
+            <div class="field"><label>رقم الاعتماد</label><input type="text" id="qms-lab-f-accreditation-number"></div>
+            <div class="field"><label>الموقع</label><input type="text" id="qms-lab-f-location"></div>
+            <div class="field"><label>مسؤول التواصل</label><input type="text" id="qms-lab-f-contact-person"></div>
+            <div class="field"><label>الهاتف</label><input type="text" id="qms-lab-f-phone"></div>
+            <div class="field"><label><input type="checkbox" id="qms-lab-f-external"> مختبر خارجي</label></div>
+            <div class="field field-full"><label>ملاحظات</label><textarea id="qms-lab-f-notes" rows="2"></textarea></div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-primary" id="qms-lab-form-save">حفظ</button>
+            <button class="btn btn-outline" id="qms-lab-form-cancel">إلغاء</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="calc-card">
+        <h2>فنيو المختبر</h2>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="qms-tech-btn-new">+ فني جديد</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>الاسم</th><th>المؤهل</th><th>رقم الشهادة</th><th>تاريخ انتهاء الشهادة</th><th>إجراءات</th></tr></thead>
+          <tbody id="qms-tech-tbody"></tbody>
+        </table>
+
+        <div class="calc-card" id="qms-tech-form-view" style="display:none; margin-top:16px">
+          <h3 id="qms-tech-form-title">فني مختبر جديد</h3>
+          <div id="qms-tech-form-alert"></div>
+          <div class="field-grid">
+            <div class="field"><label>الاسم *</label><input type="text" id="qms-tech-f-name"></div>
+            <div class="field"><label>المختبر</label><select id="qms-tech-f-lab"></select></div>
+            <div class="field"><label>المؤهل</label><input type="text" id="qms-tech-f-qualification"></div>
+            <div class="field"><label>رقم الشهادة</label><input type="text" id="qms-tech-f-certificate-number"></div>
+            <div class="field"><label>تاريخ انتهاء الشهادة</label><input type="date" id="qms-tech-f-certificate-expiry"></div>
+            <div class="field"><label>الهاتف</label><input type="text" id="qms-tech-f-phone"></div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-primary" id="qms-tech-form-save">حفظ</button>
+            <button class="btn btn-outline" id="qms-tech-form-cancel">إلغاء</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="calc-card">
+        <h2>أجهزة المختبر والمعايرة</h2>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="qms-equip-btn-new">+ جهاز جديد</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>الكود</th><th>الاسم</th><th>الرقم التسلسلي</th><th>آخر معايرة</th><th>المعايرة القادمة</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <tbody id="qms-equip-tbody"></tbody>
+        </table>
+
+        <div class="calc-card" id="qms-equip-form-view" style="display:none; margin-top:16px">
+          <h3 id="qms-equip-form-title">جهاز مختبر جديد</h3>
+          <div id="qms-equip-form-alert"></div>
+          <div class="field-grid">
+            <div class="field"><label>اسم الجهاز *</label><input type="text" id="qms-equip-f-name"></div>
+            <div class="field"><label>المختبر</label><select id="qms-equip-f-lab"></select></div>
+            <div class="field"><label>الرقم التسلسلي</label><input type="text" id="qms-equip-f-serial-number"></div>
+            <div class="field"><label>تاريخ آخر معايرة</label><input type="date" id="qms-equip-f-last-calibration-date"></div>
+            <div class="field"><label>تاريخ المعايرة القادمة</label><input type="date" id="qms-equip-f-next-calibration-date"></div>
+            <div class="field field-full"><label>ملاحظات</label><textarea id="qms-equip-f-notes" rows="2"></textarea></div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-primary" id="qms-equip-form-save">حفظ</button>
+            <button class="btn btn-outline" id="qms-equip-form-cancel">إلغاء</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ القسم التاسع (الجزء 2/4): نقاط الفحص (ITP) ============ -->
+    <section class="calc-panel" id="panel-qms-itp">
+      <div class="calc-card" id="qms-itp-list-view">
+        <h2>نقاط الفحص (Inspection Test Plan - ITP)</h2>
+        <div class="toolbar">
+          <input type="text" id="qms-itp-search" placeholder="بحث بالعنصر أو المرحلة أو الكود...">
+          <select id="qms-itp-filter-status"><option value="">كل الحالات</option></select>
+          <button class="btn btn-primary" id="qms-itp-btn-new">+ نقطة فحص جديدة</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>الكود</th><th>العنصر</th><th>المرحلة</th><th>نوع الفحص</th><th>الجهة المسؤولة</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <tbody id="qms-itp-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="calc-card" id="qms-itp-form-view" style="display:none">
+        <h2 id="qms-itp-form-title">نقطة فحص جديدة</h2>
+        <div id="qms-itp-form-alert"></div>
+        <div class="field-grid">
+          <div class="field"><label>معرّف المشروع *</label><input type="text" id="qms-itp-f-project"></div>
+          <div class="field"><label>العنصر *</label><input type="text" id="qms-itp-f-element" placeholder="مثال: عمود C1"></div>
+          <div class="field"><label>المرحلة *</label><input type="text" id="qms-itp-f-stage" placeholder="مثال: صب الخرسانة"></div>
+          <div class="field"><label>نوع الفحص</label><select id="qms-itp-f-inspection-type"></select></div>
+          <div class="field"><label>الجهة المسؤولة</label><select id="qms-itp-f-responsible-party"></select></div>
+          <div class="field field-full"><label>معايير القبول</label><input type="text" id="qms-itp-f-acceptance-criteria"></div>
+          <div class="field field-full"><label>الملاحظات</label><textarea id="qms-itp-f-notes" rows="3"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="qms-itp-form-save">حفظ</button>
+          <button class="btn btn-outline" id="qms-itp-form-cancel">إلغاء</button>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -2800,5 +2976,6 @@
 <script src="js/hseViolations.js"></script>
 <script src="js/hseReportsAI.js"></script>
 <script src="js/qms.js"></script>
+<script src="js/qms-part2.js"></script>
 </body>
 </html>
