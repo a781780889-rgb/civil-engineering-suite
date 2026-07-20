@@ -51,6 +51,8 @@ const HSE_REPORTS = require('./utils/hseReports');
 const HSE_AI = require('./utils/hseAI');
 const QMS = require('./utils/qmsManagement');
 const QMSX = require('./utils/qmsDocsKpis');
+const QMS_ALERTS = require('./utils/qmsAlerts');
+const QMS_REPORTS = require('./utils/qmsReports');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -4124,6 +4126,139 @@ const API_HANDLERS = {
   // ----- مؤشرات الأداء (KPIs) -----
   '/api/qms/kpis': {
     GET: async (_body, query) => QMSX.getQualityKpis({ projectId: query?.projectId }),
+  },
+
+  // ===================================================================
+  // ===== القسم التاسع - الجزء الرابع (4/4): التنبيهات الذكية =========
+  // ===================================================================
+
+  '/api/qms/alerts': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return { success: true, data: QMS_ALERTS.getActiveAlerts({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/alerts/summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view');
+      return { success: true, data: QMS_ALERTS.getAlertsSummary({ projectId: query?.projectId || null }) };
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم التاسع - الجزء الرابع (4/4): التقارير ==================
+  // ===================================================================
+
+  '/api/qms/reports/inspection-requests': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return {
+        success: true,
+        report: QMS_REPORTS.buildInspectionRequestsReport({
+          projectId: query?.projectId || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/qms/reports/material-tests': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return {
+        success: true,
+        report: QMS_REPORTS.buildMaterialTestsReport({
+          projectId: query?.projectId || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/qms/reports/ncrs': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return {
+        success: true,
+        report: QMS_REPORTS.buildNcrReport({
+          projectId: query?.projectId || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/qms/reports/capas': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return {
+        success: true,
+        report: QMS_REPORTS.buildCapaReport({
+          projectId: query?.projectId || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/qms/reports/lab': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, report: QMS_REPORTS.buildLabReport({ labId: query?.labId || null }) };
+    },
+  },
+  '/api/qms/reports/performance': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, report: QMS_REPORTS.buildQualityPerformanceReport({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/reports/periodic': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return {
+        success: true,
+        report: QMS_REPORTS.buildPeriodicReport({
+          projectId: query?.projectId || null,
+          period: query?.period || 'daily',
+          dateFrom: query?.dateFrom || null,
+          dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/qms/reports/executive': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'qms', 'view_reports');
+      return { success: true, report: QMS_REPORTS.buildExecutiveReport({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/qms/reports/export/pdf': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'export_reports');
+      const result = QMS_REPORTS.exportQmsReportToPDF(body.report, { projectName: body.projectName, engineerName: body.engineerName });
+      return { success: true, ...result };
+    },
+  },
+  '/api/qms/reports/export/excel': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'export_reports');
+      const result = QMS_REPORTS.exportQmsReportToExcel(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/qms/reports/export/csv': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'export_reports');
+      const result = QMS_REPORTS.exportQmsReportToCSV(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/qms/reports/export/word': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'export_reports');
+      const result = QMS_REPORTS.exportQmsReportToWord(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/qms/reports/export/print': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'qms', 'export_reports');
+      const result = QMS_REPORTS.exportQmsReportToPrintableHTML(body.report, { projectName: body.projectName });
+      return { success: true, ...result };
+    },
   },
 };
 
