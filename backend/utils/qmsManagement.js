@@ -55,6 +55,7 @@ function ensureStore() {
       capas: {},               // { id: capaRecord }                (الإجراءات التصحيحية/الوقائية CAPA - الجزء 3)
       mars: {},                // { id: marRecord }                 (طلبات اعتماد المواد MAR - الجزء 3)
       sdrs: {},                // { id: sdrRecord }                 (طلبات اعتماد الرسومات SDR - الجزء 3)
+      documents: {},           // { id: documentRecord }            (إدارة الوثائق: مواصفات/أكواد/شهادات - الجزء 5)
       auditLog: [],
       seq: 0,
     };
@@ -74,7 +75,7 @@ function loadStore() {
   for (const key of [
     'qualityPlans', 'qualityPlanVersions', 'inspectionRequests',
     'materialTests', 'labs', 'labTechnicians', 'labEquipment', 'itpItems',
-    'ncrs', 'capas', 'mars', 'sdrs',
+    'ncrs', 'capas', 'mars', 'sdrs', 'documents',
   ]) {
     if (!store[key]) { store[key] = {}; migrated = true; }
   }
