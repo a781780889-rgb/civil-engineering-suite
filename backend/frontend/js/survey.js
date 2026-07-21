@@ -72,6 +72,7 @@ async function surveyLoadDashboard() {
     cardsEl.innerHTML = `
       <div class="result-card"><div class="rc-value">${data.total_projects}</div><div class="rc-label">إجمالي المشاريع المساحية</div></div>
       <div class="result-card"><div class="rc-value">${data.total_control_points}</div><div class="rc-label">نقاط الرفع</div></div>
+      <div class="result-card"><div class="rc-value">${data.total_survey_records}</div><div class="rc-label">عمليات الرفع المتخصصة</div></div>
       <div class="result-card"><div class="rc-value">${data.total_stakeout_points}</div><div class="rc-label">نقاط التوقيع</div></div>
       <div class="result-card"><div class="rc-value">${data.total_devices}</div><div class="rc-label">الأجهزة المرتبطة</div></div>
       <div class="result-card"><div class="rc-value">${data.total_maps}</div><div class="rc-label">الخرائط</div></div>
@@ -751,6 +752,318 @@ async function surveyLoadCalculationHistory() {
 }
 
 // ============================================================
+// القسم العاشر - الجزء 3-أ: الرفع المساحي المتخصص (Survey Records)
+// ============================================================
+const SVYREC_TYPE_LABELS = {
+  land_survey: 'رفع أراضي', road_survey: 'رفع طرق', building_survey: 'رفع مباني',
+  bridge_survey: 'رفع جسور', tunnel_survey: 'رفع أنفاق', network_survey: 'رفع شبكات',
+  utility_survey: 'رفع خطوط خدمات', elevation_survey: 'رفع مناسيب',
+  longitudinal_section: 'مقطع طولي', cross_section: 'مقطع عرضي', contour_survey: 'رفع كنتور',
+};
+const SVYREC_STATUS_LABELS = {
+  draft: 'مسودة', in_progress: 'جارٍ التنفيذ', completed: 'مكتمل', reviewed: 'تمت المراجعة', approved: 'معتمد',
+};
+let svyrecEditingId = null;
+
+function svyrecShowListView() {
+  document.getElementById('svyrec-list-view').style.display = '';
+  document.getElementById('svyrec-form-view').style.display = 'none';
+  document.getElementById('svyrec-detail-view').style.display = 'none';
+}
+function svyrecShowFormView() {
+  document.getElementById('svyrec-list-view').style.display = 'none';
+  document.getElementById('svyrec-form-view').style.display = '';
+  document.getElementById('svyrec-detail-view').style.display = 'none';
+}
+function svyrecShowDetailView() {
+  document.getElementById('svyrec-list-view').style.display = 'none';
+  document.getElementById('svyrec-form-view').style.display = 'none';
+  document.getElementById('svyrec-detail-view').style.display = '';
+}
+
+async function svyrecLoadList() {
+  const tbody = document.getElementById('svyrec-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7">جارِ التحميل...</td></tr>';
+  try {
+    const query = {
+      project_id: document.getElementById('svyrec-project-id').value.trim() || null,
+      q: document.getElementById('svyrec-search').value || null,
+      survey_type: document.getElementById('svyrec-filter-type').value || null,
+      status: document.getElementById('svyrec-filter-status').value || null,
+    };
+    const { data } = await surveyFetch('/records', { query });
+    tbody.innerHTML = data.length ? data.map((s) => `
+      <tr>
+        <td>${s.survey_number}</td>
+        <td>${s.title}</td>
+        <td>${SVYREC_TYPE_LABELS[s.survey_type] || s.survey_type}</td>
+        <td><span class="badge">${SVYREC_STATUS_LABELS[s.status] || s.status}</span></td>
+        <td>${s.surveyor || '-'}</td>
+        <td>${s.points ? s.points.length : 0}</td>
+        <td>
+          <button class="btn btn-sm" data-svyrec-view="${s.id}">عرض</button>
+          <button class="btn btn-sm" data-svyrec-edit="${s.id}">تعديل</button>
+          <button class="btn btn-sm btn-danger" data-svyrec-delete="${s.id}">حذف</button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="7">لا توجد عمليات رفع مسجّلة بعد</td></tr>';
+
+    tbody.querySelectorAll('[data-svyrec-view]').forEach((btn) => {
+      btn.addEventListener('click', () => svyrecViewRecord(btn.dataset.svyrecView));
+    });
+    tbody.querySelectorAll('[data-svyrec-edit]').forEach((btn) => {
+      btn.addEventListener('click', () => svyrecEditRecord(btn.dataset.svyrecEdit));
+    });
+    tbody.querySelectorAll('[data-svyrec-delete]').forEach((btn) => {
+      btn.addEventListener('click', () => svyrecDeleteRecord(btn.dataset.svyrecDelete));
+    });
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:#c0392b">${e.message}</td></tr>`;
+  }
+}
+
+function svyrecUpdateTypeFields() {
+  const type = document.getElementById('svyrec-f-type').value;
+  document.getElementById('svyrec-fields-cross').style.display = type === 'cross_section' ? '' : 'none';
+  document.getElementById('svyrec-fields-long').style.display = type === 'longitudinal_section' ? '' : 'none';
+  document.getElementById('svyrec-fields-contour').style.display = type === 'contour_survey' ? '' : 'none';
+  document.getElementById('svyrec-fields-generic').style.display = ['cross_section', 'longitudinal_section', 'contour_survey'].includes(type) ? 'none' : '';
+}
+
+function svyrecResetForm() {
+  svyrecEditingId = null;
+  document.getElementById('svyrec-id').value = '';
+  document.getElementById('svyrec-form-title').textContent = 'عملية رفع جديدة';
+  document.getElementById('svyrec-f-project').value = document.getElementById('svyrec-project-id').value.trim() || '';
+  document.getElementById('svyrec-f-number').value = '';
+  document.getElementById('svyrec-f-type').value = 'land_survey';
+  document.getElementById('svyrec-f-title').value = '';
+  document.getElementById('svyrec-f-status').value = 'draft';
+  document.getElementById('svyrec-f-surveyor').value = '';
+  document.getElementById('svyrec-f-date').value = '';
+  document.getElementById('svyrec-f-device').value = '';
+  document.getElementById('svyrec-f-drawing').value = '';
+  document.getElementById('svyrec-f-chainage').value = '';
+  document.getElementById('svyrec-f-design-elev').value = '';
+  document.getElementById('svyrec-f-cross-points').value = '';
+  document.getElementById('svyrec-f-long-points').value = '';
+  document.getElementById('svyrec-f-contour-interval').value = '1';
+  document.getElementById('svyrec-f-contour-points').value = '';
+  document.getElementById('svyrec-f-generic-points').value = '';
+  document.getElementById('svyrec-f-notes').value = '';
+  document.getElementById('svyrec-form-error').textContent = '';
+  svyrecUpdateTypeFields();
+}
+
+function svyrecNewRecord() {
+  svyrecResetForm();
+  svyrecShowFormView();
+}
+
+function svyrecParseCrossPoints(text) {
+  return text.split('\n').map((l) => l.trim()).filter(Boolean).map((line) => {
+    const [offset, elevation] = line.split(',').map((v) => Number(v.trim()));
+    return { offset, elevation };
+  });
+}
+function svyrecParseLongPoints(text) {
+  return text.split('\n').map((l) => l.trim()).filter(Boolean).map((line) => {
+    const [chainage, elevation] = line.split(',').map((v) => Number(v.trim()));
+    return { chainage, elevation };
+  });
+}
+function svyrecParseXYZPoints(text) {
+  return text.split('\n').map((l) => l.trim()).filter(Boolean).map((line) => {
+    const [easting, northing, elevation] = line.split(',').map((v) => Number(v.trim()));
+    return { easting, northing, elevation };
+  });
+}
+
+function svyrecBuildPointsFromForm(type) {
+  if (type === 'cross_section') return svyrecParseCrossPoints(document.getElementById('svyrec-f-cross-points').value);
+  if (type === 'longitudinal_section') return svyrecParseLongPoints(document.getElementById('svyrec-f-long-points').value);
+  if (type === 'contour_survey') return svyrecParseXYZPoints(document.getElementById('svyrec-f-contour-points').value);
+  const generic = document.getElementById('svyrec-f-generic-points').value.trim();
+  return generic ? svyrecParseXYZPoints(generic) : [];
+}
+
+async function svyrecSaveRecord() {
+  const errEl = document.getElementById('svyrec-form-error');
+  errEl.textContent = '';
+  const type = document.getElementById('svyrec-f-type').value;
+  const body = {
+    project_id: document.getElementById('svyrec-f-project').value.trim(),
+    survey_number: document.getElementById('svyrec-f-number').value.trim() || undefined,
+    survey_type: type,
+    title: document.getElementById('svyrec-f-title').value.trim(),
+    status: document.getElementById('svyrec-f-status').value,
+    surveyor: document.getElementById('svyrec-f-surveyor').value.trim(),
+    survey_date: document.getElementById('svyrec-f-date').value || undefined,
+    device_used: document.getElementById('svyrec-f-device').value.trim(),
+    reference_drawing: document.getElementById('svyrec-f-drawing').value.trim(),
+    notes: document.getElementById('svyrec-f-notes').value.trim(),
+    points: svyrecBuildPointsFromForm(type),
+  };
+  if (type === 'cross_section') {
+    body.chainage_start = document.getElementById('svyrec-f-chainage').value || undefined;
+    body.design_elevation = document.getElementById('svyrec-f-design-elev').value || undefined;
+  }
+  if (type === 'contour_survey') {
+    body.contour_interval = document.getElementById('svyrec-f-contour-interval').value || 1;
+  }
+  try {
+    if (svyrecEditingId) {
+      body.id = svyrecEditingId;
+      await surveyFetch('/records/update', { method: 'POST', body });
+    } else {
+      await surveyFetch('/records', { method: 'POST', body });
+    }
+    svyrecShowListView();
+    svyrecLoadList();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function svyrecEditRecord(id) {
+  try {
+    const { data: rec } = await surveyFetch('/records/get', { query: { id } });
+    svyrecResetForm();
+    svyrecEditingId = id;
+    document.getElementById('svyrec-form-title').textContent = `تعديل: ${rec.survey_number}`;
+    document.getElementById('svyrec-id').value = rec.id;
+    document.getElementById('svyrec-f-project').value = rec.project_id;
+    document.getElementById('svyrec-f-number').value = rec.survey_number;
+    document.getElementById('svyrec-f-type').value = rec.survey_type;
+    document.getElementById('svyrec-f-title').value = rec.title;
+    document.getElementById('svyrec-f-status').value = rec.status;
+    document.getElementById('svyrec-f-surveyor').value = rec.surveyor || '';
+    document.getElementById('svyrec-f-date').value = rec.survey_date ? String(rec.survey_date).slice(0, 10) : '';
+    document.getElementById('svyrec-f-device').value = rec.device_used || '';
+    document.getElementById('svyrec-f-drawing').value = rec.reference_drawing || '';
+    document.getElementById('svyrec-f-notes').value = rec.notes || '';
+    svyrecUpdateTypeFields();
+    if (rec.survey_type === 'cross_section') {
+      document.getElementById('svyrec-f-chainage').value = rec.chainage_start ?? '';
+      document.getElementById('svyrec-f-design-elev').value = rec.design_elevation ?? '';
+      document.getElementById('svyrec-f-cross-points').value = (rec.points || []).map((p) => `${p.offset},${p.elevation}`).join('\n');
+    } else if (rec.survey_type === 'longitudinal_section') {
+      document.getElementById('svyrec-f-long-points').value = (rec.points || []).map((p) => `${p.chainage},${p.elevation}`).join('\n');
+    } else if (rec.survey_type === 'contour_survey') {
+      document.getElementById('svyrec-f-contour-interval').value = rec.contour_interval ?? 1;
+      document.getElementById('svyrec-f-contour-points').value = (rec.points || []).map((p) => `${p.easting},${p.northing},${p.elevation}`).join('\n');
+    } else {
+      document.getElementById('svyrec-f-generic-points').value = (rec.points || []).map((p) => `${p.easting ?? ''},${p.northing ?? ''},${p.elevation ?? ''}`).join('\n');
+    }
+    svyrecShowFormView();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function svyrecDeleteRecord(id) {
+  if (!confirm('هل أنت متأكد من حذف عملية الرفع هذه؟')) return;
+  try {
+    await surveyFetch('/records/delete', { method: 'POST', body: { id } });
+    svyrecLoadList();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function svyrecRenderDerived(rec) {
+  if (!rec.derived) return '';
+  if (rec.derived.error) return `<div style="color:#c0392b">تعذّر حساب البيانات المشتقة: ${rec.derived.error}</div>`;
+  if (rec.derived.cross_section) {
+    const d = rec.derived.cross_section;
+    return `
+      <h3>نتائج المقطع العرضي</h3>
+      <div class="result-cards">
+        <div class="result-card"><div class="rc-value">${d.cut_area_sqm}</div><div class="rc-label">مساحة الحفر (م²)</div></div>
+        <div class="result-card"><div class="rc-value">${d.fill_area_sqm}</div><div class="rc-label">مساحة الردم (م²)</div></div>
+        <div class="result-card"><div class="rc-value">${d.net_area_sqm}</div><div class="rc-label">الصافي (م²)</div></div>
+      </div>`;
+  }
+  if (rec.derived.longitudinal_section) {
+    const d = rec.derived.longitudinal_section;
+    return `
+      <h3>نتائج المقطع الطولي</h3>
+      <div class="result-cards">
+        <div class="result-card"><div class="rc-value">${d.total_length}</div><div class="rc-label">الطول الإجمالي (م)</div></div>
+        <div class="result-card"><div class="rc-value">${d.min_elevation}</div><div class="rc-label">أدنى منسوب</div></div>
+        <div class="result-card"><div class="rc-value">${d.max_elevation}</div><div class="rc-label">أعلى منسوب</div></div>
+      </div>
+      <table class="data-table"><thead><tr><th>من</th><th>إلى</th><th>الطول</th><th>الميل %</th></tr></thead>
+      <tbody>${d.segments.map((s) => `<tr><td>${s.from_chainage}</td><td>${s.to_chainage}</td><td>${s.length}</td><td>${s.grade_percent}%</td></tr>`).join('')}</tbody></table>`;
+  }
+  if (rec.derived.contour) {
+    const d = rec.derived.contour;
+    return `
+      <h3>نتائج الرفع الكنتوري</h3>
+      <div class="result-cards">
+        <div class="result-card"><div class="rc-value">${d.min_elevation}</div><div class="rc-label">أدنى منسوب</div></div>
+        <div class="result-card"><div class="rc-value">${d.max_elevation}</div><div class="rc-label">أعلى منسوب</div></div>
+        <div class="result-card"><div class="rc-value">${d.levels_count}</div><div class="rc-label">عدد خطوط الكنتور</div></div>
+      </div>`;
+  }
+  return '';
+}
+
+async function svyrecViewRecord(id) {
+  try {
+    const { data: rec } = await surveyFetch('/records/get', { query: { id } });
+    document.getElementById('svyrec-detail-title').textContent = `${rec.survey_number} — ${rec.title}`;
+    document.getElementById('svyrec-detail-body').innerHTML = `
+      <div class="result-cards">
+        <div class="result-card"><div class="rc-value">${SVYREC_TYPE_LABELS[rec.survey_type] || rec.survey_type}</div><div class="rc-label">نوع الرفع</div></div>
+        <div class="result-card"><div class="rc-value">${SVYREC_STATUS_LABELS[rec.status] || rec.status}</div><div class="rc-label">الحالة</div></div>
+        <div class="result-card"><div class="rc-value">${rec.points ? rec.points.length : 0}</div><div class="rc-label">عدد النقاط</div></div>
+      </div>
+      <p><strong>المسّاح:</strong> ${rec.surveyor || '-'} &nbsp; | &nbsp; <strong>الجهاز:</strong> ${rec.device_used || '-'} &nbsp; | &nbsp; <strong>المخطط المرجعي:</strong> ${rec.reference_drawing || '-'}</p>
+      <p><strong>ملاحظات:</strong> ${rec.notes || '-'}</p>
+      ${svyrecRenderDerived(rec)}
+    `;
+    svyrecShowDetailView();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function svyrecExport() {
+  const projectId = document.getElementById('svyrec-project-id').value.trim();
+  if (!projectId) { alert('يرجى إدخال معرّف المشروع أولاً'); return; }
+  try {
+    const { data } = await surveyFetch('/records/export-csv', { query: { project_id: projectId } });
+    window.open(data.url, '_blank');
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function svyrecCalcVolume() {
+  const errEl = document.getElementById('svyrec-vol-error');
+  const resultEl = document.getElementById('svyrec-vol-result');
+  const intervalsEl = document.getElementById('svyrec-vol-intervals');
+  errEl.textContent = ''; resultEl.innerHTML = ''; intervalsEl.innerHTML = '';
+  const ids = document.getElementById('svyrec-vol-ids').value.split(',').map((s) => s.trim()).filter(Boolean);
+  if (ids.length < 2) { errEl.textContent = 'يرجى إدخال معرّفَي مقطعين عرضيين على الأقل'; return; }
+  try {
+    const { data } = await surveyFetch('/records/earthwork-volume', { method: 'POST', body: { survey_ids: ids } });
+    resultEl.innerHTML = `
+      <div class="result-card"><div class="rc-value">${data.total_cut_volume_cum}</div><div class="rc-label">إجمالي الحفر (م³)</div></div>
+      <div class="result-card"><div class="rc-value">${data.total_fill_volume_cum}</div><div class="rc-label">إجمالي الردم (م³)</div></div>
+      <div class="result-card"><div class="rc-value">${data.net_volume_cum}</div><div class="rc-label">الصافي (م³)</div></div>
+    `;
+    intervalsEl.innerHTML = `
+      <p><strong>${data.net_direction}</strong></p>
+      <table class="data-table"><thead><tr><th>من</th><th>إلى</th><th>المسافة</th><th>حفر (م³)</th><th>ردم (م³)</th></tr></thead>
+      <tbody>${data.intervals.map((iv) => `<tr><td>${iv.from}</td><td>${iv.to}</td><td>${iv.distance}</td><td>${iv.cut_volume_cum}</td><td>${iv.fill_volume_cum}</td></tr>`).join('')}</tbody></table>`;
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+// ============================================================
 // ربط الأحداث
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -825,6 +1138,37 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnLoadCalcHistory = document.getElementById('survey-btn-load-calc-history');
   if (btnLoadCalcHistory) btnLoadCalcHistory.addEventListener('click', surveyLoadCalculationHistory);
 
+  // ---- الرفع المساحي المتخصص (الجزء 3-أ) ----
+  const btnSvyrecLoad = document.getElementById('svyrec-btn-load');
+  if (btnSvyrecLoad) btnSvyrecLoad.addEventListener('click', svyrecLoadList);
+
+  const btnSvyrecNew = document.getElementById('svyrec-btn-new');
+  if (btnSvyrecNew) btnSvyrecNew.addEventListener('click', svyrecNewRecord);
+
+  const btnSvyrecExport = document.getElementById('svyrec-btn-export');
+  if (btnSvyrecExport) btnSvyrecExport.addEventListener('click', svyrecExport);
+
+  const btnSvyrecSave = document.getElementById('svyrec-btn-save');
+  if (btnSvyrecSave) btnSvyrecSave.addEventListener('click', svyrecSaveRecord);
+
+  const btnSvyrecCancel = document.getElementById('svyrec-btn-cancel');
+  if (btnSvyrecCancel) btnSvyrecCancel.addEventListener('click', svyrecShowListView);
+
+  const btnSvyrecBack = document.getElementById('svyrec-btn-back-to-list');
+  if (btnSvyrecBack) btnSvyrecBack.addEventListener('click', svyrecShowListView);
+
+  const svyrecTypeSel = document.getElementById('svyrec-f-type');
+  if (svyrecTypeSel) svyrecTypeSel.addEventListener('change', svyrecUpdateTypeFields);
+
+  const btnSvyrecVolume = document.getElementById('svyrec-btn-volume');
+  if (btnSvyrecVolume) btnSvyrecVolume.addEventListener('click', svyrecCalcVolume);
+
+  ['svyrec-search', 'svyrec-filter-type', 'svyrec-filter-status'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', svyrecLoadList);
+    if (el) el.addEventListener('change', svyrecLoadList);
+  });
+
   // تحميل اللوحات عند فتحها لأول مرة عبر نظام nav.js/app.js الحالي
   document.querySelectorAll('.nav-item[data-panel^="survey-"]').forEach((item) => {
     item.addEventListener('click', () => {
@@ -833,6 +1177,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (panel === 'survey-projects') surveyLoadProjects();
       if (panel === 'survey-control-points') surveyCpShowListView();
       if (panel === 'survey-calculations') { surveyUpdateCalcInputs(); surveyLoadCalculationHistory(); }
+      if (panel === 'survey-records') { svyrecShowListView(); svyrecLoadList(); }
     });
   });
 });
