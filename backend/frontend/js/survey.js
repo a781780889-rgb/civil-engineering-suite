@@ -1178,6 +1178,155 @@ document.addEventListener('DOMContentLoaded', () => {
       if (panel === 'survey-control-points') surveyCpShowListView();
       if (panel === 'survey-calculations') { surveyUpdateCalcInputs(); surveyLoadCalculationHistory(); }
       if (panel === 'survey-records') { svyrecShowListView(); svyrecLoadList(); }
+      if (panel === 'survey-geo-tools') { surveyLoadStatePlaneZones(); }
     });
+  });
+});
+
+// ============================================================
+// تحديث الجزء الأول: أنظمة الإحداثيات المتقدمة (State Plane / Local-Helmert)
+// + استيراد وتصدير الملفات الجغرافية (GeoJSON / KML / KMZ / DXF / LandXML / CSV)
+// ============================================================
+
+async function surveyLoadStatePlaneZones() {
+  const sel = document.getElementById('svygeo-sp-zone');
+  if (!sel) return;
+  try {
+    const { data } = await surveyFetch('/geodesy/state-plane-zones');
+    sel.innerHTML = data.map((z) => `<option value="${z.code}">${z.label} — ${z.projection}</option>`).join('');
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function surveyConvertToStatePlane() {
+  const lat = Number(document.getElementById('svygeo-sp-lat').value);
+  const lon = Number(document.getElementById('svygeo-sp-lon').value);
+  const zoneCode = document.getElementById('svygeo-sp-zone').value;
+  const out = document.getElementById('svygeo-sp-result');
+  try {
+    const { data } = await surveyFetch('/geodesy/state-plane/from-geographic', { method: 'POST', body: { lat, lon, zoneCode } });
+    out.textContent = `X: ${data.x} م، Y: ${data.y} م — ${data.zone_label} (${data.projection})`;
+  } catch (e) {
+    out.textContent = '';
+    alert(e.message);
+  }
+}
+
+async function surveyConvertFromStatePlane() {
+  const x = Number(document.getElementById('svygeo-sp-x').value);
+  const y = Number(document.getElementById('svygeo-sp-y').value);
+  const zoneCode = document.getElementById('svygeo-sp-zone').value;
+  const out = document.getElementById('svygeo-sp-result');
+  try {
+    const { data } = await surveyFetch('/geodesy/state-plane/to-geographic', { method: 'POST', body: { x, y, zoneCode } });
+    out.textContent = `خط العرض: ${data.lat}، خط الطول: ${data.lon}`;
+  } catch (e) {
+    out.textContent = '';
+    alert(e.message);
+  }
+}
+
+/** بناء أزواج نقاط التحكم (محلي/مرجعي) من نص مُدخل بصيغة: localX,localY,refX,refY لكل سطر */
+function surveyParseHelmertPairsText(text) {
+  return text.trim().split('\n').map((l) => l.trim()).filter(Boolean).map((line) => {
+    const [lx, ly, rx, ry] = line.split(',').map((v) => Number(v.trim()));
+    return { local: { x: lx, y: ly }, reference: { x: rx, y: ry } };
+  });
+}
+
+async function surveyComputeHelmert() {
+  const text = document.getElementById('svygeo-helmert-pairs').value;
+  const out = document.getElementById('svygeo-helmert-result');
+  try {
+    const pairs = surveyParseHelmertPairsText(text);
+    if (pairs.some((p) => Number.isNaN(p.local.x) || Number.isNaN(p.reference.x))) {
+      throw new Error('تنسيق النقاط غير صحيح. الصيغة المطلوبة لكل سطر: localX,localY,refX,refY');
+    }
+    const { data } = await surveyFetch('/geodesy/helmert/compute', { method: 'POST', body: { pairs } });
+    window.__surveyLastHelmertParams = data;
+    out.innerHTML = `المقياس: ${data.scale} — الدوران: ${data.rotation_deg}° — الإزاحة: (${data.tx}, ${data.ty})<br>
+      دقة التحويل (RMSE): ${data.rmse_m} م — عدد نقاط التحكم المستخدمة: ${data.control_points_used}`;
+  } catch (e) {
+    out.textContent = '';
+    alert(e.message);
+  }
+}
+
+async function surveyApplyHelmertToPoint() {
+  const x = Number(document.getElementById('svygeo-helmert-px').value);
+  const y = Number(document.getElementById('svygeo-helmert-py').value);
+  const out = document.getElementById('svygeo-helmert-apply-result');
+  try {
+    if (!window.__surveyLastHelmertParams) throw new Error('يجب حساب معاملات التحويل أولاً بالضغط على "حساب التحويل"');
+    const { data } = await surveyFetch('/geodesy/helmert/apply', { method: 'POST', body: { point: { x, y }, params: window.__surveyLastHelmertParams } });
+    out.textContent = `الإحداثيات المرجعية الناتجة: X = ${data.x}، Y = ${data.y}`;
+  } catch (e) {
+    out.textContent = '';
+    alert(e.message);
+  }
+}
+
+/** تحميل نقاط جاهزة للتصدير من الحقل النصي (name,lat,lon,elevation لكل سطر) */
+function surveyParseExportPointsText(text) {
+  return text.trim().split('\n').map((l) => l.trim()).filter(Boolean).map((line) => {
+    const [name, lat, lon, elevation] = line.split(',').map((s) => s.trim());
+    return { name, lat: Number(lat), lon: Number(lon), elevation: elevation ? Number(elevation) : null };
+  });
+}
+
+async function surveyExportGeoFile(format) {
+  const text = document.getElementById('svygeo-export-points').value;
+  const out = document.getElementById('svygeo-export-result');
+  try {
+    const points = surveyParseExportPointsText(text);
+    if (!points.length) throw new Error('أدخل نقطة واحدة على الأقل بالصيغة: name,lat,lon,elevation');
+    const endpointMap = { geojson: '/files/export/geojson', kml: '/files/export/kml', kmz: '/files/export/kmz' };
+    const { data } = await surveyFetch(endpointMap[format], { method: 'POST', body: { points } });
+    out.innerHTML = `تم إنشاء الملف بنجاح (${data.count} نقطة). <a href="${data.url}" target="_blank" download>تنزيل الملف (${data.format})</a>`;
+  } catch (e) {
+    out.textContent = '';
+    alert(e.message);
+  }
+}
+
+async function surveyImportGeoFile(format) {
+  const fileInput = document.getElementById('svygeo-import-file');
+  const out = document.getElementById('svygeo-import-result');
+  if (!fileInput.files.length) { alert('اختر ملفاً أولاً'); return; }
+  try {
+    const content = await fileInput.files[0].text();
+    const endpointMap = {
+      geojson: '/files/import/geojson', kml: '/files/import/kml',
+      dxf: '/files/import/dxf', landxml: '/files/import/landxml', csv: '/files/import/csv-points',
+    };
+    const { data, count } = await surveyFetch(endpointMap[format], { method: 'POST', body: { content } });
+    window.__surveyLastImportedPoints = data;
+    out.innerHTML = `تم استيراد ${count} نقطة بنجاح.<br>` + data.slice(0, 10).map((p) => `${p.name}: ${JSON.stringify(p)}`).join('<br>')
+      + (data.length > 10 ? `<br>... و${data.length - 10} نقطة إضافية` : '');
+  } catch (e) {
+    out.textContent = '';
+    alert(e.message);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btnSpTo = document.getElementById('svygeo-btn-sp-to');
+  if (btnSpTo) btnSpTo.addEventListener('click', surveyConvertToStatePlane);
+  const btnSpFrom = document.getElementById('svygeo-btn-sp-from');
+  if (btnSpFrom) btnSpFrom.addEventListener('click', surveyConvertFromStatePlane);
+
+  const btnHelmertCompute = document.getElementById('svygeo-btn-helmert-compute');
+  if (btnHelmertCompute) btnHelmertCompute.addEventListener('click', surveyComputeHelmert);
+  const btnHelmertApply = document.getElementById('svygeo-btn-helmert-apply');
+  if (btnHelmertApply) btnHelmertApply.addEventListener('click', surveyApplyHelmertToPoint);
+
+  ['geojson', 'kml', 'kmz'].forEach((fmt) => {
+    const btn = document.getElementById(`svygeo-btn-export-${fmt}`);
+    if (btn) btn.addEventListener('click', () => surveyExportGeoFile(fmt));
+  });
+  ['geojson', 'kml', 'dxf', 'landxml', 'csv'].forEach((fmt) => {
+    const btn = document.getElementById(`svygeo-btn-import-${fmt}`);
+    if (btn) btn.addEventListener('click', () => surveyImportGeoFile(fmt));
   });
 });
