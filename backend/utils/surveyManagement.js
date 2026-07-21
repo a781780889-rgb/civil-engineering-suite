@@ -507,6 +507,7 @@ function getDashboard() {
   const coordinateSystems = Object.values(store.coordinateSystems);
   const controlPoints = Object.values(store.controlPoints);
   const surveyCalcs = Object.values(store.surveyCalcs);
+  const surveyRecords = Object.values(store.surveys);
 
   const projectsByStatus = PROJECT_STATUSES.reduce((acc, s) => {
     acc[s] = projects.filter((p) => p.status === s).length;
@@ -533,16 +534,25 @@ function getDashboard() {
     data: {
       total_projects: projects.length,
       total_control_points: controlPoints.length,
-      total_stakeout_points: 0,                         // الجزء الثالث
-      total_devices: 0,                                 // الجزء الرابع
-      total_maps: Object.keys(store.maps).length,       // الجزء الخامس
-      total_survey_files: 0,                            // الجزء الرابع
-      total_stakeout_files: 0,                          // الجزء الرابع
+      total_survey_records: surveyRecords.length,        // الجزء 3-أ
+      total_stakeout_points: 0,                          // الجزء 3-ب
+      total_devices: 0,                                  // الجزء الرابع
+      total_maps: Object.keys(store.maps).length,        // الجزء الخامس
+      total_survey_files: 0,                             // الجزء الرابع
+      total_stakeout_files: 0,                           // الجزء الرابع
       total_calculations_executed: surveyCalcs.length,
       projects_by_status: projectsByStatus,
+      survey_records_by_type: SURVEY_TYPES.reduce((acc, t) => {
+        acc[t] = surveyRecords.filter((s) => s.survey_type === t).length;
+        return acc;
+      }, {}),
       total_coordinate_systems: coordinateSystems.length,
       recent_projects: recentProjects,
       recent_measurements: recentMeasurements,
+      recent_survey_records: [...surveyRecords]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 5)
+        .map((s) => ({ id: s.id, survey_number: s.survey_number, title: s.title, survey_type: s.survey_type, status: s.status, created_at: s.created_at })),
       recent_reports: [],       // الجزء السادس
       devices_status: [],       // الجزء الرابع
       recent_activity: recentAudit,
@@ -566,6 +576,9 @@ function getReferenceData() {
       control_point_types: CONTROL_POINT_TYPES,
       control_point_type_labels_ar: CONTROL_POINT_TYPE_LABELS_AR,
       survey_calc_types: ['distance', 'bearing', 'horizontal_angle', 'slope', 'closed_area', 'traverse_closure'],
+      survey_record_types: SURVEY_TYPES,
+      survey_record_type_labels_ar: SURVEY_TYPE_LABELS_AR2,
+      survey_record_statuses: SURVEY_STATUS_VALUES,
     },
   };
 }
@@ -1051,6 +1064,374 @@ function calcTraverseClosure({ startPoint, legs } = {}) {
   };
 }
 
+// ==================================================================================
+// ===== الجزء الثالث-أ (3-أ): الرفع المساحي المتخصص (Specialized Survey Records) ====
+// ==================================================================================
+// يغطي هذا النطاق جميع أنواع الرفع المطلوبة عبر نموذج بيانات موحّد ومرن (survey_type)
+// بدل تكرار منطق منفصل لكل نوع، مع حسابات هندسية حقيقية للمقاطع الطولية/العرضية
+// وبيانات الكنتور، ومحرك حساب أحجام الحفر/الردم يعتمد على طريقة المتوسط
+// (Average End Area Method) المعتمدة هندسياً في أعمال المساحة والطرق.
+
+const SURVEY_TYPES = [
+  'land_survey', 'road_survey', 'building_survey', 'bridge_survey', 'tunnel_survey',
+  'network_survey', 'utility_survey', 'elevation_survey', 'longitudinal_section',
+  'cross_section', 'contour_survey',
+];
+
+const SURVEY_TYPE_LABELS_AR2 = {
+  land_survey: 'رفع أراضي', road_survey: 'رفع طرق', building_survey: 'رفع مباني',
+  bridge_survey: 'رفع جسور', tunnel_survey: 'رفع أنفاق', network_survey: 'رفع شبكات',
+  utility_survey: 'رفع خطوط خدمات', elevation_survey: 'رفع مناسيب',
+  longitudinal_section: 'مقطع طولي', cross_section: 'مقطع عرضي', contour_survey: 'رفع كنتور',
+};
+
+const SURVEY_STATUS_VALUES = ['draft', 'in_progress', 'completed', 'reviewed', 'approved'];
+
+/** حساب حجم الحفر/الردم بين مقطعين عرضيين متتاليين بطريقة متوسط المساحات (Average End Area) */
+function calcEndAreaVolume({ area1, area2, distance } = {}) {
+  const a1 = Number(area1); const a2 = Number(area2); const d = Number(distance);
+  if (Number.isNaN(a1) || Number.isNaN(a2) || Number.isNaN(d) || d <= 0) {
+    throw new Error('يجب إدخال مساحتي المقطعين (area1, area2) والمسافة بينهما (distance > 0)');
+  }
+  return r4(((a1 + a2) / 2) * d);
+}
+
+/** حساب مساحة مقطع عرضي من نقاط (Offset, Elevation) بالنسبة لمنسوب تصميم مرجعي */
+function calcCrossSectionArea({ points, designElevation } = {}) {
+  if (!Array.isArray(points) || points.length < 2) {
+    throw new Error('يجب إدخال نقطتين على الأقل للمقطع العرضي (offset, elevation)');
+  }
+  const de = designElevation !== undefined && designElevation !== null ? Number(designElevation) : null;
+  const pts = points.map((p) => ({ offset: Number(p.offset), elevation: Number(p.elevation) }));
+  if (pts.some((p) => Number.isNaN(p.offset) || Number.isNaN(p.elevation))) {
+    throw new Error('قيم offset/elevation لإحدى نقاط المقطع غير صحيحة');
+  }
+  pts.sort((a, b) => a.offset - b.offset);
+
+  let cutArea = 0; let fillArea = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p1 = pts[i]; const p2 = pts[i + 1];
+    const width = p2.offset - p1.offset;
+    if (de !== null) {
+      const h1 = p1.elevation - de;
+      const h2 = p2.elevation - de;
+      const avgH = (h1 + h2) / 2;
+      const segArea = Math.abs(avgH) * width;
+      if (avgH >= 0) cutArea += segArea; else fillArea += segArea;
+    }
+  }
+  return {
+    cut_area_sqm: r4(cutArea),
+    fill_area_sqm: r4(fillArea),
+    net_area_sqm: r4(cutArea - fillArea),
+    points_used: pts.length,
+    design_elevation: de,
+  };
+}
+
+/** توليد بيانات كنتور مبسّطة من سحابة نقاط عبر استيفاء خطي على كل زوج نقاط (تقريب عملي بلا تبعيات خارجية) */
+function generateContourLines({ points, interval = 1 } = {}) {
+  if (!Array.isArray(points) || points.length < 3) {
+    throw new Error('يجب إدخال 3 نقاط على الأقل لتوليد خطوط الكنتور');
+  }
+  const iv = Number(interval);
+  if (Number.isNaN(iv) || iv <= 0) throw new Error('قيمة الفاصل الكنتوري (interval) يجب أن تكون رقماً موجباً');
+  const pts = points.map((p) => ({
+    easting: Number(p.easting), northing: Number(p.northing), elevation: Number(p.elevation),
+  }));
+  if (pts.some((p) => Number.isNaN(p.easting) || Number.isNaN(p.northing) || Number.isNaN(p.elevation))) {
+    throw new Error('إحداثيات أو منسوب إحدى نقاط الرفع غير صحيحة');
+  }
+  const elevations = pts.map((p) => p.elevation);
+  const minEl = Math.min(...elevations);
+  const maxEl = Math.max(...elevations);
+  const levels = [];
+  let lvl = Math.ceil(minEl / iv) * iv;
+  while (lvl <= maxEl) { levels.push(r2(lvl)); lvl += iv; }
+
+  const segments = [];
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      const p1 = pts[i]; const p2 = pts[j];
+      const eMin = Math.min(p1.elevation, p2.elevation);
+      const eMax = Math.max(p1.elevation, p2.elevation);
+      levels.forEach((level) => {
+        if (level > eMin && level < eMax && eMax !== eMin) {
+          const t = (level - p1.elevation) / (p2.elevation - p1.elevation);
+          if (t >= 0 && t <= 1) {
+            segments.push({
+              level,
+              easting: r4(p1.easting + t * (p2.easting - p1.easting)),
+              northing: r4(p1.northing + t * (p2.northing - p1.northing)),
+            });
+          }
+        }
+      });
+    }
+  }
+  const byLevel = {};
+  segments.forEach((s) => {
+    if (!byLevel[s.level]) byLevel[s.level] = [];
+    byLevel[s.level].push({ easting: s.easting, northing: s.northing });
+  });
+  return {
+    min_elevation: r4(minEl),
+    max_elevation: r4(maxEl),
+    interval: iv,
+    levels_count: levels.length,
+    contour_points_by_level: byLevel,
+  };
+}
+
+function validateSurveyRecordInput(body, { partial = false } = {}) {
+  const errors = [];
+  if (!partial || body.project_id !== undefined) {
+    if (!body.project_id) errors.push('معرّف المشروع (project_id) مطلوب');
+  }
+  if (!partial || body.survey_type !== undefined) {
+    if (!body.survey_type || !SURVEY_TYPES.includes(body.survey_type)) {
+      errors.push(`نوع الرفع غير صحيح. الأنواع المدعومة: ${SURVEY_TYPES.join(', ')}`);
+    }
+  }
+  if (!partial || body.title !== undefined) {
+    if (!body.title || !String(body.title).trim()) errors.push('عنوان عملية الرفع مطلوب');
+  }
+  if (body.status !== undefined && body.status !== null && body.status !== '' && !SURVEY_STATUS_VALUES.includes(body.status)) {
+    errors.push(`حالة الرفع غير صحيحة. الحالات المدعومة: ${SURVEY_STATUS_VALUES.join(', ')}`);
+  }
+  if (body.points !== undefined && body.points !== null && !Array.isArray(body.points)) {
+    errors.push('نقاط الرفع (points) يجب أن تكون مصفوفة');
+  }
+  return errors;
+}
+
+function computeSurveyDerivedData(record) {
+  const derived = {};
+  try {
+    if (record.survey_type === 'cross_section' && Array.isArray(record.points) && record.points.length >= 2) {
+      derived.cross_section = calcCrossSectionArea({
+        points: record.points, designElevation: record.design_elevation ?? null,
+      });
+    }
+    if (record.survey_type === 'longitudinal_section' && Array.isArray(record.points) && record.points.length >= 2) {
+      const sorted = [...record.points].map((p) => ({
+        chainage: Number(p.chainage), elevation: Number(p.elevation),
+        design_elevation: p.design_elevation !== undefined ? Number(p.design_elevation) : null,
+      })).sort((a, b) => a.chainage - b.chainage);
+      let totalLength = 0;
+      const segments = [];
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const p1 = sorted[i]; const p2 = sorted[i + 1];
+        const dist = p2.chainage - p1.chainage;
+        totalLength += dist;
+        const gradePercent = dist !== 0 ? r4(((p2.elevation - p1.elevation) / dist) * 100) : 0;
+        segments.push({
+          from_chainage: r2(p1.chainage), to_chainage: r2(p2.chainage), length: r2(dist), grade_percent: gradePercent,
+        });
+      }
+      derived.longitudinal_section = {
+        points_count: sorted.length, total_length: r2(totalLength), segments,
+        min_elevation: r4(Math.min(...sorted.map((p) => p.elevation))),
+        max_elevation: r4(Math.max(...sorted.map((p) => p.elevation))),
+      };
+    }
+    if (record.survey_type === 'contour_survey' && Array.isArray(record.points) && record.points.length >= 3) {
+      derived.contour = generateContourLines({ points: record.points, interval: record.contour_interval || 1 });
+    }
+  } catch (e) {
+    derived.error = e.message;
+  }
+  return derived;
+}
+
+function createSurveyRecord(body) {
+  const store = loadStore();
+  const errors = validateSurveyRecordInput(body || {});
+  if (errors.length) throw new Error(errors.join(' / '));
+  if (!store.projects[body.project_id]) throw new Error('المشروع المساحي غير موجود');
+
+  const existingForProject = Object.values(store.surveys).filter((s) => s.project_id === body.project_id);
+  const seq = existingForProject.length + 1;
+
+  const id = newId('SVY');
+  const record = {
+    id,
+    project_id: body.project_id,
+    survey_number: body.survey_number && String(body.survey_number).trim()
+      ? String(body.survey_number).trim()
+      : `SVY-${String(seq).padStart(4, '0')}`,
+    survey_type: body.survey_type,
+    title: String(body.title).trim(),
+    description: body.description || '',
+    status: body.status || 'draft',
+    surveyor: body.surveyor || '',
+    survey_date: body.survey_date || nowISO(),
+    device_used: body.device_used || '',
+    points: Array.isArray(body.points) ? body.points : [],
+    chainage_start: body.chainage_start !== undefined && body.chainage_start !== '' ? Number(body.chainage_start) : null,
+    chainage_end: body.chainage_end !== undefined && body.chainage_end !== '' ? Number(body.chainage_end) : null,
+    design_elevation: body.design_elevation !== undefined && body.design_elevation !== '' ? Number(body.design_elevation) : null,
+    contour_interval: body.contour_interval !== undefined && body.contour_interval !== '' ? Number(body.contour_interval) : null,
+    reference_drawing: body.reference_drawing || '',
+    photos: Array.isArray(body.photos) ? body.photos : [],
+    notes: body.notes || '',
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  const dup = existingForProject.find((s) => s.survey_number === record.survey_number);
+  if (dup) throw new Error(`رقم عملية الرفع "${record.survey_number}" مستخدم مسبقاً في هذا المشروع`);
+
+  record.derived = computeSurveyDerivedData(record);
+
+  store.surveys[id] = record;
+  audit(store, {
+    action: 'create', entity: 'survey_record', entityId: id, projectId: body.project_id,
+    details: { survey_number: record.survey_number, survey_type: record.survey_type },
+  });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function getSurveyRecord(id) {
+  const store = loadStore();
+  const rec = store.surveys[id];
+  if (!rec) throw new Error('عملية الرفع غير موجودة');
+  return rec;
+}
+
+function listSurveyRecords({ project_id, survey_type, status, q, sortBy = 'created_at', sortDir = 'desc', page = 1, pageSize = 50 } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.surveys);
+  if (project_id) items = items.filter((s) => s.project_id === project_id);
+  if (survey_type) items = items.filter((s) => s.survey_type === survey_type);
+  if (status) items = items.filter((s) => s.status === status);
+  if (q) {
+    const needle = String(q).toLowerCase();
+    items = items.filter((s) => s.survey_number.toLowerCase().includes(needle)
+      || s.title.toLowerCase().includes(needle)
+      || (s.description || '').toLowerCase().includes(needle));
+  }
+  items.sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (a[sortBy] < b[sortBy]) return -1 * dir;
+    if (a[sortBy] > b[sortBy]) return 1 * dir;
+    return 0;
+  });
+  const total = items.length;
+  const start = (Number(page) - 1) * Number(pageSize);
+  const paged = items.slice(start, start + Number(pageSize));
+  return { success: true, data: paged, pagination: { total, page: Number(page), pageSize: Number(pageSize) } };
+}
+
+function updateSurveyRecord(id, body) {
+  const store = loadStore();
+  const rec = store.surveys[id];
+  if (!rec) throw new Error('عملية الرفع غير موجودة');
+  const errors = validateSurveyRecordInput(body || {}, { partial: true });
+  if (errors.length) throw new Error(errors.join(' / '));
+
+  if (body.survey_number !== undefined) {
+    const newNumber = String(body.survey_number).trim();
+    if (newNumber && newNumber !== rec.survey_number) {
+      const dup = Object.values(store.surveys)
+        .find((s) => s.project_id === rec.project_id && s.survey_number === newNumber && s.id !== id);
+      if (dup) throw new Error(`رقم عملية الرفع "${newNumber}" مستخدم مسبقاً في هذا المشروع`);
+      rec.survey_number = newNumber;
+    }
+  }
+
+  const updatable = ['survey_type', 'title', 'description', 'status', 'surveyor', 'survey_date',
+    'device_used', 'points', 'chainage_start', 'chainage_end', 'design_elevation',
+    'contour_interval', 'reference_drawing', 'photos', 'notes'];
+  for (const key of updatable) {
+    if (body[key] !== undefined) {
+      if (['chainage_start', 'chainage_end', 'design_elevation', 'contour_interval'].includes(key)) {
+        rec[key] = body[key] !== null && body[key] !== '' ? Number(body[key]) : null;
+      } else {
+        rec[key] = body[key];
+      }
+    }
+  }
+  rec.updated_at = nowISO();
+  rec.derived = computeSurveyDerivedData(rec);
+
+  audit(store, { action: 'update', entity: 'survey_record', entityId: id, projectId: rec.project_id });
+  saveStore(store);
+  return { success: true, data: rec };
+}
+
+function deleteSurveyRecord(id) {
+  const store = loadStore();
+  const rec = store.surveys[id];
+  if (!rec) throw new Error('عملية الرفع غير موجودة');
+  delete store.surveys[id];
+  audit(store, { action: 'delete', entity: 'survey_record', entityId: id, projectId: rec.project_id });
+  saveStore(store);
+  return { success: true, data: { deleted: id } };
+}
+
+/** حساب حجم الحفر/الردم الإجمالي لسلسلة مقاطع عرضية مرتبطة بمشروع (طريقة متوسط المساحات) */
+function calcEarthworkVolumeFromCrossSections({ survey_ids } = {}) {
+  if (!Array.isArray(survey_ids) || survey_ids.length < 2) {
+    throw new Error('يجب إدخال معرّفَي مقطعين عرضيين على الأقل (survey_ids) مرتّبين حسب الـ chainage');
+  }
+  const store = loadStore();
+  const sections = survey_ids.map((id) => {
+    const rec = store.surveys[id];
+    if (!rec) throw new Error(`المقطع العرضي بالمعرّف ${id} غير موجود`);
+    if (rec.survey_type !== 'cross_section') throw new Error(`السجل ${id} ليس مقطعاً عرضياً`);
+    if (rec.chainage_start === null) throw new Error(`المقطع ${rec.survey_number} لا يحتوي على chainage_start`);
+    const derived = rec.derived?.cross_section || calcCrossSectionArea({ points: rec.points, designElevation: rec.design_elevation });
+    return { id, survey_number: rec.survey_number, chainage: rec.chainage_start, cut_area: derived.cut_area_sqm, fill_area: derived.fill_area_sqm };
+  }).sort((a, b) => a.chainage - b.chainage);
+
+  let totalCutVolume = 0; let totalFillVolume = 0;
+  const intervals = [];
+  for (let i = 0; i < sections.length - 1; i++) {
+    const s1 = sections[i]; const s2 = sections[i + 1];
+    const distance = s2.chainage - s1.chainage;
+    if (distance <= 0) throw new Error('يجب أن تكون قيم chainage تصاعدية وغير متطابقة بين المقاطع المتتالية');
+    const cutVol = calcEndAreaVolume({ area1: s1.cut_area, area2: s2.cut_area, distance });
+    const fillVol = calcEndAreaVolume({ area1: s1.fill_area, area2: s2.fill_area, distance });
+    totalCutVolume += cutVol; totalFillVolume += fillVol;
+    intervals.push({
+      from: s1.survey_number, to: s2.survey_number, distance: r2(distance),
+      cut_volume_cum: cutVol, fill_volume_cum: fillVol,
+    });
+  }
+  return {
+    sections_count: sections.length,
+    intervals,
+    total_cut_volume_cum: r4(totalCutVolume),
+    total_fill_volume_cum: r4(totalFillVolume),
+    net_volume_cum: r4(totalCutVolume - totalFillVolume),
+    net_direction: totalCutVolume >= totalFillVolume ? 'فائض حفر (يحتاج نقل/تخلص)' : 'عجز (يحتاج توريد ردم)',
+  };
+}
+
+function exportSurveyRecordsToCSV({ project_id, survey_type } = {}) {
+  if (!project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+  const { data: items } = listSurveyRecords({ project_id, survey_type, pageSize: 100000, page: 1 });
+  const headers = ['رقم عملية الرفع', 'العنوان', 'النوع', 'الحالة', 'المسّاح', 'تاريخ الرفع',
+    'الجهاز المستخدم', 'عدد النقاط', 'Chainage من', 'Chainage إلى'];
+  const rows = items.map((s) => [
+    s.survey_number, s.title, SURVEY_TYPE_LABELS_AR2[s.survey_type] || s.survey_type,
+    s.status, s.surveyor || '', s.survey_date ? String(s.survey_date).slice(0, 10) : '',
+    s.device_used || '', s.points.length, s.chainage_start ?? '', s.chainage_end ?? '',
+  ]);
+  const buffer = generateCsv(headers, rows);
+  const filename = `survey-records-${project_id}-${Date.now()}.csv`;
+  const outputPath = path.join(REPORTS_DIR, filename);
+  fs.writeFileSync(outputPath, buffer);
+
+  const store = loadStore();
+  audit(store, { action: 'export_csv', entity: 'survey_record', entityId: null, projectId: project_id, details: { count: items.length } });
+  saveStore(store);
+
+  return { success: true, data: { url: `/reports/${filename}`, count: items.length } };
+}
+
 function runSurveyCalculation({ project_id = null, calc_type, input, actor = null } = {}) {
   const CALC_FUNCTIONS = {
     distance: calcDistance,
@@ -1130,6 +1511,17 @@ module.exports = {
   calcTraverseClosure,
   runSurveyCalculation,
   listSurveyCalculations,
+  // الرفع المساحي المتخصص (الجزء 3-أ/6)
+  createSurveyRecord,
+  getSurveyRecord,
+  listSurveyRecords,
+  updateSurveyRecord,
+  deleteSurveyRecord,
+  exportSurveyRecordsToCSV,
+  calcCrossSectionArea,
+  generateContourLines,
+  calcEndAreaVolume,
+  calcEarthworkVolumeFromCrossSections,
   // مساعدات داخلية معروضة للاستخدام من الأجزاء اللاحقة لنفس القسم
   _internal: { loadStore, saveStore, audit, newId, nowISO, r2, r4, r6 },
 };
