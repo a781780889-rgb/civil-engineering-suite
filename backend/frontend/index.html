@@ -242,6 +242,9 @@
     <div class="nav-item" data-panel="survey-calculations">
       <span class="nav-icon">🧮</span> حسابات المساحة
     </div>
+    <div class="nav-item" data-panel="survey-records">
+      <span class="nav-icon">📐</span> الرفع المساحي المتخصص
+    </div>
   </nav>
 
   <main class="main-content">
@@ -3580,6 +3583,144 @@
           <thead><tr><th>النوع</th><th>المشروع</th><th>التاريخ</th><th>ملخص النتيجة</th></tr></thead>
           <tbody id="survey-calc-history-tbody"></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- ===== القسم العاشر - الجزء 3-أ: الرفع المساحي المتخصص ===== -->
+    <section class="calc-panel" id="panel-survey-records">
+      <div class="calc-card" id="svyrec-list-view">
+        <h2>القسم العاشر — الرفع المساحي المتخصص</h2>
+        <div class="toolbar">
+          <input type="text" id="svyrec-project-id" placeholder="معرّف المشروع المساحي (SRV-PRJ-...) *">
+          <input type="text" id="svyrec-search" placeholder="بحث بالعنوان أو رقم العملية...">
+          <select id="svyrec-filter-type">
+            <option value="">كل الأنواع</option>
+            <option value="land_survey">رفع أراضي</option>
+            <option value="road_survey">رفع طرق</option>
+            <option value="building_survey">رفع مباني</option>
+            <option value="bridge_survey">رفع جسور</option>
+            <option value="tunnel_survey">رفع أنفاق</option>
+            <option value="network_survey">رفع شبكات</option>
+            <option value="utility_survey">رفع خطوط خدمات</option>
+            <option value="elevation_survey">رفع مناسيب</option>
+            <option value="longitudinal_section">مقطع طولي</option>
+            <option value="cross_section">مقطع عرضي</option>
+            <option value="contour_survey">رفع كنتور</option>
+          </select>
+          <select id="svyrec-filter-status">
+            <option value="">كل الحالات</option>
+            <option value="draft">مسودة</option>
+            <option value="in_progress">جارٍ التنفيذ</option>
+            <option value="completed">مكتمل</option>
+            <option value="reviewed">تمت المراجعة</option>
+            <option value="approved">معتمد</option>
+          </select>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="svyrec-btn-load">عرض السجلات</button>
+          <button class="btn btn-primary" id="svyrec-btn-new">+ عملية رفع جديدة</button>
+          <button class="btn" id="svyrec-btn-export">تصدير CSV</button>
+        </div>
+        <table class="data-table" id="svyrec-table">
+          <thead><tr><th>الرقم</th><th>العنوان</th><th>النوع</th><th>الحالة</th><th>المسّاح</th><th>عدد النقاط</th><th></th></tr></thead>
+          <tbody id="svyrec-tbody"></tbody>
+        </table>
+
+        <h3 style="margin-top:24px">حساب حجم الحفر/الردم من مقاطع عرضية (Average End Area Method)</h3>
+        <div class="toolbar">
+          <input type="text" id="svyrec-vol-ids" placeholder="معرّفات المقاطع العرضية مفصولة بفاصلة (SVY-...,SVY-...)" style="min-width:420px">
+          <button class="btn btn-primary" id="svyrec-btn-volume">احسب الحجم</button>
+        </div>
+        <div id="svyrec-vol-error" style="color:#c0392b;margin-top:8px"></div>
+        <div class="result-cards" id="svyrec-vol-result"></div>
+        <div id="svyrec-vol-intervals"></div>
+      </div>
+
+      <div class="calc-card" id="svyrec-form-view" style="display:none">
+        <h2 id="svyrec-form-title">عملية رفع جديدة</h2>
+        <input type="hidden" id="svyrec-id">
+        <div class="form-grid">
+          <label>المشروع (project_id) *<input type="text" id="svyrec-f-project"></label>
+          <label>رقم العملية (اختياري - تلقائي)<input type="text" id="svyrec-f-number"></label>
+          <label>نوع الرفع *
+            <select id="svyrec-f-type">
+              <option value="land_survey">رفع أراضي</option>
+              <option value="road_survey">رفع طرق</option>
+              <option value="building_survey">رفع مباني</option>
+              <option value="bridge_survey">رفع جسور</option>
+              <option value="tunnel_survey">رفع أنفاق</option>
+              <option value="network_survey">رفع شبكات</option>
+              <option value="utility_survey">رفع خطوط خدمات</option>
+              <option value="elevation_survey">رفع مناسيب</option>
+              <option value="longitudinal_section">مقطع طولي</option>
+              <option value="cross_section">مقطع عرضي</option>
+              <option value="contour_survey">رفع كنتور</option>
+            </select>
+          </label>
+          <label>العنوان *<input type="text" id="svyrec-f-title"></label>
+          <label>الحالة
+            <select id="svyrec-f-status">
+              <option value="draft">مسودة</option>
+              <option value="in_progress">جارٍ التنفيذ</option>
+              <option value="completed">مكتمل</option>
+              <option value="reviewed">تمت المراجعة</option>
+              <option value="approved">معتمد</option>
+            </select>
+          </label>
+          <label>المسّاح<input type="text" id="svyrec-f-surveyor"></label>
+          <label>تاريخ الرفع<input type="date" id="svyrec-f-date"></label>
+          <label>الجهاز المستخدم<input type="text" id="svyrec-f-device"></label>
+          <label>المخطط المرجعي<input type="text" id="svyrec-f-drawing"></label>
+        </div>
+
+        <!-- حقول خاصة بالمقطع العرضي -->
+        <div id="svyrec-fields-cross" class="form-grid" style="display:none">
+          <label>Chainage (موقع المقطع)<input type="number" step="0.01" id="svyrec-f-chainage"></label>
+          <label>منسوب التصميم (Design Elevation)<input type="number" step="0.001" id="svyrec-f-design-elev"></label>
+          <label style="grid-column:1/-1">
+            نقاط المقطع العرضي (Offset,Elevation لكل سطر)
+            <textarea id="svyrec-f-cross-points" rows="6" placeholder="مثال:&#10;-5,11&#10;0,10.5&#10;5,9"></textarea>
+          </label>
+        </div>
+
+        <!-- حقول خاصة بالمقطع الطولي -->
+        <div id="svyrec-fields-long" class="form-grid" style="display:none">
+          <label style="grid-column:1/-1">
+            نقاط المقطع الطولي (Chainage,Elevation لكل سطر)
+            <textarea id="svyrec-f-long-points" rows="6" placeholder="مثال:&#10;0,100&#10;50,101&#10;100,99"></textarea>
+          </label>
+        </div>
+
+        <!-- حقول خاصة بالكنتور -->
+        <div id="svyrec-fields-contour" class="form-grid" style="display:none">
+          <label>الفاصل الكنتوري (Interval)<input type="number" step="0.1" id="svyrec-f-contour-interval" value="1"></label>
+          <label style="grid-column:1/-1">
+            نقاط الرفع (Easting,Northing,Elevation لكل سطر)
+            <textarea id="svyrec-f-contour-points" rows="6" placeholder="مثال:&#10;0,0,10&#10;10,0,12&#10;0,10,11&#10;10,10,13"></textarea>
+          </label>
+        </div>
+
+        <!-- حقول عامة لبقية أنواع الرفع (نقاط Easting,Northing,Elevation عامة) -->
+        <div id="svyrec-fields-generic" class="form-grid">
+          <label style="grid-column:1/-1">
+            نقاط الرفع (Easting,Northing,Elevation لكل سطر — اختياري)
+            <textarea id="svyrec-f-generic-points" rows="6" placeholder="مثال:&#10;500000,2700000,50&#10;500010,2700005,51"></textarea>
+          </label>
+        </div>
+
+        <label style="display:block;margin-top:8px">ملاحظات<textarea id="svyrec-f-notes"></textarea></label>
+
+        <div class="toolbar" style="margin-top:12px">
+          <button class="btn btn-primary" id="svyrec-btn-save">حفظ</button>
+          <button class="btn" id="svyrec-btn-cancel">إلغاء</button>
+        </div>
+        <div id="svyrec-form-error" style="color:#c0392b;margin-top:8px"></div>
+      </div>
+
+      <div class="calc-card" id="svyrec-detail-view" style="display:none">
+        <button class="btn" id="svyrec-btn-back-to-list">← رجوع للقائمة</button>
+        <h2 id="svyrec-detail-title"></h2>
+        <div id="svyrec-detail-body"></div>
       </div>
     </section>
 
