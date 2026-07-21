@@ -1468,9 +1468,227 @@ function listSurveyCalculations({ project_id, calc_type, page = 1, pageSize = 50
   return { success: true, data: paged, pagination: { total, page: Number(page), pageSize: Number(pageSize) } };
 }
 
+// ===================== التوقيع المساحي (Setting-Out / Stakeout) - الجزء 3-ب/6 =====================
+const STAKEOUT_TYPE_LABELS_AR = {
+  axis: 'توقيع محاور',
+  footing: 'توقيع قواعد',
+  column: 'توقيع أعمدة',
+  road: 'توقيع طرق',
+  utility: 'توقيع خدمات',
+  level: 'توقيع مناسيب',
+  boundary: 'توقيع حدود',
+};
+
+function validateStakeoutInput(body, { partial = false } = {}) {
+  const errors = [];
+  if (!partial) {
+    if (!body.project_id) errors.push('معرّف المشروع (project_id) مطلوب');
+    if (!body.stakeout_type || !STAKEOUT_TYPE_LABELS_AR[body.stakeout_type]) {
+      errors.push(`نوع التوقيع غير صالح. الأنواع المدعومة: ${Object.keys(STAKEOUT_TYPE_LABELS_AR).join(', ')}`);
+    }
+    if (!body.title) errors.push('عنوان عملية التوقيع مطلوب');
+  }
+  if (body.design_point) {
+    const dp = body.design_point;
+    if (dp.easting == null || dp.northing == null) errors.push('نقطة التصميم (design_point) تتطلب easting و northing');
+  }
+  if (body.as_built_point) {
+    const ap = body.as_built_point;
+    if (ap.easting == null || ap.northing == null) errors.push('النقطة المنفذة (as_built_point) تتطلب easting و northing');
+  }
+  if (errors.length) { const e = new Error(errors.join(' | ')); e.validationErrors = errors; throw e; }
+}
+
+function computeStakeoutDeviation({ design_point, as_built_point, tolerance_m = 0.02 } = {}) {
+  if (!design_point || !as_built_point) return null;
+  const dE = as_built_point.easting - design_point.easting;
+  const dN = as_built_point.northing - design_point.northing;
+  const dZ = (as_built_point.elevation != null && design_point.elevation != null)
+    ? as_built_point.elevation - design_point.elevation : null;
+  const horizontalDeviation = Math.sqrt(dE * dE + dN * dN);
+  const withinTolerance = horizontalDeviation <= Number(tolerance_m);
+  return {
+    delta_easting_m: r4(dE),
+    delta_northing_m: r4(dN),
+    delta_elevation_m: dZ != null ? r4(dZ) : null,
+    horizontal_deviation_m: r4(horizontalDeviation),
+    tolerance_m: Number(tolerance_m),
+    within_tolerance: withinTolerance,
+    verdict: withinTolerance ? 'مطابق لحدود التفاوت المسموح' : 'خارج حدود التفاوت - يلزم إعادة التوقيع أو التصحيح',
+  };
+}
+
+function createStakeout(body) {
+  validateStakeoutInput(body);
+  const store = loadStore();
+  const project = store.projects[body.project_id];
+  if (!project) throw new Error('المشروع المساحي غير موجود');
+
+  const id = newId('STK');
+  const deviation = computeStakeoutDeviation({
+    design_point: body.design_point,
+    as_built_point: body.as_built_point,
+    tolerance_m: body.tolerance_m ?? 0.02,
+  });
+
+  const record = {
+    id,
+    stakeout_number: `SO-${String(Object.keys(store.stakeouts).length + 1).padStart(4, '0')}`,
+    project_id: body.project_id,
+    stakeout_type: body.stakeout_type,
+    title: body.title,
+    element_reference: body.element_reference || '',
+    design_point: body.design_point || null,
+    as_built_point: body.as_built_point || null,
+    deviation,
+    tolerance_m: body.tolerance_m ?? 0.02,
+    status: deviation ? (deviation.within_tolerance ? 'verified_ok' : 'out_of_tolerance') : 'pending_measurement',
+    surveyor: body.surveyor || '',
+    device_used: body.device_used || '',
+    stakeout_date: body.stakeout_date || nowISO(),
+    drawing_reference: body.drawing_reference || '',
+    notes: body.notes || '',
+    photos: Array.isArray(body.photos) ? body.photos : [],
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  store.stakeouts[id] = record;
+  audit(store, { action: 'create', entity: 'stakeout', entityId: id, projectId: body.project_id, details: { stakeout_type: body.stakeout_type } });
+  saveStore(store);
+  return { success: true, data: record };
+}
+
+function getStakeout(id) {
+  const store = loadStore();
+  const record = store.stakeouts[id];
+  if (!record) throw new Error('عنصر التوقيع غير موجود');
+  return { success: true, data: record };
+}
+
+function listStakeouts({ project_id, stakeout_type, status, q, sortBy = 'created_at', sortDir = 'desc', page = 1, pageSize = 50 } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.stakeouts);
+  if (project_id) items = items.filter((s) => s.project_id === project_id);
+  if (stakeout_type) items = items.filter((s) => s.stakeout_type === stakeout_type);
+  if (status) items = items.filter((s) => s.status === status);
+  if (q) {
+    const needle = String(q).toLowerCase();
+    items = items.filter((s) => (s.title || '').toLowerCase().includes(needle)
+      || (s.element_reference || '').toLowerCase().includes(needle)
+      || (s.stakeout_number || '').toLowerCase().includes(needle));
+  }
+  items.sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (a[sortBy] < b[sortBy]) return -1 * dir;
+    if (a[sortBy] > b[sortBy]) return 1 * dir;
+    return 0;
+  });
+  const total = items.length;
+  const start = (Number(page) - 1) * Number(pageSize);
+  const paged = items.slice(start, start + Number(pageSize));
+  return { success: true, data: paged, pagination: { total, page: Number(page), pageSize: Number(pageSize) } };
+}
+
+function updateStakeout(id, body) {
+  const store = loadStore();
+  const existing = store.stakeouts[id];
+  if (!existing) throw new Error('عنصر التوقيع غير موجود');
+  validateStakeoutInput(body, { partial: true });
+
+  const merged = { ...existing, ...body, id };
+  if (body.design_point || body.as_built_point || body.tolerance_m != null) {
+    merged.deviation = computeStakeoutDeviation({
+      design_point: body.design_point || existing.design_point,
+      as_built_point: body.as_built_point || existing.as_built_point,
+      tolerance_m: body.tolerance_m ?? existing.tolerance_m ?? 0.02,
+    });
+    merged.status = merged.deviation ? (merged.deviation.within_tolerance ? 'verified_ok' : 'out_of_tolerance') : existing.status;
+  }
+  merged.updated_at = nowISO();
+
+  store.stakeouts[id] = merged;
+  audit(store, { action: 'update', entity: 'stakeout', entityId: id, projectId: existing.project_id, details: {} });
+  saveStore(store);
+  return { success: true, data: merged };
+}
+
+function deleteStakeout(id) {
+  const store = loadStore();
+  const existing = store.stakeouts[id];
+  if (!existing) throw new Error('عنصر التوقيع غير موجود');
+  delete store.stakeouts[id];
+  audit(store, { action: 'delete', entity: 'stakeout', entityId: id, projectId: existing.project_id, details: {} });
+  saveStore(store);
+  return { success: true, data: { id } };
+}
+
+function compareStakeoutBatchToDesign({ project_id, stakeout_type } = {}) {
+  if (!project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+  const { data: items } = listStakeouts({ project_id, stakeout_type, pageSize: 100000 });
+  const withDeviation = items.filter((s) => s.deviation);
+  const outOfTolerance = withDeviation.filter((s) => !s.deviation.within_tolerance);
+  const maxDeviation = withDeviation.reduce((max, s) => Math.max(max, s.deviation.horizontal_deviation_m), 0);
+  const avgDeviation = withDeviation.length
+    ? withDeviation.reduce((sum, s) => sum + s.deviation.horizontal_deviation_m, 0) / withDeviation.length
+    : 0;
+  return {
+    success: true,
+    data: {
+      total_points: items.length,
+      measured_points: withDeviation.length,
+      pending_points: items.length - withDeviation.length,
+      out_of_tolerance_count: outOfTolerance.length,
+      max_horizontal_deviation_m: r4(maxDeviation),
+      avg_horizontal_deviation_m: r4(avgDeviation),
+      out_of_tolerance_items: outOfTolerance.map((s) => ({
+        id: s.id, stakeout_number: s.stakeout_number, title: s.title,
+        element_reference: s.element_reference, deviation: s.deviation,
+      })),
+      overall_verdict: outOfTolerance.length === 0 && withDeviation.length > 0
+        ? 'جميع نقاط التوقيع المقاسة مطابقة لحدود التفاوت'
+        : outOfTolerance.length > 0
+          ? `يوجد ${outOfTolerance.length} نقطة/نقاط خارج حدود التفاوت المسموح`
+          : 'لا توجد نقاط تم قياسها بعد',
+    },
+  };
+}
+
+function exportStakeoutsToCSV({ project_id, stakeout_type } = {}) {
+  if (!project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+  const { data: items } = listStakeouts({ project_id, stakeout_type, pageSize: 100000 });
+  const headers = ['رقم التوقيع', 'العنوان', 'النوع', 'العنصر المرجعي', 'الحالة',
+    'انحراف أفقي (م)', 'حد التفاوت (م)', 'المسّاح', 'تاريخ التوقيع'];
+  const rows = items.map((s) => [
+    s.stakeout_number, s.title, STAKEOUT_TYPE_LABELS_AR[s.stakeout_type] || s.stakeout_type,
+    s.element_reference || '', s.status,
+    s.deviation ? s.deviation.horizontal_deviation_m : '', s.tolerance_m,
+    s.surveyor || '', s.stakeout_date ? String(s.stakeout_date).slice(0, 10) : '',
+  ]);
+  const buffer = generateCsv(headers, rows);
+  const filename = `stakeouts-${project_id}-${Date.now()}.csv`;
+  const outputPath = path.join(REPORTS_DIR, filename);
+  fs.writeFileSync(outputPath, buffer);
+
+  const store = loadStore();
+  audit(store, { action: 'export_csv', entity: 'stakeout', entityId: null, projectId: project_id, details: { count: items.length } });
+  saveStore(store);
+
+  return { success: true, data: { url: `/reports/${filename}`, count: items.length } };
+}
+
 module.exports = {
   // أدوار
   ensureSurveyRolesSeeded,
+  // التوقيع المساحي (الجزء 3-ب/6)
+  createStakeout,
+  getStakeout,
+  listStakeouts,
+  updateStakeout,
+  deleteStakeout,
+  compareStakeoutBatchToDesign,
+  exportStakeoutsToCSV,
+  STAKEOUT_TYPE_LABELS_AR,
   // مشاريع
   createProject,
   getProject,
