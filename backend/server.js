@@ -58,6 +58,8 @@ const QMS_AI = require('./utils/qmsAI');
 const QMS_APPROVALS = require('./utils/qmsApprovals');
 const QMS_SUPPLY = require('./utils/qmsSupplyLink');
 const SURVEY = require('./utils/surveyManagement');
+const SURVEY_REPORTS = require('./utils/surveyReports');
+const SURVEY_AI = require('./utils/surveyAI');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -4855,6 +4857,190 @@ const API_HANDLERS = {
     POST: async (body, _query, req) => {
       requirePermission(req, 'survey', 'view');
       return { success: true, data: SURVEY.calcEarthworkVolumeFromCrossSections(body) };
+    },
+  },
+
+  // ===================================================================
+  // القسم العاشر - التوقيع المساحي (Survey Stakeout / Setting-Out)
+  // ===================================================================
+
+  '/api/survey/stakeouts': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.listStakeouts(query);
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      return SURVEY.createStakeout(body);
+    },
+  },
+  '/api/survey/stakeouts/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY.getStakeout(query.id) };
+    },
+  },
+  '/api/survey/stakeouts/update': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'update');
+      return SURVEY.updateStakeout(body.id, body);
+    },
+  },
+  '/api/survey/stakeouts/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'delete');
+      return SURVEY.deleteStakeout(body.id);
+    },
+  },
+  '/api/survey/stakeouts/compare-to-design': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.compareStakeoutBatchToDesign(query);
+    },
+  },
+  '/api/survey/stakeouts/export-csv': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.exportStakeoutsToCSV(query);
+    },
+  },
+
+  // ===================================================================
+  // القسم العاشر - وحدة التقارير الموحّدة (Survey Reports)
+  // ===================================================================
+
+  '/api/survey/reports/records': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, report: SURVEY_REPORTS.buildSurveyRecordsReport(query) };
+    },
+  },
+  '/api/survey/reports/stakeouts': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, report: SURVEY_REPORTS.buildStakeoutReport(query) };
+    },
+  },
+  '/api/survey/reports/coordinate-systems': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, report: SURVEY_REPORTS.buildCoordinateSystemsReport(query) };
+    },
+  },
+  '/api/survey/reports/control-points': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, report: SURVEY_REPORTS.buildControlPointsReport(query) };
+    },
+  },
+  '/api/survey/reports/earthwork': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, report: SURVEY_REPORTS.buildEarthworkReport(body) };
+    },
+  },
+  '/api/survey/reports/accuracy': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, report: SURVEY_REPORTS.buildAccuracyReport({ project_id: query?.project_id }) };
+    },
+  },
+  '/api/survey/reports/executive': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, report: SURVEY_REPORTS.buildExecutiveSurveyReport({ project_id: query?.project_id }) };
+    },
+  },
+
+  // ----- تصدير تقارير قسم المساحة -----
+  '/api/survey/reports/export/pdf': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = SURVEY_REPORTS.exportSurveyReportToPDF(body.report, { projectName: body.projectName, engineerName: body.engineerName });
+      return { success: true, ...result };
+    },
+  },
+  '/api/survey/reports/export/excel': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = SURVEY_REPORTS.exportSurveyReportToExcel(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/survey/reports/export/csv': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = SURVEY_REPORTS.exportSurveyReportToCSV(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/survey/reports/export/word': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = SURVEY_REPORTS.exportSurveyReportToWord(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/survey/reports/export/print': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = SURVEY_REPORTS.exportSurveyReportToPrintableHTML(body.report, { projectName: body.projectName });
+      return { success: true, ...result };
+    },
+  },
+
+  // ===================================================================
+  // القسم العاشر - المساعد الذكي لقسم المساحة (Survey AI Assistant)
+  // ===================================================================
+
+  '/api/survey/ai/status': {
+    GET: async () => ({ success: true, available: SURVEY_AI.isAIAvailable() }),
+  },
+  '/api/survey/ai/analyze-data': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return SURVEY_AI.analyzeSurveyData({ projectId: body.projectId });
+    },
+  },
+  '/api/survey/ai/detect-errors': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return SURVEY_AI.detectErrorsAndDeviations({ projectId: body.projectId });
+    },
+  },
+  '/api/survey/ai/suggest-corrections': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return SURVEY_AI.suggestCoordinateCorrections({ projectId: body.projectId });
+    },
+  },
+  '/api/survey/ai/predict-risk-areas': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return SURVEY_AI.predictSurveyRiskAreas({ projectId: body.projectId });
+    },
+  },
+  '/api/survey/ai/summarize-fieldwork': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return SURVEY_AI.summarizeFieldWork({ projectId: body.projectId, dateFrom: body.dateFrom || null, dateTo: body.dateTo || null });
+    },
+  },
+  '/api/survey/ai/ask': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.question) throw new Error('نص السؤال (question) مطلوب');
+      return SURVEY_AI.askSurveyQuestion({ question: body.question, projectId: body.projectId || null });
     },
   },
 };
