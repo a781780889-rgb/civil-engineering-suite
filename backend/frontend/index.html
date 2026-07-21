@@ -245,6 +245,9 @@
     <div class="nav-item" data-panel="survey-records">
       <span class="nav-icon">📐</span> الرفع المساحي المتخصص
     </div>
+    <div class="nav-item" data-panel="survey-geo-tools">
+      <span class="nav-icon">🌐</span> أنظمة متقدمة وملفات جغرافية
+    </div>
   </nav>
 
   <main class="main-content">
@@ -3721,6 +3724,73 @@
         <button class="btn" id="svyrec-btn-back-to-list">← رجوع للقائمة</button>
         <h2 id="svyrec-detail-title"></h2>
         <div id="svyrec-detail-body"></div>
+      </div>
+    </section>
+
+    <!-- ===== القسم العاشر - تحديث الجزء الأول: أنظمة إحداثيات متقدمة + ملفات جغرافية ===== -->
+    <section class="calc-panel" id="panel-survey-geo-tools">
+      <div class="calc-card">
+        <h2>القسم العاشر — أنظمة الإحداثيات المتقدمة (State Plane)</h2>
+        <p class="muted">تحويل بين الإحداثيات الجغرافية (WGS84) ومناطق State Plane الأمريكية (NAD83) باستخدام إسقاطي Lambert Conformal Conic وTransverse Mercator الرسميين.</p>
+        <div class="toolbar">
+          <select id="svygeo-sp-zone"></select>
+        </div>
+        <div class="grid-2" style="margin-top:12px">
+          <div>
+            <h3>من جغرافي إلى State Plane</h3>
+            <input type="number" step="any" id="svygeo-sp-lat" placeholder="خط العرض (Lat)">
+            <input type="number" step="any" id="svygeo-sp-lon" placeholder="خط الطول (Lon)">
+            <button class="btn btn-primary" id="svygeo-btn-sp-to">تحويل إلى State Plane</button>
+          </div>
+          <div>
+            <h3>من State Plane إلى جغرافي</h3>
+            <input type="number" step="any" id="svygeo-sp-x" placeholder="X (Easting)">
+            <input type="number" step="any" id="svygeo-sp-y" placeholder="Y (Northing)">
+            <button class="btn btn-primary" id="svygeo-btn-sp-from">تحويل إلى إحداثيات جغرافية</button>
+          </div>
+        </div>
+        <div id="svygeo-sp-result" class="result-box" style="margin-top:10px"></div>
+      </div>
+
+      <div class="calc-card">
+        <h2>الأنظمة المحلية (Local Coordinate Systems) — تحويل Helmert</h2>
+        <p class="muted">أدخل نقاط تحكم مشتركة (لها إحداثيات محلية وإحداثيات مرجعية معاً) لحساب معاملات التحويل التشابهي (إزاحة + دوران + مقياس) بطريقة المربعات الصغرى، ثم طبّقه على أي نقطة محلية أخرى.</p>
+        <textarea id="svygeo-helmert-pairs" rows="5" placeholder="كل سطر: localX,localY,refX,refY&#10;مثال:&#10;0,0,100,200&#10;10,0,110,200&#10;0,10,100,210"></textarea>
+        <button class="btn btn-primary" id="svygeo-btn-helmert-compute">حساب معاملات التحويل</button>
+        <div id="svygeo-helmert-result" class="result-box" style="margin-top:10px"></div>
+
+        <div class="toolbar" style="margin-top:14px">
+          <input type="number" step="any" id="svygeo-helmert-px" placeholder="X محلي لنقطة جديدة">
+          <input type="number" step="any" id="svygeo-helmert-py" placeholder="Y محلي لنقطة جديدة">
+          <button class="btn" id="svygeo-btn-helmert-apply">تطبيق التحويل على النقطة</button>
+        </div>
+        <div id="svygeo-helmert-apply-result" class="result-box" style="margin-top:10px"></div>
+      </div>
+
+      <div class="calc-card">
+        <h2>تصدير نقاط إلى ملفات جغرافية</h2>
+        <p class="muted">كل سطر نقطة بالصيغة: name,lat,lon,elevation (المنسوب اختياري)</p>
+        <textarea id="svygeo-export-points" rows="5" placeholder="P1,24.7136,46.6753,612&#10;P2,24.7140,46.6760,615"></textarea>
+        <div class="toolbar" style="margin-top:10px">
+          <button class="btn" id="svygeo-btn-export-geojson">تصدير GeoJSON</button>
+          <button class="btn" id="svygeo-btn-export-kml">تصدير KML</button>
+          <button class="btn" id="svygeo-btn-export-kmz">تصدير KMZ</button>
+        </div>
+        <div id="svygeo-export-result" class="result-box" style="margin-top:10px"></div>
+      </div>
+
+      <div class="calc-card">
+        <h2>استيراد نقاط من ملفات جغرافية</h2>
+        <p class="muted">الصيغ المدعومة للاستيراد: GeoJSON، KML، DXF (كيانات POINT)، LandXML (CgPoints)، CSV (name,x,y,z,description)</p>
+        <input type="file" id="svygeo-import-file" accept=".json,.geojson,.kml,.dxf,.xml,.csv">
+        <div class="toolbar" style="margin-top:10px">
+          <button class="btn" id="svygeo-btn-import-geojson">استيراد كـ GeoJSON</button>
+          <button class="btn" id="svygeo-btn-import-kml">استيراد كـ KML</button>
+          <button class="btn" id="svygeo-btn-import-dxf">استيراد كـ DXF</button>
+          <button class="btn" id="svygeo-btn-import-landxml">استيراد كـ LandXML</button>
+          <button class="btn" id="svygeo-btn-import-csv">استيراد كـ CSV</button>
+        </div>
+        <div id="svygeo-import-result" class="result-box" style="margin-top:10px"></div>
       </div>
     </section>
 
