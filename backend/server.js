@@ -5179,6 +5179,68 @@ const API_HANDLERS = {
       return SURVEY_GEOFILES.importPointsFromCSV(body.content, { hasHeader: body.hasHeader !== false });
     },
   },
+
+  // ===== Excel (XLSX) =====
+  '/api/survey/files/export/excel': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!Array.isArray(body.points)) throw new Error('مصفوفة points مطلوبة');
+      const result = SURVEY_GEOFILES.exportPointsToExcel(body.points, { fileNamePrefix: body.fileNamePrefix, sheetName: body.sheetName });
+      const store = SURVEY._internal.loadStore();
+      SURVEY._internal.audit(store, { action: 'export_excel', entity: 'survey_points', entityId: null, projectId: body.project_id || null, details: { count: body.points.length } });
+      SURVEY._internal.saveStore(store);
+      return result;
+    },
+  },
+  '/api/survey/files/import/excel': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.content_base64) throw new Error('محتوى الملف (content_base64) مطلوب: أرسل ملف xlsx مشفّراً بصيغة base64');
+      const buffer = Buffer.from(body.content_base64, 'base64');
+      return SURVEY_GEOFILES.importPointsFromExcel(buffer);
+    },
+  },
+
+  // ===== Shapefile (SHP) =====
+  '/api/survey/files/export/shp': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!Array.isArray(body.points)) throw new Error('مصفوفة points مطلوبة');
+      const result = SURVEY_GEOFILES.exportPointsToSHP(body.points, { fileNamePrefix: body.fileNamePrefix });
+      const store = SURVEY._internal.loadStore();
+      SURVEY._internal.audit(store, { action: 'export_shp', entity: 'survey_points', entityId: null, projectId: body.project_id || null, details: { count: body.points.length } });
+      SURVEY._internal.saveStore(store);
+      return result;
+    },
+  },
+  '/api/survey/files/import/shp': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.content_base64) throw new Error('محتوى الملف (content_base64) مطلوب: أرسل أرشيف ZIP يحوي .shp (+ .dbf اختياري) مشفّراً بصيغة base64');
+      const buffer = Buffer.from(body.content_base64, 'base64');
+      return SURVEY_GEOFILES.importPointsFromSHP(buffer);
+    },
+  },
+
+  // ===== IFC =====
+  '/api/survey/files/export/ifc': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!Array.isArray(body.points)) throw new Error('مصفوفة points مطلوبة');
+      const result = SURVEY_GEOFILES.exportPointsToIFC(body.points, { fileNamePrefix: body.fileNamePrefix, projectName: body.projectName });
+      const store = SURVEY._internal.loadStore();
+      SURVEY._internal.audit(store, { action: 'export_ifc', entity: 'survey_points', entityId: null, projectId: body.project_id || null, details: { count: body.points.length } });
+      SURVEY._internal.saveStore(store);
+      return result;
+    },
+  },
+  '/api/survey/files/import/ifc': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.content) throw new Error('محتوى الملف (content) مطلوب: نص ملف IFC (STEP ASCII)');
+      return SURVEY_GEOFILES.importPointsFromIFC(body.content);
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
