@@ -19,6 +19,8 @@ const zlib = require('zlib');
 const SGM_ = require('./surveyManagement');
 const { _internal } = SGM_;
 const { r6 } = _internal;
+const { generateXlsx } = require('./xlsxWriter');
+const { parseXlsxBuffer, sheetToObjects, unzip: unzipGeneric } = require('../calculators/import/xlsxImporter');
 
 const REPORTS_DIR = path.join(__dirname, '..', '..', 'reports');
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
@@ -394,6 +396,527 @@ function importPointsFromCSV(content, { hasHeader = true } = {}) {
   return { success: true, data: points, count: points.length };
 }
 
+// ==================================================================================
+// ==================================== Excel (XLSX) =================================
+// تصدير/استيراد نقاط المساحة بصيغة Excel حقيقية (.xlsx) بإعادة استخدام مولّد/محلّل
+// XLSX الموجودين فعلياً في المشروع (xlsxWriter.js لـ BOQ، xlsxImporter.js لـ BOQ)
+// بدون أي مكتبة خارجية - نفس آلية ZIP/XML المستخدمة في باقي أقسام النظام.
+// ==================================================================================
+
+/**
+ * تصدير قائمة نقاط (رفع/تحكم/توقيع) إلى ملف Excel (.xlsx) حقيقي وصالح للفتح في
+ * Microsoft Excel / LibreOffice Calc، بورقة عمل واحدة تحوي جميع حقول النقطة.
+ * points: [{ name, point_type, x/easting, y/northing, elevation, description, measured_at, device }]
+ */
+function exportPointsToExcel(points, { fileNamePrefix = 'survey-points', sheetName = 'Survey Points' } = {}) {
+  if (!Array.isArray(points) || points.length === 0) throw new Error('لا توجد نقاط لتصديرها');
+
+  const headers = ['الاسم', 'النوع', 'Easting/X', 'Northing/Y', 'Elevation', 'الوصف', 'تاريخ القياس', 'الجهاز', 'دقة القياس'];
+  const rows = [headers];
+  points.forEach((p) => {
+    const x = typeof p.x === 'number' ? p.x : (typeof p.easting === 'number' ? p.easting : '');
+    const y = typeof p.y === 'number' ? p.y : (typeof p.northing === 'number' ? p.northing : '');
+    rows.push([
+      p.name || '',
+      p.point_type || p.type || '',
+      typeof x === 'number' ? r6(x) : '',
+      typeof y === 'number' ? r6(y) : '',
+      typeof p.elevation === 'number' ? r6(p.elevation) : '',
+      p.description || '',
+      p.measured_at || p.date || '',
+      p.device || '',
+      typeof p.accuracy === 'number' ? p.accuracy : '',
+    ]);
+  });
+
+  const buffer = generateXlsx([{ name: sheetName, rows }]);
+  const filename = `${fileNamePrefix}-${ts()}.xlsx`;
+  const outputPath = path.join(REPORTS_DIR, filename);
+  fs.writeFileSync(outputPath, buffer);
+  return { success: true, data: { url: `/reports/${filename}`, count: points.length, format: 'XLSX' } };
+}
+
+/**
+ * استيراد نقاط مساحية من ملف Excel (.xlsx) حقيقي: يقرأ أول ورقة عمل تحوي بيانات فعلية،
+ * يتعرف على الأعمدة بمرونة (عربي/إنجليزي) ويستخرج النقاط منظّمة.
+ * buffer: Buffer لمحتوى ملف .xlsx (يُرسَل كـ base64 من العميل ثم يُحوَّل إلى Buffer قبل الاستدعاء)
+ */
+function importPointsFromExcel(buffer) {
+  if (!Buffer.isBuffer(buffer)) throw new Error('يجب توفير محتوى الملف كـ Buffer صالح');
+  const { sheetNames, sheets } = parseXlsxBuffer(buffer);
+  if (sheetNames.length === 0) throw new Error('الملف لا يحتوي على أي أوراق عمل');
+
+  let targetSheetName = sheetNames[0];
+  for (const name of sheetNames) {
+    if (sheets[name] && sheets[name].length > 1) { targetSheetName = name; break; }
+  }
+  const { headers, records } = sheetToObjects(sheets[targetSheetName] || []);
+  if (records.length === 0) throw new Error('لم يتم العثور على بيانات في ورقة العمل');
+
+  const findCol = (candidates) => headers.find((h) => candidates.some((c) => String(h).toLowerCase().includes(c)));
+  const nameCol = findCol(['اسم', 'name']);
+  const xCol = findCol(['easting', 'x']);
+  const yCol = findCol(['northing', 'y']);
+  const zCol = findCol(['elevation', 'z', 'منسوب']);
+  const descCol = findCol(['وصف', 'description']);
+  const typeCol = findCol(['نوع', 'type']);
+
+  if (!xCol || !yCol) {
+    throw new Error('تعذر التعرف على أعمدة الإحداثيات (Easting/Northing أو X/Y) في الملف');
+  }
+
+  const points = [];
+  records.forEach((rec, idx) => {
+    const xNum = Number(rec[xCol]); const yNum = Number(rec[yCol]);
+    if (Number.isNaN(xNum) || Number.isNaN(yNum)) return;
+    points.push({
+      name: (nameCol && rec[nameCol]) || `PT-${idx + 1}`,
+      x: xNum, y: yNum,
+      elevation: zCol && rec[zCol] !== '' && !Number.isNaN(Number(rec[zCol])) ? Number(rec[zCol]) : null,
+      description: (descCol && rec[descCol]) || '',
+      point_type: (typeCol && rec[typeCol]) || 'imported',
+    });
+  });
+
+  if (points.length === 0) throw new Error('لم يتم استخراج أي نقاط صالحة من ملف Excel');
+  return { success: true, data: points, count: points.length, sheet_used: targetSheetName, detected_headers: headers };
+}
+
+// ==================================================================================
+// ================================= Shapefile (SHP) ==================================
+// تصدير/استيراد Shapefile حقيقي وفق مواصفة ESRI القياسية (Point Shapefile):
+// ثلاثة ملفات مترابطة .shp (الهندسة) + .shx (الفهرس) + .dbf (السمات الوصفية)،
+// تُبنى يدوياً بايت-بايت وفق التوثيق الرسمي (ESRI Shapefile Technical Description)،
+// ثم تُغلَّف معاً في أرشيف ZIP واحد باستخدام buildZip الموجودة أصلاً في هذا الملف.
+// ==================================================================================
+
+const SHP_FILE_CODE = 9994;
+const SHP_VERSION = 1000;
+const SHP_TYPE_POINT = 1;
+
+/** يبني ملف .shp (Point) من مصفوفة نقاط [{x, y}] */
+function buildShpFile(points) {
+  const recordSize = 4 + 20; // header (4 int16) + content (شكل 1 + X + Y = 20 بايت)
+  const contentLenWords = 10; // شكل النقطة: 4 بايت type + 16 بايت x/y = 20 بايت = 10 كلمات (16-bit)
+  const fileLenWords = 50 + points.length * (4 + contentLenWords); // 100 بايت هيدر = 50 كلمة
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  points.forEach((p) => {
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  });
+  if (!Number.isFinite(minX)) { minX = 0; maxX = 0; minY = 0; maxY = 0; }
+
+  const header = Buffer.alloc(100);
+  header.writeInt32BE(SHP_FILE_CODE, 0);
+  header.writeInt32BE(fileLenWords, 24);
+  header.writeInt32LE(SHP_VERSION, 28);
+  header.writeInt32LE(SHP_TYPE_POINT, 32);
+  header.writeDoubleLE(minX, 36);
+  header.writeDoubleLE(minY, 44);
+  header.writeDoubleLE(maxX, 52);
+  header.writeDoubleLE(maxY, 60);
+  // Z/M ranges (غير مستخدمة لنوع Point ثنائي الأبعاد) تبقى صفراً
+
+  const records = points.map((p, idx) => {
+    const rec = Buffer.alloc(8 + 20);
+    rec.writeInt32BE(idx + 1, 0);
+    rec.writeInt32BE(contentLenWords, 4);
+    rec.writeInt32LE(SHP_TYPE_POINT, 8);
+    rec.writeDoubleLE(p.x, 12);
+    rec.writeDoubleLE(p.y, 20);
+    return rec;
+  });
+
+  return Buffer.concat([header, ...records]);
+}
+
+/** يبني ملف .shx (فهرس السجلات) المرافق لـ .shp */
+function buildShxFile(points) {
+  const fileLenWords = 50 + points.length * 4;
+  const header = Buffer.alloc(100);
+  header.writeInt32BE(SHP_FILE_CODE, 0);
+  header.writeInt32BE(fileLenWords, 24);
+  header.writeInt32LE(SHP_VERSION, 28);
+  header.writeInt32LE(SHP_TYPE_POINT, 32);
+
+  let offsetWords = 50;
+  const entries = points.map(() => {
+    const e = Buffer.alloc(8);
+    e.writeInt32BE(offsetWords, 0);
+    e.writeInt32BE(10, 4);
+    offsetWords += 4 + 10;
+    return e;
+  });
+  return Buffer.concat([header, ...entries]);
+}
+
+/** يبني ملف .dbf (جدول السمات dBase III) بحقول: ID, NAME, TYPE, ELEV, DESC */
+function buildDbfFile(points) {
+  const fields = [
+    { name: 'ID', type: 'N', length: 10, decimals: 0 },
+    { name: 'NAME', type: 'C', length: 40, decimals: 0 },
+    { name: 'TYPE', type: 'C', length: 20, decimals: 0 },
+    { name: 'ELEV', type: 'N', length: 18, decimals: 4 },
+    { name: 'DESC', type: 'C', length: 60, decimals: 0 },
+  ];
+  const recordLength = 1 + fields.reduce((s, f) => s + f.length, 0);
+  const headerLength = 32 + fields.length * 32 + 1;
+  const now = new Date();
+
+  const header = Buffer.alloc(32);
+  header.writeUInt8(0x03, 0); // dBase III without memo
+  header.writeUInt8(now.getFullYear() - 1900, 1);
+  header.writeUInt8(now.getMonth() + 1, 2);
+  header.writeUInt8(now.getDate(), 3);
+  header.writeInt32LE(points.length, 4);
+  header.writeUInt16LE(headerLength, 8);
+  header.writeUInt16LE(recordLength, 10);
+  header.writeUInt8(0x08, 29); // Language Driver ID: إشارة إلى أن الحقول النصية مرمّزة UTF-8
+
+  const fieldDescriptors = fields.map((f) => {
+    const buf = Buffer.alloc(32);
+    Buffer.from(f.name.padEnd(11, '\0').slice(0, 11), 'ascii').copy(buf, 0);
+    buf.write(f.type, 11, 'ascii');
+    buf.writeUInt8(f.length, 16);
+    buf.writeUInt8(f.decimals, 17);
+    return buf;
+  });
+  const headerTerminator = Buffer.from([0x0D]);
+
+  const records = points.map((p, idx) => {
+    const rec = Buffer.alloc(recordLength);
+    rec.writeUInt8(0x20, 0); // مساحة = سجل غير محذوف
+    let offset = 1;
+    // الحقول تُكتب بترميز UTF-8 محسوبة بعدد البايتات وليس عدد الحروف، لتمكين حفظ نصوص عربية
+    // ضمن العرض الثابت للحقل دون تلف بايتات الحروف متعددة البايت.
+    const writeField = (value, length, padLeft = false) => {
+      const str = String(value ?? '');
+      let bytes = Buffer.from(str, 'utf-8');
+      if (bytes.length > length) bytes = bytes.slice(0, length); // اقتصاص بالبايت (قد يقطع حرفاً أخيراً نادراً)
+      const padLen = length - bytes.length;
+      const padding = Buffer.alloc(padLen, 0x20); // مسافات ASCII للحشو
+      const fieldBuf = padLeft ? Buffer.concat([padding, bytes]) : Buffer.concat([bytes, padding]);
+      fieldBuf.copy(rec, offset);
+      offset += length;
+    };
+    writeField(idx + 1, fields[0].length, true);
+    writeField(p.name || '', fields[1].length);
+    writeField(p.point_type || p.type || '', fields[2].length);
+    writeField(typeof p.elevation === 'number' ? p.elevation.toFixed(4) : '', fields[3].length, true);
+    writeField(p.description || '', fields[4].length);
+    return rec;
+  });
+
+  const eof = Buffer.from([0x1A]);
+  return Buffer.concat([header, ...fieldDescriptors, headerTerminator, ...records, eof]);
+}
+
+/**
+ * تصدير نقاط المساحة كـ Shapefile حقيقي (نوع Point) مطابق لمواصفة ESRI،
+ * معبّأ كملف .zip واحد يحوي (name.shp, name.shx, name.dbf) لتسهيل التنزيل والفتح المباشر في QGIS/ArcGIS.
+ * يتطلب إحداثيات مستوية (x, y) أو (easting, northing).
+ */
+function exportPointsToSHP(points, { fileNamePrefix = 'survey-points' } = {}) {
+  if (!Array.isArray(points) || points.length === 0) throw new Error('لا توجد نقاط لتصديرها');
+  const normalized = points.map((p) => ({
+    ...p,
+    x: typeof p.x === 'number' ? p.x : p.easting,
+    y: typeof p.y === 'number' ? p.y : p.northing,
+  }));
+  const missing = normalized.filter((p) => typeof p.x !== 'number' || typeof p.y !== 'number');
+  if (missing.length > 0) throw new Error('توجد نقاط بدون إحداثيات x/y أو easting/northing صالحة');
+
+  const baseName = 'survey-points';
+  const shp = buildShpFile(normalized);
+  const shx = buildShxFile(normalized);
+  const dbf = buildDbfFile(normalized);
+
+  const zipBuffer = buildZip([
+    { name: `${baseName}.shp`, content: shp },
+    { name: `${baseName}.shx`, content: shx },
+    { name: `${baseName}.dbf`, content: dbf },
+  ]);
+
+  const filename = `${fileNamePrefix}-${ts()}.zip`;
+  const outputPath = path.join(REPORTS_DIR, filename);
+  fs.writeFileSync(outputPath, zipBuffer);
+  return { success: true, data: { url: `/reports/${filename}`, count: points.length, format: 'SHP (zipped: shp+shx+dbf)' } };
+}
+
+/**
+ * استيراد نقاط من Shapefile: يقرأ أرشيف ZIP يحوي .shp (+ .dbf اختياري للسمات)،
+ * يحلّل الهيدر والسجلات وفق مواصفة ESRI لاستخراج نقاط (Point Shapefile فقط - النوع الأكثر شيوعاً للرفع المساحي).
+ * zipBuffer: Buffer لأرشيف .zip يحوي ملفات .shp/.dbf (أو .shp فقط بدون سمات).
+ */
+function importPointsFromSHP(zipBuffer) {
+  if (!Buffer.isBuffer(zipBuffer)) throw new Error('يجب توفير محتوى الملف كـ Buffer صالح (أرشيف ZIP يحوي .shp)');
+
+  // إعادة استخدام محلّل ZIP العام الموجود فعلياً في xlsxImporter (unzip ليس خاصاً بصيغة XLSX فقط)
+  let entries;
+  if (typeof unzipGeneric === 'function') {
+    entries = unzipGeneric(zipBuffer);
+  } else {
+    // fallback: استخراج يدوي بسيط لو تعذّر الوصول للدالة العامة
+    entries = extractZipEntriesLocal(zipBuffer);
+  }
+
+  const shpName = Object.keys(entries).find((n) => n.toLowerCase().endsWith('.shp'));
+  if (!shpName) throw new Error('لم يتم العثور على ملف .shp داخل الأرشيف المرفوع');
+  const shpBuf = entries[shpName];
+
+  const dbfName = Object.keys(entries).find((n) => n.toLowerCase().endsWith('.dbf'));
+  const dbfRecords = dbfName ? parseDbfFile(entries[dbfName]) : [];
+
+  const fileCode = shpBuf.readInt32BE(0);
+  if (fileCode !== SHP_FILE_CODE) throw new Error('ملف .shp غير صالح (File Code غير مطابق لمواصفة ESRI)');
+  const shapeType = shpBuf.readInt32LE(32);
+  if (shapeType !== SHP_TYPE_POINT) {
+    throw new Error(`نوع الشكل الهندسي (${shapeType}) غير مدعوم حالياً؛ يدعم النظام حالياً Point Shapefile فقط`);
+  }
+
+  const points = [];
+  let offset = 100; // نهاية الهيدر الثابت (100 بايت)
+  let idx = 0;
+  while (offset < shpBuf.length) {
+    const recNumber = shpBuf.readInt32BE(offset);
+    const contentLenWords = shpBuf.readInt32BE(offset + 4);
+    const contentStart = offset + 8;
+    const recShapeType = shpBuf.readInt32LE(contentStart);
+    if (recShapeType === SHP_TYPE_POINT) {
+      const x = shpBuf.readDoubleLE(contentStart + 4);
+      const y = shpBuf.readDoubleLE(contentStart + 12);
+      const attrs = dbfRecords[idx] || {};
+      points.push({
+        name: attrs.NAME || `PT-${recNumber}`,
+        x, y,
+        elevation: attrs.ELEV !== undefined && attrs.ELEV !== '' ? Number(attrs.ELEV) : null,
+        description: attrs.DESC || '',
+        point_type: attrs.TYPE || 'imported',
+      });
+    }
+    offset = contentStart + contentLenWords * 2;
+    idx += 1;
+  }
+
+  if (points.length === 0) throw new Error('لم يتم استخراج أي نقاط من ملف .shp');
+  return { success: true, data: points, count: points.length };
+}
+
+/** استخراج بسيط لملفات ZIP غير مضغوطة/مضغوطة deflate (بديل احتياطي محلي إن تعذّر الوصول لـ unzip الداخلية) */
+function extractZipEntriesLocal(buffer) {
+  const entries = {};
+  let offset = 0;
+  while (offset < buffer.length - 4) {
+    const sig = buffer.readUInt32LE(offset);
+    if (sig !== 0x04034b50) break;
+    const method = buffer.readUInt16LE(offset + 8);
+    const compSize = buffer.readUInt32LE(offset + 18);
+    const nameLen = buffer.readUInt16LE(offset + 26);
+    const extraLen = buffer.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const name = buffer.toString('utf-8', nameStart, nameStart + nameLen);
+    const dataStart = nameStart + nameLen + extraLen;
+    const rawData = buffer.slice(dataStart, dataStart + compSize);
+    entries[name] = method === 8 ? zlib.inflateRawSync(rawData) : rawData;
+    offset = dataStart + compSize;
+  }
+  return entries;
+}
+
+/** يحلّل ملف .dbf (dBase III) ويعيد مصفوفة كائنات {FIELD: value} بنفس ترتيب سجلات .shp */
+function parseDbfFile(buf) {
+  const numFields = Math.floor((buf.readUInt16LE(8) - 32 - 1) / 32);
+  const numRecords = buf.readInt32LE(4);
+  const recordLength = buf.readUInt16LE(10);
+  const fields = [];
+  for (let i = 0; i < numFields; i += 1) {
+    const fOffset = 32 + i * 32;
+    const name = buf.toString('ascii', fOffset, fOffset + 11).replace(/\0.*$/, '');
+    const length = buf.readUInt8(fOffset + 16);
+    fields.push({ name, length });
+  }
+  const headerLength = buf.readUInt16LE(8);
+  const records = [];
+  for (let r = 0; r < numRecords; r += 1) {
+    const recOffset = headerLength + r * recordLength;
+    let fieldOffset = recOffset + 1; // تجاوز بايت حالة الحذف
+    const obj = {};
+    fields.forEach((f) => {
+      // الحقول النصية مكتوبة UTF-8 (انظر buildDbfFile)، لذا يُقرأ الحقل كبايتات UTF-8 وليس ascii
+      // لضمان استرجاع النصوص العربية بشكل صحيح، ثم تُزال المسافات الزائدة من الحشو.
+      const raw = buf.toString('utf-8', fieldOffset, fieldOffset + f.length).replace(/\0/g, '').trim();
+      obj[f.name] = raw;
+      fieldOffset += f.length;
+    });
+    records.push(obj);
+  }
+  return records;
+}
+
+// ==================================================================================
+// ==================================== IFC ==========================================
+// تصدير/استيراد مبسّط لصيغة IFC (Industry Foundation Classes - STEP/ISO-10303-21) خاص
+// بنقاط المساحة: كل نقطة تُمثَّل كـ IfcCartesianPoint مرتبطة بـ IfcBuildingElementProxy
+// (تمثيل قياسي لعناصر مساحية/مرجعية في نماذج BIM لا تندرج تحت تصنيف إنشائي محدد).
+// الملف الناتج STEP نصي صالح البنية ويمكن فتحه في برامج BIM (Revit, BIMcollab, Solibri, IFC viewers).
+// ==================================================================================
+
+function ifcTimestamp() {
+  return new Date().toISOString().replace(/\.\d+Z$/, '');
+}
+
+/**
+ * تصدير نقاط المساحة إلى ملف IFC (STEP) حقيقي البنية: هيدر ISO-10303-21 قياسي،
+ * ونقطة IfcCartesianPoint + IfcBuildingElementProxy لكل نقطة رفع/تحكم/توقيع.
+ */
+function exportPointsToIFC(points, { fileNamePrefix = 'survey-points', projectName = 'Survey Project' } = {}) {
+  if (!Array.isArray(points) || points.length === 0) throw new Error('لا توجد نقاط لتصديرها');
+  const normalized = points.map((p) => ({
+    ...p,
+    x: typeof p.x === 'number' ? p.x : p.easting,
+    y: typeof p.y === 'number' ? p.y : p.northing,
+  }));
+  const missing = normalized.filter((p) => typeof p.x !== 'number' || typeof p.y !== 'number');
+  if (missing.length > 0) throw new Error('توجد نقاط بدون إحداثيات x/y أو easting/northing صالحة');
+
+  const lines = [];
+  let id = 1;
+  const nextId = () => id++;
+
+  const ownerHistoryId = nextId();
+  const personId = nextId();
+  const orgId = nextId();
+  const appId = nextId();
+  const originPointId = nextId();
+  const axis2PlacementId = nextId();
+  const projectId = nextId();
+  const geomContextId = nextId();
+  const unitAssignmentId = nextId();
+
+  lines.push(`#${personId}=IFCPERSON($,$,'Surveyor',$,$,$,$,$);`);
+  lines.push(`#${orgId}=IFCORGANIZATION($,'Civil Engineering Suite',$,$,$);`);
+  lines.push(`#${appId}=IFCAPPLICATION(#${orgId},'1.0','Civil Engineering Suite - Survey Module','CES-SURVEY');`);
+  lines.push(`#${ownerHistoryId}=IFCOWNERHISTORY(IFCPERSONANDORGANIZATION(#${personId},#${orgId},$),#${appId},$,.ADDED.,$,$,$,0);`);
+  lines.push(`#${originPointId}=IFCCARTESIANPOINT((0.,0.,0.));`);
+  lines.push(`#${axis2PlacementId}=IFCAXIS2PLACEMENT3D(#${originPointId},$,$);`);
+  lines.push(`#${unitAssignmentId}=IFCUNITASSIGNMENT((IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.)));`);
+  lines.push(`#${geomContextId}=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,#${axis2PlacementId},$);`);
+  lines.push(`#${projectId}=IFCPROJECT('${projectName.replace(/'/g, '')}',#${ownerHistoryId},'${projectName.replace(/'/g, '')}',$,$,$,$,(#${geomContextId}),#${unitAssignmentId});`);
+
+  normalized.forEach((p, idx) => {
+    const ptId = nextId();
+    const placementId = nextId();
+    const localPlacementId = nextId();
+    const proxyId = nextId();
+    const z = typeof p.elevation === 'number' ? p.elevation : 0;
+    const label = (p.name || `PT-${idx + 1}`).replace(/'/g, '');
+    const desc = (p.description || p.point_type || 'Survey Point').replace(/'/g, '');
+    lines.push(`#${ptId}=IFCCARTESIANPOINT((${r6(p.x)},${r6(p.y)},${r6(z)}));`);
+    lines.push(`#${placementId}=IFCAXIS2PLACEMENT3D(#${ptId},$,$);`);
+    lines.push(`#${localPlacementId}=IFCLOCALPLACEMENT($,#${placementId});`);
+    lines.push(`#${proxyId}=IFCBUILDINGELEMENTPROXY('${newGuidLike()}',#${ownerHistoryId},'${label}','${desc}',$,#${localPlacementId},$,$,.NOTDEFINED.);`);
+  });
+
+  const header = [
+    'ISO-10303-21;',
+    'HEADER;',
+    `FILE_DESCRIPTION(('Survey Points Export'),'2;1');`,
+    `FILE_NAME('${fileNamePrefix}.ifc','${ifcTimestamp()}',('Civil Engineering Suite'),('Survey Module'),'CES-IFC-Writer','CES-SURVEY','');`,
+    `FILE_SCHEMA(('IFC4'));`,
+    'ENDSEC;',
+    'DATA;',
+  ].join('\n');
+
+  const footer = ['ENDSEC;', 'END-ISO-10303-21;'].join('\n');
+
+  const content = [header, ...lines, footer].join('\n');
+  const filename = `${fileNamePrefix}-${ts()}.ifc`;
+  const outputPath = path.join(REPORTS_DIR, filename);
+  fs.writeFileSync(outputPath, content, 'utf-8');
+  return { success: true, data: { url: `/reports/${filename}`, count: points.length, format: 'IFC (STEP/ISO-10303-21)' } };
+}
+
+function newGuidLike() {
+  // معرّف بسيط يشبه IFC GUID (22 حرف) - لأغراض عدم التكرار داخل الملف فقط، وليس IFC GlobalId المضغوط رسمياً
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_$';
+  let out = '';
+  for (let i = 0; i < 22; i += 1) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+/**
+ * استيراد نقاط من ملف IFC: يحلّل أسطر IFCCARTESIANPOINT وIFCBUILDINGELEMENTPROXY المرتبطة بها
+ * عبر IFCLOCALPLACEMENT/IFCAXIS2PLACEMENT3D لاستخراج الإحداثيات والاسم/الوصف لكل نقطة مساحية مُصدَّرة سابقاً.
+ * content: نص محتوى ملف .ifc (STEP ASCII)
+ */
+function importPointsFromIFC(content) {
+  if (typeof content !== 'string' || !content.trim()) throw new Error('محتوى ملف IFC فارغ أو غير صالح');
+
+  const entityMap = {};
+  content.split('\n').forEach((line) => {
+    const m = line.match(/^#(\d+)=([A-Z0-9]+)\((.*)\);\s*$/);
+    if (m) entityMap[m[1]] = { type: m[2], args: m[3] };
+  });
+
+  const points = [];
+  Object.entries(entityMap).forEach(([id, entity]) => {
+    if (entity.type !== 'IFCBUILDINGELEMENTPROXY') return;
+    // البنية: (GlobalId, OwnerHistory, Name, Description, ObjectType, ObjectPlacement, Representation, Tag, PredefinedType)
+    const args = splitStepArgs(entity.args);
+    const name = (args[2] || '').replace(/^'|'$/g, '');
+    const description = (args[3] || '').replace(/^'|'$/g, '');
+    const placementRef = (args[5] || '').replace('#', '');
+    const localPlacement = entityMap[placementRef];
+    if (!localPlacement) return;
+    const lpArgs = splitStepArgs(localPlacement.args);
+    const axisRef = (lpArgs[1] || '').replace('#', '');
+    const axisEntity = entityMap[axisRef];
+    if (!axisEntity) return;
+    const axisArgs = splitStepArgs(axisEntity.args);
+    const pointRef = (axisArgs[0] || '').replace('#', '');
+    const pointEntity = entityMap[pointRef];
+    if (!pointEntity || pointEntity.type !== 'IFCCARTESIANPOINT') return;
+    const coordsMatch = pointEntity.args.match(/\(([^()]*)\)/);
+    if (!coordsMatch) return;
+    const coords = coordsMatch[1].split(',').map((c) => Number(c.trim()));
+    if (coords.length < 2 || coords.some((c) => Number.isNaN(c))) return;
+
+    points.push({
+      name: name || `PT-${id}`,
+      x: coords[0], y: coords[1],
+      elevation: coords.length > 2 ? coords[2] : null,
+      description: description || '',
+      point_type: 'imported',
+    });
+  });
+
+  if (points.length === 0) throw new Error('لم يتم العثور على أي نقاط (IfcBuildingElementProxy) صالحة داخل ملف IFC');
+  return { success: true, data: points, count: points.length };
+}
+
+/** يقسّم قائمة وسائط STEP مع مراعاة الأقواس والفواصل داخل النصوص المقتبسة */
+function splitStepArgs(argsStr) {
+  const result = [];
+  let depth = 0; let current = ''; let inString = false;
+  for (let i = 0; i < argsStr.length; i += 1) {
+    const ch = argsStr[i];
+    if (ch === "'" ) inString = !inString;
+    if (!inString) {
+      if (ch === '(') depth += 1;
+      if (ch === ')') depth -= 1;
+    }
+    if (ch === ',' && depth === 0 && !inString) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) result.push(current.trim());
+  return result;
+}
+
 module.exports = {
   exportPointsToGeoJSON,
   importPointsFromGeoJSON,
@@ -405,6 +928,12 @@ module.exports = {
   exportPointsToLandXML,
   importPointsFromLandXML,
   importPointsFromCSV,
+  exportPointsToExcel,
+  importPointsFromExcel,
+  exportPointsToSHP,
+  importPointsFromSHP,
+  exportPointsToIFC,
+  importPointsFromIFC,
   buildZip,
   crc32,
 };
