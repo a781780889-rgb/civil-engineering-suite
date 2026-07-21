@@ -4815,6 +4815,48 @@ const API_HANDLERS = {
       return SURVEY.listSurveyCalculations(query);
     },
   },
+
+  // ======== القسم العاشر - تطبيق المساحة (الجزء 3-أ/6): الرفع المساحي المتخصص ========
+  '/api/survey/records': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.listSurveyRecords(query);
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      return SURVEY.createSurveyRecord(body);
+    },
+  },
+  '/api/survey/records/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY.getSurveyRecord(query.id) };
+    },
+  },
+  '/api/survey/records/update': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'update');
+      return SURVEY.updateSurveyRecord(body.id, body);
+    },
+  },
+  '/api/survey/records/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'delete');
+      return SURVEY.deleteSurveyRecord(body.id);
+    },
+  },
+  '/api/survey/records/export-csv': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.exportSurveyRecordsToCSV(query);
+    },
+  },
+  '/api/survey/records/earthwork-volume': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY.calcEarthworkVolumeFromCrossSections(body) };
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
