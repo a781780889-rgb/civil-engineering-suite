@@ -60,6 +60,8 @@ const QMS_SUPPLY = require('./utils/qmsSupplyLink');
 const SURVEY = require('./utils/surveyManagement');
 const SURVEY_REPORTS = require('./utils/surveyReports');
 const SURVEY_AI = require('./utils/surveyAI');
+const SURVEY_GEODESY = require('./utils/surveyGeodesy');
+const SURVEY_GEOFILES = require('./utils/surveyGeoFiles');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -5041,6 +5043,140 @@ const API_HANDLERS = {
       requirePermission(req, 'survey', 'view');
       if (!body.question) throw new Error('نص السؤال (question) مطلوب');
       return SURVEY_AI.askSurveyQuestion({ question: body.question, projectId: body.projectId || null });
+    },
+  },
+
+  // ===================================================================================
+  // القسم العاشر - الجزء الأول من التحديث: أنظمة الإحداثيات المتقدمة
+  // (State Plane + Local/Helmert) - Geospatial File Import/Export
+  // ===================================================================================
+
+  '/api/survey/geodesy/state-plane-zones': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY_GEODESY.listStatePlaneZones() };
+    },
+  },
+  '/api/survey/geodesy/state-plane/to-geographic': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY_GEODESY.statePlaneToGeographic(body) };
+    },
+  },
+  '/api/survey/geodesy/state-plane/from-geographic': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY_GEODESY.geographicToStatePlane(body) };
+    },
+  },
+  '/api/survey/geodesy/helmert/compute': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!Array.isArray(body.pairs)) throw new Error('يجب إرسال مصفوفة pairs من نقاط التحكم المشتركة');
+      const store = SURVEY._internal.loadStore();
+      const params = SURVEY_GEODESY.computeHelmertTransform(body.pairs);
+      SURVEY._internal.audit(store, { action: 'compute_helmert', entity: 'coordinate_system', entityId: null, projectId: body.project_id || null, details: { control_points_used: params.control_points_used, rmse_m: params.rmse_m } });
+      SURVEY._internal.saveStore(store);
+      return { success: true, data: params };
+    },
+  },
+  '/api/survey/geodesy/helmert/apply': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.params) throw new Error('معاملات التحويل (params) مطلوبة، احسبها أولاً عبر helmert/compute');
+      const direction = body.direction === 'inverse' ? 'applyInverseHelmertTransform' : 'applyHelmertTransform';
+      return { success: true, data: SURVEY_GEODESY[direction](body.point, body.params) };
+    },
+  },
+
+  '/api/survey/files/export/geojson': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!Array.isArray(body.points)) throw new Error('مصفوفة points مطلوبة');
+      const result = SURVEY_GEOFILES.exportPointsToGeoJSON(body.points, { fileNamePrefix: body.fileNamePrefix });
+      const store = SURVEY._internal.loadStore();
+      SURVEY._internal.audit(store, { action: 'export_geojson', entity: 'survey_points', entityId: null, projectId: body.project_id || null, details: { count: body.points.length } });
+      SURVEY._internal.saveStore(store);
+      return result;
+    },
+  },
+  '/api/survey/files/import/geojson': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.content) throw new Error('محتوى الملف (content) مطلوب');
+      return SURVEY_GEOFILES.importPointsFromGeoJSON(body.content);
+    },
+  },
+  '/api/survey/files/export/kml': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!Array.isArray(body.points)) throw new Error('مصفوفة points مطلوبة');
+      const result = SURVEY_GEOFILES.exportPointsToKML(body.points, { fileNamePrefix: body.fileNamePrefix, docName: body.docName });
+      const store = SURVEY._internal.loadStore();
+      SURVEY._internal.audit(store, { action: 'export_kml', entity: 'survey_points', entityId: null, projectId: body.project_id || null, details: { count: body.points.length } });
+      SURVEY._internal.saveStore(store);
+      return result;
+    },
+  },
+  '/api/survey/files/import/kml': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.content) throw new Error('محتوى الملف (content) مطلوب');
+      return SURVEY_GEOFILES.importPointsFromKML(body.content);
+    },
+  },
+  '/api/survey/files/export/kmz': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!Array.isArray(body.points)) throw new Error('مصفوفة points مطلوبة');
+      const result = SURVEY_GEOFILES.exportPointsToKMZ(body.points, { fileNamePrefix: body.fileNamePrefix, docName: body.docName });
+      const store = SURVEY._internal.loadStore();
+      SURVEY._internal.audit(store, { action: 'export_kmz', entity: 'survey_points', entityId: null, projectId: body.project_id || null, details: { count: body.points.length } });
+      SURVEY._internal.saveStore(store);
+      return result;
+    },
+  },
+  '/api/survey/files/export/dxf': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!Array.isArray(body.points)) throw new Error('مصفوفة points مطلوبة');
+      const result = SURVEY_GEOFILES.exportPointsToDXF(body.points, { fileNamePrefix: body.fileNamePrefix });
+      const store = SURVEY._internal.loadStore();
+      SURVEY._internal.audit(store, { action: 'export_dxf', entity: 'survey_points', entityId: null, projectId: body.project_id || null, details: { count: body.points.length } });
+      SURVEY._internal.saveStore(store);
+      return result;
+    },
+  },
+  '/api/survey/files/import/dxf': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.content) throw new Error('محتوى الملف (content) مطلوب');
+      return SURVEY_GEOFILES.importPointsFromDXF(body.content);
+    },
+  },
+  '/api/survey/files/export/landxml': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!Array.isArray(body.points)) throw new Error('مصفوفة points مطلوبة');
+      const result = SURVEY_GEOFILES.exportPointsToLandXML(body.points, { fileNamePrefix: body.fileNamePrefix, projectName: body.projectName });
+      const store = SURVEY._internal.loadStore();
+      SURVEY._internal.audit(store, { action: 'export_landxml', entity: 'survey_points', entityId: null, projectId: body.project_id || null, details: { count: body.points.length } });
+      SURVEY._internal.saveStore(store);
+      return result;
+    },
+  },
+  '/api/survey/files/import/landxml': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.content) throw new Error('محتوى الملف (content) مطلوب');
+      return SURVEY_GEOFILES.importPointsFromLandXML(body.content);
+    },
+  },
+  '/api/survey/files/import/csv-points': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!body.content) throw new Error('محتوى الملف (content) مطلوب');
+      return SURVEY_GEOFILES.importPointsFromCSV(body.content, { hasHeader: body.hasHeader !== false });
     },
   },
 };
