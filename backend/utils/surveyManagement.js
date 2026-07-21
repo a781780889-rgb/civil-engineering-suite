@@ -109,8 +109,8 @@ WGS84.ep2 = (WGS84.a * WGS84.a - WGS84.b * WGS84.b) / (WGS84.b * WGS84.b); // ا
 
 const K0 = 0.9996; // عامل القياس المعياري لإسقاط UTM
 
-const SUPPORTED_SYSTEMS = ['UTM', 'GEOGRAPHIC', 'LOCAL'];
-const SUPPORTED_DATUMS = ['WGS84', 'LOCAL'];
+const SUPPORTED_SYSTEMS = ['UTM', 'GEOGRAPHIC', 'LOCAL', 'STATE_PLANE'];
+const SUPPORTED_DATUMS = ['WGS84', 'LOCAL', 'NAD83'];
 
 function deg2rad(d) { return (d * Math.PI) / 180; }
 function rad2deg(r) { return (r * 180) / Math.PI; }
@@ -265,6 +265,19 @@ function convertCoordinates({ from, to, input }) {
     const v = validateUTM(input);
     if (!v.valid) throw new Error(v.errors.join(' / '));
     return utmToGeographic(input);
+  }
+  if (from === 'GEOGRAPHIC' && to === 'STATE_PLANE') {
+    // lazy require لتفادي التبعية الدائرية (surveyGeodesy يعتمد على هذا الملف بدوره)
+    const GEO = require('./surveyGeodesy');
+    const v = validateGeographic(input);
+    if (!v.valid) throw new Error(v.errors.join(' / '));
+    if (!input.zoneCode) throw new Error('يجب تحديد zoneCode لمنطقة State Plane المستهدفة');
+    return GEO.geographicToStatePlane(input);
+  }
+  if (from === 'STATE_PLANE' && to === 'GEOGRAPHIC') {
+    const GEO = require('./surveyGeodesy');
+    if (!input.zoneCode) throw new Error('يجب تحديد zoneCode لمنطقة State Plane المصدر');
+    return GEO.statePlaneToGeographic(input);
   }
   throw new Error(`مسار التحويل من ${from} إلى ${to} غير مدعوم بعد ضمن الجزء الحالي من قسم المساحة`);
 }
@@ -1742,4 +1755,7 @@ module.exports = {
   calcEarthworkVolumeFromCrossSections,
   // مساعدات داخلية معروضة للاستخدام من الأجزاء اللاحقة لنفس القسم
   _internal: { loadStore, saveStore, audit, newId, nowISO, r2, r4, r6 },
+  // ثوابت عامة يُعاد استخدامها من وحدات تكميلية (surveyGeodesy / surveyGeoFiles)
+  SUPPORTED_SYSTEMS,
+  SUPPORTED_DATUMS,
 };
