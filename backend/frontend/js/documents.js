@@ -280,6 +280,9 @@ async function dmsViewDocument(docId) {
         <p><strong>الكلمات المفتاحية:</strong> ${data.keywords.join('، ') || '-'}</p>
         <p><strong>المؤلف:</strong> ${data.author || '-'} — <strong>آخر تحديث:</strong> ${new Date(data.updated_at).toLocaleString('ar-SA')}</p>
 
+        <h4 style="margin-top:16px">سير عمل الاعتماد (الجزء 3/10)</h4>
+        <div id="dms-doc-wf-panel" class="pm-activity-log" style="margin-bottom:12px">جارِ تحميل حالة سير العمل...</div>
+
         <h4 style="margin-top:16px">رفع إصدار جديد</h4>
         <div class="toolbar" style="flex-wrap:wrap">
           <input type="file" id="dms-new-version-file" />
@@ -319,6 +322,7 @@ async function dmsViewDocument(docId) {
     panel.querySelectorAll('[data-dms-restore-version]').forEach((btn) => {
       btn.addEventListener('click', () => dmsRestoreVersion(docId, btn.dataset.dmsRestoreVersion));
     });
+    dmsLoadDocWorkflowPanel(docId);
   } catch (e) {
     panel.innerHTML = `<div class="result-card" style="color:#c0392b">${e.message}</div>`;
   }
@@ -367,6 +371,204 @@ async function dmsRestoreVersion(docId, versionId) {
 }
 
 // ============================================================
+// الجزء 3/10: سير عمل الاعتماد (Workflow)
+// ============================================================
+
+const DMS_WF_STAGE_BADGE = {
+  approved: 'dms-badge dms-badge-success',
+  rejected: 'dms-badge dms-badge-danger',
+};
+
+/** يعرض داخل تفاصيل المستند: المرحلة الحالية + أزرار اعتماد/رفض/نشر + سجل القرارات */
+async function dmsLoadDocWorkflowPanel(docId) {
+  const el = document.getElementById('dms-doc-wf-panel');
+  if (!el) return;
+  el.innerHTML = 'جارِ تحميل حالة سير العمل...';
+  try {
+    const { data } = await dmsFetch('/documents/workflow/status', { query: { id: docId } });
+    const stageLine = data.is_complete
+      ? '<div class="alert-info">اكتملت جميع مراحل سير العمل لهذا المستند.</div>'
+      : `<p><strong>المرحلة الحالية المستحقة:</strong> ${data.current_stage.label} (${data.current_stage.key})</p>`;
+
+    const historyRows = data.history.length
+      ? data.history.map((h) => `
+        <tr>
+          <td>${h.stage_label}</td>
+          <td><span class="${DMS_WF_STAGE_BADGE[h.decision] || 'dms-badge'}">${h.decision === 'approved' ? 'معتمد' : 'مرفوض'}</span></td>
+          <td>${h.actor}</td>
+          <td>${h.comments || '-'}</td>
+          <td>${new Date(h.decided_at).toLocaleString('ar-SA')}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5">لا يوجد سجل قرارات بعد لهذا المستند</td></tr>';
+
+    el.innerHTML = `
+      <p><strong>سير العمل:</strong> ${data.workflow_name} — <strong>حالة المستند:</strong> ${DMS_REF?.document_status_labels?.[data.document_status] || data.document_status}</p>
+      ${stageLine}
+      <div class="toolbar" style="flex-wrap:wrap;margin:8px 0">
+        <input type="text" id="dms-wf-actor" placeholder="اسمك (المعتمِد)">
+        <input type="text" id="dms-wf-comments" placeholder="ملاحظات (إلزامي عند الرفض)">
+        <button class="btn btn-primary" id="dms-wf-btn-approve" ${data.is_complete ? 'disabled' : ''}>اعتماد المرحلة الحالية</button>
+        <button class="btn" id="dms-wf-btn-reject" ${data.is_complete ? 'disabled' : ''}>رفض المرحلة الحالية</button>
+        ${data.document_status === 'approved' ? '<button class="btn btn-primary" id="dms-wf-btn-publish">نشر المستند</button>' : ''}
+        ${data.document_status === 'rejected' ? '<button class="btn" id="dms-wf-btn-resubmit">إعادة تقديم للمراجعة</button>' : ''}
+      </div>
+      <div id="dms-wf-action-error" style="color:#c0392b"></div>
+      <table class="data-table" style="margin-top:8px">
+        <thead><tr><th>المرحلة</th><th>القرار</th><th>بواسطة</th><th>ملاحظات</th><th>التاريخ</th></tr></thead>
+        <tbody>${historyRows}</tbody>
+      </table>
+    `;
+
+    const approveBtn = document.getElementById('dms-wf-btn-approve');
+    if (approveBtn) approveBtn.addEventListener('click', () => dmsWfDecide(docId, 'approve'));
+    const rejectBtn = document.getElementById('dms-wf-btn-reject');
+    if (rejectBtn) rejectBtn.addEventListener('click', () => dmsWfDecide(docId, 'reject'));
+    const publishBtn = document.getElementById('dms-wf-btn-publish');
+    if (publishBtn) publishBtn.addEventListener('click', () => dmsWfPublish(docId));
+    const resubmitBtn = document.getElementById('dms-wf-btn-resubmit');
+    if (resubmitBtn) resubmitBtn.addEventListener('click', () => dmsWfResubmit(docId));
+  } catch (e) {
+    // إن لم يبدأ سير العمل بعد لهذا المستند، نعرض زر بدء بدلاً من رسالة خطأ فقط
+    el.innerHTML = `
+      <p style="color:#c0392b">${e.message}</p>
+      <button class="btn btn-primary" id="dms-wf-btn-start-inline">بدء سير عمل الاعتماد لهذا المستند</button>
+    `;
+    const startBtn = document.getElementById('dms-wf-btn-start-inline');
+    if (startBtn) {
+      startBtn.addEventListener('click', async () => {
+        try {
+          await dmsFetch('/documents/workflow/start', { method: 'POST', body: { document_id: docId } });
+          dmsLoadDocWorkflowPanel(docId);
+        } catch (err) {
+          el.innerHTML = `<p style="color:#c0392b">${err.message}</p>`;
+        }
+      });
+    }
+  }
+}
+
+async function dmsWfDecide(docId, action) {
+  const errEl = document.getElementById('dms-wf-action-error');
+  errEl.textContent = '';
+  try {
+    const actor = document.getElementById('dms-wf-actor').value || null;
+    const comments = document.getElementById('dms-wf-comments').value || '';
+    if (!actor) throw new Error('يجب إدخال اسم المعتمِد');
+    await dmsFetch(`/documents/workflow/${action}`, {
+      method: 'POST', body: { document_id: docId, actor, comments },
+    });
+    dmsLoadDocWorkflowPanel(docId);
+    dmsLoadDocuments();
+    dmsLoadDashboard();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function dmsWfPublish(docId) {
+  const errEl = document.getElementById('dms-wf-action-error');
+  errEl.textContent = '';
+  try {
+    const actor = document.getElementById('dms-wf-actor').value || null;
+    await dmsFetch('/documents/workflow/publish', { method: 'POST', body: { document_id: docId, actor } });
+    dmsLoadDocWorkflowPanel(docId);
+    dmsLoadDocuments();
+    dmsLoadDashboard();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function dmsWfResubmit(docId) {
+  const errEl = document.getElementById('dms-wf-action-error');
+  errEl.textContent = '';
+  try {
+    const actor = document.getElementById('dms-wf-actor').value || null;
+    await dmsFetch('/documents/workflow/resubmit', { method: 'POST', body: { document_id: docId, actor } });
+    dmsLoadDocWorkflowPanel(docId);
+    dmsLoadDocuments();
+    dmsLoadDashboard();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+// ---------- صندوق الموافقات المعلّقة ----------
+async function dmsLoadPendingApprovals() {
+  const tbody = document.getElementById('dms-pending-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6">جارِ التحميل...</td></tr>';
+  try {
+    const projectId = document.getElementById('dms-wf-filter-project')?.value || null;
+    const { data } = await dmsFetch('/approvals/pending', { query: { projectId } });
+    tbody.innerHTML = data.length ? data.map((p) => `
+      <tr>
+        <td>${p.document_number}</td>
+        <td>${p.title}</td>
+        <td>${p.doc_type_label}</td>
+        <td>${p.current_stage.label}</td>
+        <td>${new Date(p.waiting_since).toLocaleString('ar-SA')}</td>
+        <td><button class="btn btn-sm" data-dms-wf-view="${p.document_id}">فتح</button></td>
+      </tr>`).join('') : '<tr><td colspan="6">لا توجد مستندات بانتظار الاعتماد حالياً</td></tr>';
+
+    tbody.querySelectorAll('[data-dms-wf-view]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.getElementById('dms-wf-doc-id').value = btn.dataset.dmsWfView;
+        dmsLoadWfStatusStandalone();
+      });
+    });
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" style="color:#c0392b">${e.message}</td></tr>`;
+  }
+}
+
+async function dmsLoadWfStatusStandalone() {
+  const docId = document.getElementById('dms-wf-doc-id')?.value;
+  const panel = document.getElementById('dms-wf-status-panel');
+  if (!docId || !panel) return;
+  panel.innerHTML = 'جارِ التحميل...';
+  try {
+    const { data } = await dmsFetch('/documents/workflow/status', { query: { id: docId } });
+    panel.innerHTML = `
+      <p><strong>سير العمل:</strong> ${data.workflow_name}</p>
+      <p><strong>حالة المستند:</strong> ${DMS_REF?.document_status_labels?.[data.document_status] || data.document_status}</p>
+      <p><strong>المرحلة الحالية:</strong> ${data.is_complete ? 'اكتملت جميع المراحل' : `${data.current_stage.label} (${data.current_stage.key})`}</p>
+      <p style="color:#666">لاتخاذ قرار اعتماد/رفض أو رفع إصدار جديد، افتح المستند من قائمة "جميع المستندات والبحث".</p>
+    `;
+  } catch (e) {
+    panel.innerHTML = `<p style="color:#c0392b">${e.message}</p>`;
+  }
+}
+
+async function dmsStartWorkflowStandalone() {
+  const docId = document.getElementById('dms-wf-doc-id')?.value;
+  if (!docId) return;
+  try {
+    await dmsFetch('/documents/workflow/start', { method: 'POST', body: { document_id: docId } });
+    dmsLoadWfStatusStandalone();
+  } catch (e) {
+    const panel = document.getElementById('dms-wf-status-panel');
+    if (panel) panel.innerHTML = `<p style="color:#c0392b">${e.message}</p>`;
+  }
+}
+
+async function dmsLoadActiveWorkflowForType() {
+  const docType = document.getElementById('dms-wf-def-type')?.value;
+  const viewEl = document.getElementById('dms-wf-active-view');
+  if (!docType || !viewEl) return;
+  viewEl.innerHTML = 'جارِ التحميل...';
+  try {
+    const { data } = await dmsFetch('/workflows/active', { query: { docType } });
+    viewEl.innerHTML = `
+      <p><strong>${data.name}</strong> ${data.is_default ? '(افتراضي - غير مخصَّص)' : ''}</p>
+      <ol>${data.stages.map((s) => `<li>${s.label} — عند الاعتماد: ${DMS_REF?.document_status_labels?.[s.resulting_status] || s.resulting_status}، عند الرفض: ${DMS_REF?.document_status_labels?.[s.on_reject_status] || s.on_reject_status}</li>`).join('')}</ol>
+    `;
+  } catch (e) {
+    viewEl.innerHTML = `<p style="color:#c0392b">${e.message}</p>`;
+  }
+}
+
+// ============================================================
 // ربط الأزرار عند تحميل الصفحة
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -381,4 +583,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const refreshBtn = document.getElementById('dms-btn-refresh-list');
   if (refreshBtn) refreshBtn.addEventListener('click', dmsLoadDocuments);
+
+  const pendingBtn = document.getElementById('dms-btn-refresh-pending');
+  if (pendingBtn) pendingBtn.addEventListener('click', dmsLoadPendingApprovals);
+
+  const loadWfStatusBtn = document.getElementById('dms-btn-load-wf-status');
+  if (loadWfStatusBtn) loadWfStatusBtn.addEventListener('click', dmsLoadWfStatusStandalone);
+
+  const startWfBtn = document.getElementById('dms-btn-start-wf');
+  if (startWfBtn) startWfBtn.addEventListener('click', dmsStartWorkflowStandalone);
+
+  const loadActiveWfBtn = document.getElementById('dms-btn-load-active-wf');
+  if (loadActiveWfBtn) loadActiveWfBtn.addEventListener('click', dmsLoadActiveWorkflowForType);
 });
