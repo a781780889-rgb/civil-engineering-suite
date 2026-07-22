@@ -272,6 +272,9 @@
     <div class="nav-item" data-panel="dms-documents">
       <span class="nav-icon">🗂️</span> جميع المستندات والبحث
     </div>
+    <div class="nav-item" data-panel="dms-categories">
+      <span class="nav-icon">📁</span> المجلدات والأرشفة
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4071,16 +4074,55 @@
           <select id="dms-filter-status" class="dms-status-select" data-keep-first-option="true">
             <option value="">كل الحالات</option>
           </select>
+          <select id="dms-filter-category" data-keep-first-option="true">
+            <option value="">كل المجلدات</option>
+          </select>
           <button class="btn btn-primary" id="dms-btn-search">بحث</button>
           <button class="btn" id="dms-btn-refresh-list">تحديث</button>
         </div>
+        <div class="toolbar" style="flex-wrap:wrap" id="dms-bulk-toolbar">
+          <span id="dms-selected-count">لم يتم تحديد أي مستند</span>
+          <select id="dms-bulk-target-category">
+            <option value="">-- انقل إلى مجلد --</option>
+          </select>
+          <button class="btn" id="dms-btn-bulk-move">نقل المحدد</button>
+          <button class="btn" id="dms-btn-bulk-archive">أرشفة المحدد</button>
+        </div>
         <table class="data-table">
           <thead>
-            <tr><th>رقم المستند</th><th>العنوان</th><th>النوع</th><th>الإصدار</th><th>الحالة</th><th>آخر تحديث</th><th></th></tr>
+            <tr><th></th><th>رقم المستند</th><th>العنوان</th><th>النوع</th><th>المجلد</th><th>الإصدار</th><th>الحالة</th><th>آخر تحديث</th><th></th></tr>
           </thead>
-          <tbody id="dms-docs-tbody"><tr><td colspan="7">اضغط "تحديث" لعرض المستندات</td></tr></tbody>
+          <tbody id="dms-docs-tbody"><tr><td colspan="9">اضغط "تحديث" لعرض المستندات</td></tr></tbody>
         </table>
         <div class="dms-detail-panel" id="dms-detail-panel" style="display:none"></div>
+      </div>
+    </section>
+
+    <section class="calc-panel" id="panel-dms-categories">
+      <div class="calc-card">
+        <h2>القسم الحادي عشر — المجلدات والتصنيف الهرمي والأرشفة</h2>
+
+        <div class="toolbar" style="flex-wrap:wrap">
+          <input type="text" id="dms-new-cat-name" placeholder="اسم المجلد الجديد">
+          <select id="dms-new-cat-parent">
+            <option value="">(مجلد رئيسي - بدون أب)</option>
+          </select>
+          <input type="text" id="dms-new-cat-project" placeholder="المشروع (اختياري) PRJ-...">
+          <button class="btn btn-primary" id="dms-btn-create-category">إنشاء مجلد</button>
+          <button class="btn" id="dms-btn-refresh-tree">تحديث الشجرة</button>
+        </div>
+
+        <div id="dms-category-tree" class="pm-activity-log" style="margin-top:12px">اضغط "تحديث الشجرة" لعرض المجلدات</div>
+
+        <hr style="margin:20px 0">
+
+        <h3>الأرشفة التلقائية</h3>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <button class="btn" id="dms-btn-view-archive-rules">عرض قواعد الأرشفة الحالية</button>
+          <button class="btn btn-primary" id="dms-btn-run-auto-archive">تشغيل الأرشفة التلقائية الآن</button>
+        </div>
+        <div id="dms-archive-rules-view" class="pm-activity-log" style="margin-top:10px"></div>
+        <div id="dms-archive-run-result" style="margin-top:10px"></div>
       </div>
     </section>
 
@@ -4186,5 +4228,6 @@
 <script src="js/survey.js"></script>
 <script src="js/surveyMapsDrawings.js"></script>
 <script src="js/documents.js"></script>
+<script src="js/documentCategories.js"></script>
 </body>
 </html>
