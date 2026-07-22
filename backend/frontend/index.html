@@ -322,6 +322,9 @@
     <div class="nav-item" data-panel="draw-versions">
       <span class="nav-icon">🕒</span> إدارة الإصدارات
     </div>
+    <div class="nav-item" data-panel="draw-viewer">
+      <span class="nav-icon">🔍</span> عارض المخططات
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4508,6 +4511,55 @@
   </div>
 </section>
 
+<!-- ============ القسم الثاني عشر: إدارة المخططات الهندسية (3/10) ============ -->
+<section class="calc-panel" id="panel-draw-viewer">
+  <div class="panel-header"><h2>عارض المخططات</h2><span class="panel-code">DRAW.VIEWER</span></div>
+  <div class="panel-body">
+    <div id="draw-view-header">
+      <div class="mini-list-empty">اختر مخططاً من قائمة "جميع المخططات" بالضغط على زر "العارض"</div>
+    </div>
+
+    <h4 style="margin-top:16px">إضافة قياس (مسافة / طول / زاوية / مساحة)</h4>
+    <div class="field">
+      <label>نوع القياس</label>
+      <select id="draw-view-mea-type">
+        <option value="distance">مسافة (نقطتان)</option>
+        <option value="length">طول (خط متعدد النقاط)</option>
+        <option value="angle">زاوية (3 نقاط: طرف - رأس - طرف)</option>
+        <option value="area">مساحة (مضلع - 3 نقاط فأكثر)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>النقاط (كل نقطة في سطر بصيغة x,y أو x,y,z)</label>
+      <textarea id="draw-view-mea-points" rows="4" placeholder="0,0&#10;10,0&#10;10,5"></textarea>
+    </div>
+    <div class="field"><label>ملاحظة (اختياري)</label><input type="text" id="draw-view-mea-label"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-draw-view-mea-add">حفظ القياس <span class="loading-spinner" style="display:none"></span></button>
+    </div>
+    <div id="draw-view-mea-alert"></div>
+    <div id="draw-view-mea-table"><div class="mini-list-empty">لا توجد بيانات بعد</div></div>
+
+    <h4 style="margin-top:16px">تسجيل نقطة إحداثية</h4>
+    <div class="filter-row">
+      <input type="number" step="any" id="draw-view-coord-x" placeholder="X">
+      <input type="number" step="any" id="draw-view-coord-y" placeholder="Y">
+      <input type="number" step="any" id="draw-view-coord-z" placeholder="Z (اختياري)">
+      <input type="text" id="draw-view-coord-label" placeholder="ملاحظة (اختياري)">
+      <button class="btn btn-primary" id="btn-draw-view-coord-add">تسجيل النقطة <span class="loading-spinner" style="display:none"></span></button>
+    </div>
+    <div id="draw-view-coord-alert"></div>
+    <div id="draw-view-coord-table"><div class="mini-list-empty">لا توجد بيانات بعد</div></div>
+
+    <h4 style="margin-top:16px">فتح عدة مخططات معاً</h4>
+    <p style="opacity:0.8">حدّد المخططات المطلوبة من مربعات الاختيار في قائمة "جميع المخططات" ثم اضغط الزر أدناه.</p>
+    <div class="btn-row">
+      <button class="btn btn-outline" id="btn-draw-view-open-multi">فتح المخططات المحددة</button>
+    </div>
+    <div id="draw-view-multi-result"></div>
+  </div>
+</section>
+
 <script src="js/app.js"></script>
 <script src="js/pm.js"></script>
 <script src="js/schedule.js"></script>
@@ -4538,5 +4590,6 @@
 <script src="js/documentModuleLinks.js"></script>
 <script src="js/drawings.js"></script>
 <script src="js/drawingVersions.js"></script>
+<script src="js/drawingViewer.js"></script>
 </body>
 </html>
