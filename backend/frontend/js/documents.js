@@ -300,6 +300,9 @@ async function dmsViewDocument(docId) {
         <h4 style="margin-top:16px">التوقيع الإلكتروني (الجزء 4/10)</h4>
         <div id="dms-doc-sig-panel" class="pm-activity-log" style="margin-bottom:12px">جارِ تحميل سجل التوقيعات...</div>
 
+        <h4 style="margin-top:16px">المشاركة (روابط آمنة ومشاركة داخلية)</h4>
+        <div id="dms-doc-share-panel" class="pm-activity-log" style="margin-bottom:12px">جارِ تحميل بيانات المشاركة...</div>
+
         <h4 style="margin-top:16px">المساعد الذكي (الذكاء الاصطناعي)</h4>
         <div id="dms-doc-ai-panel" class="pm-activity-log" style="margin-bottom:12px"></div>
 
@@ -344,6 +347,7 @@ async function dmsViewDocument(docId) {
     });
     dmsLoadDocWorkflowPanel(docId);
     dmsLoadDocSignaturePanel(docId);
+    if (typeof dmsShRenderDocumentPanel === 'function') dmsShRenderDocumentPanel(docId);
     if (typeof dmsAiRenderDocumentPanel === 'function') dmsAiRenderDocumentPanel(docId);
   } catch (e) {
     panel.innerHTML = `<div class="result-card" style="color:#c0392b">${e.message}</div>`;
