@@ -281,6 +281,9 @@
     <div class="nav-item" data-panel="dms-approvals">
       <span class="nav-icon">✅</span> سير عمل الاعتماد
     </div>
+    <div class="nav-item" data-panel="dms-backup">
+      <span class="nav-icon">🗄️</span> النسخ الاحتياطي والاستعادة
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4251,6 +4254,19 @@
       </div>
     </section>
 
+    <!-- ============ القسم الحادي عشر: النسخ الاحتياطي والاستعادة ============ -->
+    <section class="calc-panel" id="panel-dms-backup">
+      <div class="calc-card">
+        <h2>القسم الحادي عشر — النسخ الاحتياطي والاستعادة</h2>
+        <p class="muted">
+          نسخ احتياطي فعلي يشمل قاعدة بيانات إدارة المستندات وملفات المستندات الفعلية معاً (أو
+          البيانات الوصفية فقط)، مع تحقق سلامة إلزامي (checksum) قبل أي استعادة، ونسخة أمان تلقائية
+          للحالة الحالية قبل الاستبدال، وإمكانية حفظ نسخة في موقع ثانوي على الخادم.
+        </p>
+        <div id="dms-backup-panel-host"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -4356,5 +4372,6 @@
 <script src="js/documentCategories.frontend.js"></script>
 <script src="js/documentSearch.js"></script>
 <script src="js/documentAI.js"></script>
+<script src="js/documentBackup.js"></script>
 </body>
 </html>
