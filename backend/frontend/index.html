@@ -261,6 +261,17 @@
     <div class="nav-item" data-panel="survey-maps">
       <span class="nav-icon">🗺️</span> الخرائط التفاعلية
     </div>
+
+    <div class="sidebar-title" style="margin-top:16px">القسم الحادي عشر</div>
+    <div class="nav-item" data-panel="dms-dashboard">
+      <span class="nav-icon">📋</span> لوحة معلومات المستندات
+    </div>
+    <div class="nav-item" data-panel="dms-upload">
+      <span class="nav-icon">⬆️</span> رفع مستند جديد
+    </div>
+    <div class="nav-item" data-panel="dms-documents">
+      <span class="nav-icon">🗂️</span> جميع المستندات والبحث
+    </div>
   </nav>
 
   <main class="main-content">
@@ -3979,6 +3990,100 @@
       </div>
     </section>
 
+    <!-- ============ القسم الحادي عشر (الجزء 1/10): لوحة معلومات إدارة المستندات ============ -->
+    <section class="calc-panel" id="panel-dms-dashboard">
+      <div class="calc-card">
+        <h2>القسم الحادي عشر — لوحة معلومات إدارة المستندات (DMS)</h2>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="dms-btn-load-dashboard">تحديث اللوحة</button>
+        </div>
+        <div id="dms-dash-alerts" style="margin-bottom:12px"></div>
+        <div class="result-cards" id="dms-dash-cards"></div>
+        <h3 style="margin-top:20px">آخر المستندات المضافة</h3>
+        <div class="pm-activity-log" id="dms-recent-documents"></div>
+        <h3 style="margin-top:20px">آخر عمليات التعديل</h3>
+        <div class="pm-activity-log" id="dms-recent-edits"></div>
+        <h3 style="margin-top:20px">آخر الموافقات</h3>
+        <div class="pm-activity-log" id="dms-recent-approvals"></div>
+      </div>
+    </section>
+
+    <!-- ============ القسم الحادي عشر (الجزء 1/10): رفع مستند جديد ============ -->
+    <section class="calc-panel" id="panel-dms-upload">
+      <div class="calc-card">
+        <h2>القسم الحادي عشر — رفع مستند جديد</h2>
+        <p class="muted">يدعم النظام جميع الصيغ الشائعة (PDF، Word، Excel، PowerPoint، DWG، DXF، IFC، CSV، TXT، الصور، الفيديوهات، الملفات المضغوطة). يُنشأ رقم مستند مرجعي تلقائياً حسب النوع والمشروع، ويُحفظ كإصدار أول (v1) قابل للتتبع.</p>
+        <form id="dms-upload-form">
+          <div class="form-grid">
+            <div class="field">
+              <label>عنوان المستند</label>
+              <input type="text" id="dms-f-title" required>
+            </div>
+            <div class="field">
+              <label>نوع المستند</label>
+              <select id="dms-f-type" class="dms-doc-type-select" required></select>
+            </div>
+            <div class="field">
+              <label>معرّف المشروع المرتبط (اختياري)</label>
+              <input type="text" id="dms-f-project" placeholder="PRJ-...">
+            </div>
+            <div class="field">
+              <label>القسم / الإدارة (اختياري)</label>
+              <input type="text" id="dms-f-department">
+            </div>
+            <div class="field">
+              <label>اسم المؤلف / الرافع</label>
+              <input type="text" id="dms-f-author">
+            </div>
+            <div class="field">
+              <label>الكلمات المفتاحية (مفصولة بفواصل)</label>
+              <input type="text" id="dms-f-keywords" placeholder="عقد، مقاولة، 2026">
+            </div>
+            <div class="field field-full">
+              <label>الوصف (اختياري)</label>
+              <textarea id="dms-f-description" rows="3"></textarea>
+            </div>
+            <div class="field field-full">
+              <label>الملف</label>
+              <input type="file" id="dms-f-file" required>
+            </div>
+          </div>
+          <div id="dms-upload-error" style="color:#c0392b;margin-top:8px"></div>
+          <div class="btn-row">
+            <button type="submit" class="btn btn-primary">رفع المستند</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============ القسم الحادي عشر (الجزء 1/10): جميع المستندات والبحث ============ -->
+    <section class="calc-panel" id="panel-dms-documents">
+      <div class="calc-card">
+        <h2>القسم الحادي عشر — جميع المستندات والبحث</h2>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <input type="text" id="dms-search" placeholder="ابحث بالاسم أو الرقم المرجعي أو الكلمات المفتاحية...">
+          <select id="dms-filter-group" class="dms-group-select" data-keep-first-option="true">
+            <option value="">كل المجموعات</option>
+          </select>
+          <select id="dms-filter-type" class="dms-doc-type-select" data-keep-first-option="true">
+            <option value="">كل الأنواع</option>
+          </select>
+          <select id="dms-filter-status" class="dms-status-select" data-keep-first-option="true">
+            <option value="">كل الحالات</option>
+          </select>
+          <button class="btn btn-primary" id="dms-btn-search">بحث</button>
+          <button class="btn" id="dms-btn-refresh-list">تحديث</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr><th>رقم المستند</th><th>العنوان</th><th>النوع</th><th>الإصدار</th><th>الحالة</th><th>آخر تحديث</th><th></th></tr>
+          </thead>
+          <tbody id="dms-docs-tbody"><tr><td colspan="7">اضغط "تحديث" لعرض المستندات</td></tr></tbody>
+        </table>
+        <div class="dms-detail-panel" id="dms-detail-panel" style="display:none"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -4080,5 +4185,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="js/survey.js"></script>
 <script src="js/surveyMapsDrawings.js"></script>
+<script src="js/documents.js"></script>
 </body>
 </html>
