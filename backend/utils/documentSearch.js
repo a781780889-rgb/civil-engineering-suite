@@ -428,11 +428,20 @@ function searchWithinDocument(documentId, query) {
   };
 }
 
+/** يعيد نص المحتوى الخام المفهرَس لمستند معيّن (أو null إن لم يكن مفهرَساً) - لاستخدام وحدات أخرى مثل documentAI */
+function getIndexedContentText(documentId) {
+  const store = loadStore();
+  const indexEntry = store.searchIndex[documentId];
+  if (!indexEntry || !indexEntry.content_text) return null;
+  return indexEntry.content_text;
+}
+
 module.exports = {
   // فهرسة
   indexDocument,
   reindexAllDocuments,
   getIndexStatus,
+  getIndexedContentText,
   SEARCHABLE_EXTENSIONS,
 
   // بحث
