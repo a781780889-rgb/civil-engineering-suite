@@ -74,6 +74,7 @@ const DMS_SHARE = require('./utils/documentSharing');
 const DMS_NOTIF = require('./utils/documentNotifications');
 DMS_NOTIF.attachToSharingModule();
 const DMS_REPORTS = require('./utils/documentReports');
+const DMS_AI = require('./utils/documentAI');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6114,6 +6115,91 @@ const API_HANDLERS = {
       requirePermission(req, 'documents', 'view');
       const result = DMS_REPORTS.exportDmsReportToPrintableHTML(body.report, { projectName: body.projectName });
       return { success: true, ...result };
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الحادي عشر - البنود المتبقية: الذكاء الاصطناعي =========
+  // ===================================================================
+  '/api/dms/ai/available': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return { success: true, available: DMS_AI.isAIAvailable() };
+    },
+  },
+  '/api/dms/ai/classify': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_AI.classifyDocument({
+        documentId: body.documentId || null,
+        title: body.title || null,
+        description: body.description || null,
+        contentSnippet: body.contentSnippet || null,
+      });
+    },
+  },
+  '/api/dms/ai/extract-key-data': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!body.documentId) throw new Error('معرّف المستند (documentId) مطلوب');
+      return DMS_AI.extractKeyData({ documentId: body.documentId });
+    },
+  },
+  '/api/dms/ai/summarize': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!body.documentId) throw new Error('معرّف المستند (documentId) مطلوب');
+      return DMS_AI.summarizeDocument({ documentId: body.documentId, style: body.style || 'brief' });
+    },
+  },
+  '/api/dms/ai/semantic-search': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!body.query) throw new Error('نص الاستعلام (query) مطلوب');
+      return DMS_AI.semanticSearch({ query: body.query, projectId: body.projectId || null, topCandidates: body.topCandidates || 20 });
+    },
+  },
+  '/api/dms/ai/detect-duplicates': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_AI.detectDuplicateDocuments({ projectId: body.projectId || null });
+    },
+  },
+  '/api/dms/ai/suggest-keywords': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_AI.suggestKeywords({
+        documentId: body.documentId || null,
+        title: body.title || null,
+        description: body.description || null,
+      });
+    },
+  },
+  '/api/dms/ai/detect-missing': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return DMS_AI.detectMissingDocuments({ projectId: body.projectId });
+    },
+  },
+  '/api/dms/ai/executive-summary': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_AI.generateExecutiveSummary({ projectId: body.projectId || null });
+    },
+  },
+  '/api/dms/ai/analyze-contract': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!body.documentId) throw new Error('معرّف المستند (documentId) مطلوب');
+      return DMS_AI.analyzeContractOrReport({ documentId: body.documentId });
+    },
+  },
+  '/api/dms/ai/suggest-workflow': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!body.documentId) throw new Error('معرّف المستند (documentId) مطلوب');
+      return DMS_AI.suggestApprovalWorkflow({ documentId: body.documentId });
     },
   },
 };
