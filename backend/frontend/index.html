@@ -248,6 +248,12 @@
     <div class="nav-item" data-panel="survey-geo-tools">
       <span class="nav-icon">🌐</span> أنظمة متقدمة وملفات جغرافية
     </div>
+    <div class="nav-item" data-panel="survey-device-import">
+      <span class="nav-icon">📡</span> التكامل مع أجهزة المساحة
+    </div>
+    <div class="nav-item" data-panel="survey-fieldwork">
+      <span class="nav-icon">🚜</span> الأعمال الميدانية
+    </div>
   </nav>
 
   <main class="main-content">
@@ -3791,6 +3797,118 @@
           <button class="btn" id="svygeo-btn-import-csv">استيراد كـ CSV</button>
         </div>
         <div id="svygeo-import-result" class="result-box" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+    <!-- ===== القسم العاشر: التكامل مع أجهزة المساحة ===== -->
+    <section class="calc-panel" id="panel-survey-device-import">
+      <div class="calc-card">
+        <h2>التكامل مع أجهزة المساحة</h2>
+        <p style="color:#666">استيراد فعلي لملفات القياس الأصلية الصادرة من أجهزة المساحة، وتحليلها إلى نقاط رفع جاهزة للحفظ في المشروع.</p>
+        <div class="form-grid">
+          <label>معرّف المشروع المساحي *<input type="text" id="svydev-project-id" placeholder="SRV-PRJ-..."></label>
+          <label>نوع الجهاز *
+            <select id="svydev-device-type">
+              <option value="total_station">Total Station (GSI/SDR)</option>
+              <option value="gnss_rtk">GPS/GNSS/RTK (NMEA-0183)</option>
+              <option value="digital_level">Digital Level (ميزان رقمي)</option>
+              <option value="laser_scanner">Laser Scanner (PTS/XYZ)</option>
+              <option value="drone_survey">Drone Survey (GCP CSV)</option>
+            </select>
+          </label>
+          <label id="svydev-ts-format-wrap">صيغة Total Station
+            <select id="svydev-ts-format">
+              <option value="gsi">GSI16 (Leica)</option>
+              <option value="sdr">SDR33 (Sokkia)</option>
+            </select>
+          </label>
+          <label id="svydev-level-elev-wrap">منسوب بداية الميزان الرقمي<input type="number" step="0.0001" id="svydev-level-start-elev" value="0"></label>
+        </div>
+        <label>محتوى الملف الخام (الصق نص الملف مباشرة) *
+          <textarea id="svydev-file-content" rows="8" placeholder="الصق محتوى ملف الجهاز هنا (GSI / NMEA / CSV حسب النوع المختار)..."></textarea>
+        </label>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="svydev-btn-import">تحليل واستيراد</button>
+          <button class="btn" id="svydev-btn-load-imports">تحديث سجل الاستيرادات</button>
+        </div>
+        <div id="svydev-import-error" style="color:#c0392b;margin-top:8px"></div>
+        <div id="svydev-import-result" class="result-box" style="margin-top:10px"></div>
+
+        <h3 style="margin-top:20px">سجل عمليات الاستيراد</h3>
+        <table class="data-table" id="svydev-imports-table">
+          <thead><tr><th>الجهاز</th><th>الصيغة</th><th>عدد النقاط</th><th>مرفوض</th><th>التاريخ</th><th></th></tr></thead>
+          <tbody id="svydev-imports-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== القسم العاشر: الأعمال الميدانية (Offline Mode) ===== -->
+    <section class="calc-panel" id="panel-survey-fieldwork">
+      <div class="calc-card">
+        <h2>إدارة الأعمال الميدانية</h2>
+        <div class="toolbar">
+          <input type="text" id="svyfw-project-id" placeholder="معرّف المشروع المساحي (SRV-PRJ-...) *">
+          <button class="btn" id="svyfw-btn-load-tasks">تحديث المهام</button>
+          <button class="btn" id="svyfw-btn-load-teams">حالة الفرق</button>
+          <button class="btn btn-primary" id="svyfw-btn-new-task">+ مهمة ميدانية جديدة</button>
+        </div>
+
+        <div id="svyfw-task-form" style="display:none;border:1px solid #eee;padding:12px;border-radius:8px;margin-bottom:14px">
+          <div class="form-grid">
+            <label>عنوان المهمة *<input type="text" id="svyfw-f-title"></label>
+            <label>المكلَّف (مسّاح/فريق) *<input type="text" id="svyfw-f-assigned"></label>
+            <label>نوع المهمة
+              <select id="svyfw-f-type">
+                <option value="survey">رفع مساحي</option>
+                <option value="stakeout">توقيع</option>
+                <option value="inspection">تفتيش</option>
+                <option value="other">أخرى</option>
+              </select>
+            </label>
+            <label>تاريخ الموعد<input type="date" id="svyfw-f-date"></label>
+          </div>
+          <label>ملاحظات<textarea id="svyfw-f-notes" rows="2"></textarea></label>
+          <div class="toolbar">
+            <button class="btn btn-primary" id="svyfw-btn-save-task">حفظ المهمة</button>
+            <button class="btn" id="svyfw-btn-cancel-task">إلغاء</button>
+          </div>
+          <div id="svyfw-task-error" style="color:#c0392b"></div>
+        </div>
+
+        <table class="data-table" id="svyfw-tasks-table">
+          <thead><tr><th>العنوان</th><th>المكلَّف</th><th>النوع</th><th>الحالة</th><th>الموعد</th><th>إجراءات</th></tr></thead>
+          <tbody id="svyfw-tasks-tbody"></tbody>
+        </table>
+
+        <div id="svyfw-teams-status" style="margin-top:16px"></div>
+
+        <h3 style="margin-top:20px">تسجيل زيارة ميدانية (وصول/انصراف بموقع GPS)</h3>
+        <div class="form-grid">
+          <label>معرّف المهمة *<input type="text" id="svyfw-visit-task-id" placeholder="FTASK-..."></label>
+          <label>خط العرض (Lat) *<input type="number" step="0.000001" id="svyfw-visit-lat"></label>
+          <label>خط الطول (Lon) *<input type="number" step="0.000001" id="svyfw-visit-lon"></label>
+        </div>
+        <div class="toolbar">
+          <button class="btn" id="svyfw-btn-use-location">استخدام موقعي الحالي</button>
+          <button class="btn btn-primary" id="svyfw-btn-check-in">تسجيل وصول (Check-in)</button>
+        </div>
+        <div class="form-grid" style="margin-top:10px">
+          <label>معرّف الزيارة (لإنهائها) *<input type="text" id="svyfw-visit-id" placeholder="FVISIT-..."></label>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="svyfw-btn-check-out">تسجيل انصراف (Check-out)</button>
+        </div>
+        <div id="svyfw-visit-result" class="result-box" style="margin-top:10px"></div>
+
+        <h3 style="margin-top:20px">العمل دون اتصال (Offline Mode) — مزامنة دفعة أحداث</h3>
+        <p style="color:#666">عند فقدان الاتصال، تُخزَّن الأحداث الميدانية محلياً على الجهاز، ثم تُرسَل كدفعة JSON واحدة هنا عند استعادة الاتصال. المزامنة تمنع تكرار أي حدث تم تطبيقه مسبقاً تلقائياً.</p>
+        <label>دفعة الأحداث (JSON)
+          <textarea id="svyfw-sync-events" rows="6" placeholder='[{"client_id":"evt-1","type":"check_in","occurred_at":"2026-07-20T08:00:00Z","payload":{"task_id":"FTASK-...","lat":15.35,"lon":44.2}}]'></textarea>
+        </label>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="svyfw-btn-sync">مزامنة الآن</button>
+        </div>
+        <div id="svyfw-sync-result" class="result-box" style="margin-top:10px"></div>
       </div>
     </section>
 
