@@ -68,6 +68,7 @@ const SURVEY_DRAWINGS = require('./utils/surveyDrawings');
 const DMS = require('./utils/documentManagement');
 const DMS_CAT = require('./utils/documentCategories');
 const DMS_WF = require('./utils/documentWorkflow');
+const DMS_SIG = require('./utils/documentSignature');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -5714,6 +5715,64 @@ const API_HANDLERS = {
       return DMS_WF.listPendingApprovals({ projectId: query?.projectId || null, actorRole: query?.actorRole || null });
     },
   },
+
+  // ===== القسم الحادي عشر (الجزء 4/10) - نظام إدارة المستندات (DMS):
+  // التوقيع الإلكتروني (اعتماد متعدد المستويات + ختم زمني + سجل توقيعات)
+  '/api/dms/signature-policies': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_SIG.listSignaturePolicies({ docType: query?.docType || null });
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      return DMS_SIG.defineSignaturePolicy(body);
+    },
+  },
+  '/api/dms/signature-policies/active': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.docType) throw new Error('نوع المستند (docType) مطلوب');
+      return { success: true, data: DMS_SIG.getActiveSignaturePolicy(query.docType) };
+    },
+  },
+  '/api/dms/documents/sign': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'approve');
+      return DMS_SIG.signDocument(body.document_id, {
+        signerName: body.signer_name || token,
+        signerRole: body.signer_role,
+        level: body.level || null,
+        decision: body.decision || 'approved',
+        comments: body.comments || '',
+      });
+    },
+  },
+  '/api/dms/documents/signatures/revoke': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'manage');
+      return DMS_SIG.revokeSignature(body.document_id, body.signature_id, { actor: token, reason: body.reason });
+    },
+  },
+  '/api/dms/documents/signatures/verify': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.id || !query?.signatureId) throw new Error('معرّف المستند (id) ومعرّف التوقيع (signatureId) مطلوبان');
+      return DMS_SIG.verifySignature(query.id, query.signatureId);
+    },
+  },
+  '/api/dms/documents/signatures': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.id) throw new Error('معرّف المستند (id) مطلوب');
+      return DMS_SIG.getSignatureLog(query.id);
+    },
+  },
+  '/api/dms/signatures/summary': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_SIG.getSignaturesSummary();
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -5820,4 +5879,9 @@ server.listen(PORT, () => {
   // للاستخدام مباشرة عبر سير العمل الافتراضي (DEFAULT_WORKFLOW_STAGES)؛ لا تحتاج تهيئة
   // عند الإقلاع، وتُنشئ تعريفاتها المخصَّصة عند أول استدعاء لـ defineWorkflow لكل نوع مستند.
   console.log('📄 قسم إدارة المستندات - سير عمل الاعتماد (الجزء 3/10) جاهز.');
+
+  // الجزء الرابع (4/10) من القسم الحادي عشر: وحدة التوقيع الإلكتروني جاهزة للاستخدام
+  // مباشرة (سياسة افتراضية بمستوى واحد)؛ يُولَّد سرّ التوقيع (dms_signing.secret) تلقائياً
+  // عند أول عملية توقيع فعلية إن لم يكن موجوداً.
+  console.log('✍️  قسم إدارة المستندات - التوقيع الإلكتروني (الجزء 4/10) جاهز.');
 });
