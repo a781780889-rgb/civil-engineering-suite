@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>منصة الهندسة المدنية | حاسبة الخرسانة</title>
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 </head>
 <body>
 
@@ -253,6 +254,12 @@
     </div>
     <div class="nav-item" data-panel="survey-fieldwork">
       <span class="nav-icon">🚜</span> الأعمال الميدانية
+    </div>
+    <div class="nav-item" data-panel="survey-drawings">
+      <span class="nav-icon">📈</span> الرسومات التلقائية
+    </div>
+    <div class="nav-item" data-panel="survey-maps">
+      <span class="nav-icon">🗺️</span> الخرائط التفاعلية
     </div>
   </nav>
 
@@ -3912,6 +3919,66 @@
       </div>
     </section>
 
+    <!-- ===== القسم العاشر: الرسومات التلقائية (توليد فعلي: كنتور/مقاطع/DTM ثلاثي الأبعاد) ===== -->
+    <section class="calc-panel" id="panel-survey-drawings">
+      <div class="calc-card">
+        <h2>توليد رسم تلقائي من عملية رفع</h2>
+        <p class="muted">أدخل معرّف عملية الرفع (Survey ID) واختر نوع الرسم المطلوب توليده. سيتم بناء الرسم فعلياً (ملف SVG قابل للعرض والتنزيل والطباعة) من نقاط الرفع الفعلية المخزَّنة، وليس مجرد عرض شكلي.</p>
+        <div class="toolbar">
+          <input type="text" id="svydwg-survey-id" placeholder="معرّف عملية الرفع (SRV-...)">
+          <select id="svydwg-type">
+            <option value="auto">تلقائي حسب نوع الرفع</option>
+            <option value="contour">خطوط الكنتور (Contour)</option>
+            <option value="longitudinal-section">المقطع الطولي</option>
+            <option value="cross-section">المقطع العرضي</option>
+            <option value="dtm-3d">نموذج سطح الأرض / تضاريس ثلاثية الأبعاد (DTM)</option>
+            <option value="point-plot">مخطط نقاط الرفع العام</option>
+          </select>
+          <button class="btn btn-primary" id="svydwg-btn-generate">توليد الرسم</button>
+        </div>
+        <div id="svydwg-error" style="color:#c0392b;margin-top:8px"></div>
+        <div id="svydwg-result" style="margin-top:14px"></div>
+      </div>
+
+      <div class="calc-card">
+        <h2>الرسومات المُولَّدة في هذه الجلسة</h2>
+        <p class="muted">قائمة بجميع الرسومات التي تم توليدها خلال هذه الجلسة، مع روابط مباشرة للعرض والتنزيل.</p>
+        <div id="svydwg-history" class="pm-activity-log"></div>
+      </div>
+    </section>
+
+    <!-- ===== القسم العاشر: الخرائط التفاعلية (محرك خرائط فعلي عبر Leaflet) ===== -->
+    <section class="calc-panel" id="panel-survey-maps">
+      <div class="calc-card">
+        <h2>خريطة المشاريع المساحية التفاعلية</h2>
+        <p class="muted">خريطة تفاعلية فعلية (تكبير/تصغير/بحث/طبقات) تعرض جميع المشاريع المساحية المسجَّلة ذات الإحداثيات، مع إمكانية التبديل بين طبقة الشوارع وطبقة الأقمار الصناعية.</p>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="svymap-btn-load-projects">تحميل/تحديث المشاريع على الخريطة</button>
+          <select id="svymap-layer-select">
+            <option value="street">خريطة الشوارع (OpenStreetMap)</option>
+            <option value="satellite">صور الأقمار الصناعية (Esri)</option>
+            <option value="topo">خريطة طبوغرافية (OpenTopoMap)</option>
+          </select>
+          <input type="text" id="svymap-search" placeholder="ابحث عن مكان (اسم مدينة/موقع)...">
+          <button class="btn" id="svymap-btn-search">بحث</button>
+        </div>
+        <div id="svymap-error" style="color:#c0392b;margin-top:8px"></div>
+        <div id="svymap-container" style="height:520px;border-radius:10px;margin-top:12px;border:1px solid #ddd"></div>
+      </div>
+
+      <div class="calc-card">
+        <h2>عرض نقاط عملية رفع على الخريطة</h2>
+        <p class="muted">أدخل معرّف عملية رفع تحتوي نقاطاً بإحداثيات جغرافية (lat/lon) أو UTM (سيتم تحويلها تلقائياً) لعرضها كطبقة على خريطة مستقلة.</p>
+        <div class="toolbar">
+          <input type="text" id="svymap-rec-survey-id" placeholder="معرّف عملية الرفع (SRV-...)">
+          <input type="text" id="svymap-rec-utm-zone" placeholder="منطقة UTM (مثال: 38N) — اختياري إن كانت النقاط جغرافية بالفعل">
+          <button class="btn btn-primary" id="svymap-btn-load-record">عرض النقاط على الخريطة</button>
+        </div>
+        <div id="svymap-rec-error" style="color:#c0392b;margin-top:8px"></div>
+        <div id="svymap-rec-container" style="height:420px;border-radius:10px;margin-top:12px;border:1px solid #ddd"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -4010,6 +4077,8 @@
 <script src="js/qms-part4.js"></script>
 <script src="js/qms-part5.js"></script>
 <script src="js/qms-part6.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="js/survey.js"></script>
+<script src="js/surveyMapsDrawings.js"></script>
 </body>
 </html>
