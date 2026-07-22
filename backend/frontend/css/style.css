@@ -101,6 +101,101 @@ body {
   direction: rtl;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dms-bell-wrap {
+  position: relative;
+}
+.dms-bell-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: var(--paper);
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  font-size: 17px;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dms-bell-btn:hover { background: rgba(255,255,255,0.18); }
+.dms-bell-badge {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  background: var(--danger, #c0392b);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 999px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.dms-bell-dropdown {
+  position: absolute;
+  top: 46px;
+  left: 0;
+  width: 340px;
+  max-height: 420px;
+  background: #fff;
+  color: #222;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dms-bell-dropdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+}
+.dms-bell-list {
+  overflow-y: auto;
+  max-height: 320px;
+  padding: 4px 0;
+}
+.dms-bell-dropdown-foot {
+  padding: 8px 14px;
+  border-top: 1px solid #eee;
+  text-align: center;
+  font-size: 12px;
+}
+.dms-bell-dropdown-foot a { color: var(--accent-copper, #a85a2c); text-decoration: none; }
+.dms-bell-item {
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  border-bottom: 1px solid #f4f4f4;
+  cursor: pointer;
+  align-items: flex-start;
+}
+.dms-bell-item:hover { background: #f9f9f9; }
+.dms-bell-item.unread { background: #fbf3ea; }
+.dms-bell-item .dms-bell-dot {
+  width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0;
+}
+.dms-bell-item .dms-bell-body { flex: 1; }
+.dms-bell-item .dms-bell-msg { color: #333; }
+.dms-bell-item .dms-bell-time { color: #999; font-size: 11px; margin-top: 2px; }
+.dms-bell-empty { padding: 20px; text-align: center; color: #999; font-size: 13px; }
+
 .section-badge {
   font-family: var(--mono);
   font-size: 12px;
