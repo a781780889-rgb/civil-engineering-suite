@@ -308,6 +308,17 @@
     <div class="nav-item" data-panel="dms-backup">
       <span class="nav-icon">🗄️</span> النسخ الاحتياطي والاستعادة
     </div>
+
+    <div class="sidebar-title" style="margin-top:16px">القسم الثاني عشر</div>
+    <div class="nav-item" data-panel="draw-dashboard">
+      <span class="nav-icon">📐</span> لوحة معلومات المخططات
+    </div>
+    <div class="nav-item" data-panel="draw-upload">
+      <span class="nav-icon">⬆️</span> رفع مخطط جديد
+    </div>
+    <div class="nav-item" data-panel="draw-list">
+      <span class="nav-icon">🗂️</span> جميع المخططات والبحث
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4416,6 +4427,55 @@
   </div>
 </div>
 
+<!-- ============ القسم الثاني عشر: إدارة المخططات الهندسية (1/10) ============ -->
+<section class="calc-panel" id="panel-draw-dashboard">
+  <div class="panel-header"><h2>لوحة معلومات المخططات الهندسية</h2><span class="panel-code">DRAW.DASHBOARD</span></div>
+  <div class="panel-body" id="draw-dashboard-body">
+    <div class="loading-spinner"></div>
+  </div>
+</section>
+
+<section class="calc-panel" id="panel-draw-upload">
+  <div class="panel-header"><h2>رفع مخطط جديد</h2><span class="panel-code">DRAW.UPLOAD</span></div>
+  <div class="panel-body">
+    <div class="field"><label>اسم المخطط</label><input type="text" id="draw-up-name" placeholder="مثال: مخطط أساسات الطابق الأرضي"></div>
+    <div class="field">
+      <label>التخصص</label>
+      <select id="draw-up-discipline"></select>
+    </div>
+    <div class="field">
+      <label>نوع المخطط الفرعي</label>
+      <select id="draw-up-subtype"></select>
+    </div>
+    <div class="field"><label>معرّف المشروع (اختياري)</label><input type="text" id="draw-up-project" placeholder="Project ID"></div>
+    <div class="field"><label>المهندس المسؤول</label><input type="text" id="draw-up-engineer"></div>
+    <div class="field"><label>المصمم</label><input type="text" id="draw-up-designer"></div>
+    <div class="field"><label>الوصف</label><textarea id="draw-up-description" rows="2"></textarea></div>
+    <div class="field"><label>الكلمات المفتاحية (مفصولة بفاصلة)</label><input type="text" id="draw-up-keywords"></div>
+    <div class="field">
+      <label>ملف المخطط (DWG, DXF, DGN, RVT, IFC, PDF, DWF, STEP, STL, صورة)</label>
+      <input type="file" id="draw-up-file">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-draw-upload">رفع المخطط <span class="loading-spinner" style="display:none"></span></button>
+    </div>
+    <div id="draw-upload-alert"></div>
+  </div>
+</section>
+
+<section class="calc-panel" id="panel-draw-list">
+  <div class="panel-header"><h2>جميع المخططات والبحث</h2><span class="panel-code">DRAW.LIST</span></div>
+  <div class="panel-body">
+    <div class="filter-row">
+      <input type="text" id="draw-list-search" placeholder="بحث بالاسم أو الرقم أو الكلمات المفتاحية">
+      <select id="draw-list-discipline-filter"><option value="">كل التخصصات</option></select>
+      <select id="draw-list-status-filter"><option value="">كل الحالات</option></select>
+      <button class="btn btn-outline" id="btn-draw-list-refresh">تحديث</button>
+    </div>
+    <div id="draw-list-table"><div class="loading-spinner"></div></div>
+  </div>
+</section>
+
 <script src="js/app.js"></script>
 <script src="js/pm.js"></script>
 <script src="js/schedule.js"></script>
@@ -4444,5 +4504,6 @@
 <script src="js/documentBackup.js"></script>
 <script src="js/documentNotifications.js"></script>
 <script src="js/documentModuleLinks.js"></script>
+<script src="js/drawings.js"></script>
 </body>
 </html>
