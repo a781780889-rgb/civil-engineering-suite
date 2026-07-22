@@ -5520,7 +5520,8 @@ const API_HANDLERS = {
     GET: async (_body, query, req) => {
       requirePermission(req, 'documents', 'view');
       if (!query?.id) throw new Error('معرّف المستند (id) مطلوب');
-      return DMS.getDocument(query.id);
+      const token = getAuthToken(req);
+      return DMS.getDocument(query.id, { token });
     },
   },
   '/api/dms/documents/download': {
@@ -5528,7 +5529,7 @@ const API_HANDLERS = {
       requirePermission(req, 'documents', 'view');
       if (!query?.id) throw new Error('معرّف المستند (id) مطلوب');
       const token = getAuthToken(req);
-      return DMS.downloadDocument(query.id, { versionId: query.versionId || null, actor: token });
+      return DMS.downloadDocument(query.id, { versionId: query.versionId || null, actor: token, token });
     },
   },
   '/api/dms/documents/update': {
@@ -5536,21 +5537,24 @@ const API_HANDLERS = {
       requirePermission(req, 'documents', 'update');
       if (!body.id) throw new Error('معرّف المستند (id) مطلوب');
       const { id, ...rest } = body;
-      return DMS.updateDocumentMetadata(id, rest);
+      const token = getAuthToken(req);
+      return DMS.updateDocumentMetadata(id, rest, { token });
     },
   },
   '/api/dms/documents/delete': {
     POST: async (body, _query, req) => {
       requirePermission(req, 'documents', 'delete');
       if (!body.id) throw new Error('معرّف المستند (id) مطلوب');
-      return DMS.deleteDocument(body.id, { hardDelete: !!body.hard_delete });
+      const token = getAuthToken(req);
+      return DMS.deleteDocument(body.id, { hardDelete: !!body.hard_delete, token });
     },
   },
   '/api/dms/documents/versions': {
     POST: async (body, _query, req) => {
       requirePermission(req, 'documents', 'create');
       if (!body.document_id) throw new Error('معرّف المستند (document_id) مطلوب');
-      const result = await DMS.uploadNewVersion(body.document_id, body);
+      const token = getAuthToken(req);
+      const result = await DMS.uploadNewVersion(body.document_id, { ...body, token });
       // الجزء 5/10: إعادة فهرسة فورية للإصدار الجديد (يستبدل فهرس الإصدار السابق)
       try { DMS_SEARCH.indexDocument(body.document_id, { actor: body.author || null }); }
       catch (e) { console.error('⚠️  تعذّرت إعادة فهرسة الإصدار الجديد للبحث:', e.message); }
@@ -5561,7 +5565,28 @@ const API_HANDLERS = {
     POST: async (body, _query, req) => {
       requirePermission(req, 'documents', 'update');
       if (!body.document_id || !body.version_id) throw new Error('document_id و version_id مطلوبان');
-      return DMS.restoreVersion(body.document_id, body.version_id);
+      const token = getAuthToken(req);
+      return DMS.restoreVersion(body.document_id, body.version_id, { token });
+    },
+  },
+
+  // ===== صلاحيات دقيقة (Fine-Grained Access Control) - نطاق المشاريع وسجل الرفض =====
+  '/api/dms/access/user-scope': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      if (!query?.userId) throw new Error('معرّف المستخدم (userId) مطلوب');
+      return DMS.getUserProjectScope(query.userId);
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      if (!body.userId) throw new Error('معرّف المستخدم (userId) مطلوب');
+      return DMS.setUserProjectScope(body.userId, { allProjects: !!body.allProjects, projectIds: body.projectIds || [] });
+    },
+  },
+  '/api/dms/access/denials': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      return DMS.listAccessDenials({ page: query?.page ? Number(query.page) : 1, pageSize: query?.pageSize ? Number(query.pageSize) : 100 });
     },
   },
 
@@ -5619,7 +5644,8 @@ const API_HANDLERS = {
     POST: async (body, _query, req) => {
       requirePermission(req, 'documents', 'update');
       if (!Array.isArray(body.document_ids) || !body.document_ids.length) throw new Error('document_ids مطلوبة');
-      return DMS_CAT.moveDocuments(body.document_ids, body.target_category_id || null);
+      const token = getAuthToken(req);
+      return DMS_CAT.moveDocuments(body.document_ids, body.target_category_id || null, { token });
     },
   },
   '/api/dms/documents/copy': {
@@ -5631,6 +5657,7 @@ const API_HANDLERS = {
         targetCategoryId: body.target_category_id || null,
         targetProjectId: Object.prototype.hasOwnProperty.call(body, 'target_project_id') ? body.target_project_id : undefined,
         actor: token,
+        token,
       });
     },
   },
@@ -5638,14 +5665,16 @@ const API_HANDLERS = {
     POST: async (body, _query, req) => {
       requirePermission(req, 'documents', 'update');
       if (!Array.isArray(body.document_ids) || !body.document_ids.length) throw new Error('document_ids مطلوبة');
-      return DMS_CAT.archiveDocuments(body.document_ids, { reason: body.reason || null });
+      const token = getAuthToken(req);
+      return DMS_CAT.archiveDocuments(body.document_ids, { reason: body.reason || null, token });
     },
   },
   '/api/dms/documents/unarchive': {
     POST: async (body, _query, req) => {
       requirePermission(req, 'documents', 'update');
       if (!Array.isArray(body.document_ids) || !body.document_ids.length) throw new Error('document_ids مطلوبة');
-      return DMS_CAT.unarchiveDocuments(body.document_ids);
+      const token = getAuthToken(req);
+      return DMS_CAT.unarchiveDocuments(body.document_ids, { token });
     },
   },
   '/api/dms/archive/rules': {
@@ -5696,13 +5725,13 @@ const API_HANDLERS = {
   '/api/dms/documents/workflow/approve': {
     POST: async (body, _query, req) => {
       const token = requirePermission(req, 'documents', 'approve');
-      return DMS_WF.approveCurrentStage(body.document_id, { actor: token || body.actor, actorRole: body.actor_role || null, comments: body.comments || '' });
+      return DMS_WF.approveCurrentStage(body.document_id, { actor: token || body.actor, actorRole: body.actor_role || null, comments: body.comments || '', token });
     },
   },
   '/api/dms/documents/workflow/reject': {
     POST: async (body, _query, req) => {
       const token = requirePermission(req, 'documents', 'approve');
-      return DMS_WF.rejectCurrentStage(body.document_id, { actor: token || body.actor, actorRole: body.actor_role || null, comments: body.comments || '' });
+      return DMS_WF.rejectCurrentStage(body.document_id, { actor: token || body.actor, actorRole: body.actor_role || null, comments: body.comments || '', token });
     },
   },
   '/api/dms/documents/workflow/resubmit': {
@@ -5859,7 +5888,7 @@ const API_HANDLERS = {
     POST: async (body, _query, req) => {
       const token = requirePermission(req, 'documents', 'view');
       const session = SEC.getSessionUser(token);
-      return DMS_SHARE.createShareLink({ ...body, created_by: session?.username || session?.id || null });
+      return DMS_SHARE.createShareLink({ ...body, created_by: session?.username || session?.id || null, token });
     },
   },
   '/api/dms/share/links/get': {
@@ -5915,7 +5944,7 @@ const API_HANDLERS = {
     POST: async (body, _query, req) => {
       const token = requirePermission(req, 'documents', 'update');
       const session = SEC.getSessionUser(token);
-      return DMS_SHARE.shareInternally({ ...body, granted_by: session?.username || session?.id || null });
+      return DMS_SHARE.shareInternally({ ...body, granted_by: session?.username || session?.id || null, token });
     },
   },
   '/api/dms/share/internal/revoke': {
