@@ -275,6 +275,9 @@
     <div class="nav-item" data-panel="dms-categories">
       <span class="nav-icon">📁</span> المجلدات والأرشفة
     </div>
+    <div class="nav-item" data-panel="dms-approvals">
+      <span class="nav-icon">✅</span> سير عمل الاعتماد
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4123,6 +4126,47 @@
         </div>
         <div id="dms-archive-rules-view" class="pm-activity-log" style="margin-top:10px"></div>
         <div id="dms-archive-run-result" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+    <section class="calc-panel" id="panel-dms-approvals">
+      <div class="calc-card">
+        <h2>القسم الحادي عشر — سير عمل الاعتماد (Workflow)</h2>
+
+        <h3>صندوق الموافقات المعلّقة</h3>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <input type="text" id="dms-wf-filter-project" placeholder="فلترة حسب المشروع (اختياري) PRJ-...">
+          <button class="btn btn-primary" id="dms-btn-refresh-pending">تحديث صندوق الموافقات</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr><th>رقم المستند</th><th>العنوان</th><th>النوع</th><th>المرحلة الحالية</th><th>بانتظار منذ</th><th></th></tr>
+          </thead>
+          <tbody id="dms-pending-tbody"><tr><td colspan="6">اضغط "تحديث صندوق الموافقات" لعرض المستندات المعلّقة</td></tr></tbody>
+        </table>
+
+        <hr style="margin:20px 0">
+
+        <h3>متابعة سير عمل مستند محدد</h3>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <input type="text" id="dms-wf-doc-id" placeholder="معرّف المستند (id)">
+          <button class="btn btn-primary" id="dms-btn-load-wf-status">عرض حالة سير العمل</button>
+          <button class="btn" id="dms-btn-start-wf">بدء/إعادة ربط سير العمل</button>
+        </div>
+        <div id="dms-wf-status-panel" class="pm-activity-log" style="margin-top:12px"></div>
+
+        <hr style="margin:20px 0">
+
+        <h3>تخصيص سير عمل لنوع مستند</h3>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <select id="dms-wf-def-type" class="dms-doc-type-select"></select>
+          <button class="btn" id="dms-btn-load-active-wf">عرض سير العمل الحالي لهذا النوع</button>
+        </div>
+        <div id="dms-wf-active-view" class="pm-activity-log" style="margin-top:10px"></div>
+        <p style="color:#666;font-size:13px;margin-top:8px">
+          لتخصيص سير عمل مختلف عن الافتراضي (4 مراحل: مراجعة أولية، مراجعة فنية، اعتماد، نشر) لأي نوع مستند،
+          استخدم واجهة API مباشرة: <code>POST /api/dms/workflows</code> مع docType ومصفوفة stages.
+        </p>
       </div>
     </section>
 
