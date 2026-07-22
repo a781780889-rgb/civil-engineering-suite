@@ -245,6 +245,7 @@ async function drawRenderList() {
         <td>${d.responsible_engineer || '-'}</td>
         <td>
           <button class="btn btn-sm btn-outline" onclick="drawDownload('${d.id}')">تنزيل</button>
+          <button class="btn btn-sm btn-outline" onclick="drawOpenVersionsPanel('${d.id}')">الإصدارات</button>
           <button class="btn btn-sm btn-outline" onclick="drawDeleteDrawing('${d.id}')">حذف</button>
         </td>
       </tr>`).join('');
