@@ -66,6 +66,7 @@ const SURVEY_DEVICES = require('./utils/surveyDeviceImport');
 const SURVEY_FIELDWORK = require('./utils/surveyFieldwork');
 const SURVEY_DRAWINGS = require('./utils/surveyDrawings');
 const DMS = require('./utils/documentManagement');
+const DMS_CAT = require('./utils/documentCategories');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -5546,6 +5547,102 @@ const API_HANDLERS = {
       return DMS.restoreVersion(body.document_id, body.version_id);
     },
   },
+
+  // ===================================================================
+  // ===== القسم الحادي عشر (الجزء 2/10) - نظام إدارة المستندات (DMS):
+  // ===== التصنيف الهرمي والمجلدات + النقل/النسخ + الأرشفة اليدوية/التلقائية
+  // ===================================================================
+
+  '/api/dms/categories': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_CAT.listCategories(query?.projectId || null);
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'create');
+      return DMS_CAT.createCategory(body);
+    },
+  },
+  '/api/dms/categories/tree': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_CAT.getCategoryTree(query?.projectId || null);
+    },
+  },
+  '/api/dms/categories/update': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'update');
+      if (!body.id) throw new Error('معرّف المجلد (id) مطلوب');
+      const { id, ...rest } = body;
+      return DMS_CAT.updateCategory(id, rest);
+    },
+  },
+  '/api/dms/categories/move': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'update');
+      if (!body.id) throw new Error('معرّف المجلد (id) مطلوب');
+      return DMS_CAT.moveCategory(body.id, body.new_parent_id || null);
+    },
+  },
+  '/api/dms/categories/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'delete');
+      if (!body.id) throw new Error('معرّف المجلد (id) مطلوب');
+      return DMS_CAT.deleteCategory(body.id, { force: !!body.force });
+    },
+  },
+  '/api/dms/documents/assign-category': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'update');
+      if (!body.document_id) throw new Error('معرّف المستند (document_id) مطلوب');
+      return DMS_CAT.assignDocumentToCategory(body.document_id, body.category_id || null);
+    },
+  },
+  '/api/dms/documents/move': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'update');
+      if (!Array.isArray(body.document_ids) || !body.document_ids.length) throw new Error('document_ids مطلوبة');
+      return DMS_CAT.moveDocuments(body.document_ids, body.target_category_id || null);
+    },
+  },
+  '/api/dms/documents/copy': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'create');
+      if (!body.document_id) throw new Error('معرّف المستند (document_id) مطلوب');
+      const token = getAuthToken(req);
+      return DMS_CAT.copyDocument(body.document_id, {
+        targetCategoryId: body.target_category_id || null,
+        targetProjectId: Object.prototype.hasOwnProperty.call(body, 'target_project_id') ? body.target_project_id : undefined,
+        actor: token,
+      });
+    },
+  },
+  '/api/dms/documents/archive': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'update');
+      if (!Array.isArray(body.document_ids) || !body.document_ids.length) throw new Error('document_ids مطلوبة');
+      return DMS_CAT.archiveDocuments(body.document_ids, { reason: body.reason || null });
+    },
+  },
+  '/api/dms/documents/unarchive': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'update');
+      if (!Array.isArray(body.document_ids) || !body.document_ids.length) throw new Error('document_ids مطلوبة');
+      return DMS_CAT.unarchiveDocuments(body.document_ids);
+    },
+  },
+  '/api/dms/archive/rules': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_CAT.getAutoArchiveRules();
+    },
+  },
+  '/api/dms/archive/run-now': {
+    POST: async (_body, _query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      return DMS_CAT.runAutoArchive({});
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -5639,5 +5736,12 @@ server.listen(PORT, () => {
     DMS.ensureDmsRolesSeeded();
   } catch (e) {
     console.error('⚠️  تعذّرت تهيئة أدوار قسم إدارة المستندات:', e.message);
+  }
+
+  // الجزء الثاني (2/10) من القسم الحادي عشر: جدولة الأرشفة التلقائية الدورية (كل 24 ساعة)
+  try {
+    DMS_CAT.scheduleAutoArchive({ intervalHours: 24 });
+  } catch (e) {
+    console.error('⚠️  تعذّرت جدولة الأرشفة التلقائية لقسم إدارة المستندات:', e.message);
   }
 });
