@@ -236,6 +236,7 @@ async function drawRenderList() {
 
     const rows = drawListCache.map((d) => `
       <tr>
+        <td><input type="checkbox" onchange="drawViewToggleMultiSelect('${d.id}', this.checked)"></td>
         <td>${d.drawing_number}</td>
         <td>${d.name}</td>
         <td>${drawDisciplineLabel(d.discipline)}</td>
@@ -246,6 +247,7 @@ async function drawRenderList() {
         <td>
           <button class="btn btn-sm btn-outline" onclick="drawDownload('${d.id}')">تنزيل</button>
           <button class="btn btn-sm btn-outline" onclick="drawOpenVersionsPanel('${d.id}')">الإصدارات</button>
+          <button class="btn btn-sm btn-outline" onclick="drawOpenViewerPanel('${d.id}')">العارض</button>
           <button class="btn btn-sm btn-outline" onclick="drawDeleteDrawing('${d.id}')">حذف</button>
         </td>
       </tr>`).join('');
@@ -254,7 +256,7 @@ async function drawRenderList() {
       <table class="data-table">
         <thead>
           <tr>
-            <th>الرقم المرجعي</th><th>الاسم</th><th>التخصص</th><th>الإصدار</th>
+            <th></th><th>الرقم المرجعي</th><th>الاسم</th><th>التخصص</th><th>الإصدار</th>
             <th>الحالة</th><th>الحجم</th><th>المهندس المسؤول</th><th>إجراءات</th>
           </tr>
         </thead>
