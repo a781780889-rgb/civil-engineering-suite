@@ -77,6 +77,7 @@ const DMS_REPORTS = require('./utils/documentReports');
 const DMS_AI = require('./utils/documentAI');
 const DMS_BACKUP = require('./utils/documentBackup');
 const DMS_LINKS = require('./utils/documentModuleLinks');
+const DRAW = require('./utils/drawingManagement');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6351,6 +6352,64 @@ const API_HANDLERS = {
     GET: async (_body, query, req) => {
       requirePermission(req, 'documents', 'manage');
       return DMS_BACKUP.getBackupOperationsLog({ limit: query?.limit ? Number(query.limit) : 100 });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الثاني عشر - إدارة المخططات الهندسية - الجزء 1/10 =====
+  // ===================================================================
+  '/api/drawings/taxonomy': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return DRAW.getTaxonomy();
+    },
+  },
+  '/api/drawings/dashboard': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return DRAW.getDashboardStats();
+    },
+  },
+  '/api/drawings/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return { success: true, drawings: DRAW.listDrawings(query || {}) };
+    },
+  },
+  '/api/drawings/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.id) throw new Error('معرّف المخطط (id) مطلوب');
+      const drawing = DRAW.getDrawing(query.id);
+      if (!drawing) throw new Error('المخطط غير موجود');
+      return { success: true, drawing };
+    },
+  },
+  '/api/drawings/create': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'create');
+      return DRAW.createDrawing({ ...body, actor: token });
+    },
+  },
+  '/api/drawings/download': {
+    GET: async (_body, query, req) => {
+      const token = requirePermission(req, 'drawings', 'view');
+      if (!query?.id) throw new Error('معرّف المخطط (id) مطلوب');
+      return DRAW.downloadDrawingFile(query.id, { actor: token });
+    },
+  },
+  '/api/drawings/update': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.id) throw new Error('معرّف المخطط (id) مطلوب');
+      return DRAW.updateDrawingMetadata(body.id, body.updates || {}, { actor: token });
+    },
+  },
+  '/api/drawings/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'delete');
+      if (!body?.id) throw new Error('معرّف المخطط (id) مطلوب');
+      return DRAW.deleteDrawing(body.id, { actor: token });
     },
   },
 };
