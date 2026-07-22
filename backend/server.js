@@ -76,6 +76,7 @@ DMS_NOTIF.attachToSharingModule();
 const DMS_REPORTS = require('./utils/documentReports');
 const DMS_AI = require('./utils/documentAI');
 const DMS_BACKUP = require('./utils/documentBackup');
+const DMS_LINKS = require('./utils/documentModuleLinks');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6145,6 +6146,76 @@ const API_HANDLERS = {
       requirePermission(req, 'documents', 'view');
       const result = DMS_REPORTS.exportDmsReportToPrintableHTML(body.report, { projectName: body.projectName });
       return { success: true, ...result };
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الحادي عشر - البند المتبقي: التكامل مع باقي الأقسام ====
+  // ===================================================================
+  '/api/dms/links/modules': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_LINKS.getSupportedModules();
+    },
+  },
+  '/api/dms/links/link': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'update');
+      return DMS_LINKS.linkDocument({
+        documentId: body.document_id,
+        module: body.module,
+        entityId: body.entity_id,
+        entityLabel: body.entity_label || null,
+        projectId: body.project_id || null,
+        actor: token,
+        note: body.note || null,
+      });
+    },
+  },
+  '/api/dms/links/link-many': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'update');
+      return DMS_LINKS.linkDocuments({
+        documentIds: body.document_ids || [],
+        module: body.module,
+        entityId: body.entity_id,
+        entityLabel: body.entity_label || null,
+        projectId: body.project_id || null,
+        actor: token,
+      });
+    },
+  },
+  '/api/dms/links/unlink': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'update');
+      return DMS_LINKS.unlinkDocument(body.link_id, { actor: token });
+    },
+  },
+  '/api/dms/links/for-entity': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.module || !query?.entityId) throw new Error('module وentityId مطلوبان');
+      return DMS_LINKS.getLinkedDocuments(query.module, query.entityId);
+    },
+  },
+  '/api/dms/links/by-project': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.projectId) throw new Error('projectId مطلوب');
+      return DMS_LINKS.getLinkedDocumentsByProject(query.projectId);
+    },
+  },
+  '/api/dms/links/for-document': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.documentId) throw new Error('documentId مطلوب');
+      return DMS_LINKS.getModulesLinkedToDocument(query.documentId);
+    },
+  },
+  '/api/dms/links/summary': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_LINKS.getIntegrationSummary();
     },
   },
 
