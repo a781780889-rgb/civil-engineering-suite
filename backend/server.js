@@ -6313,6 +6313,11 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // صفحة عامة لفتح روابط مشاركة المستندات الخارجية (بدون تسجيل دخول) - القسم الحادي عشر
+  if (pathname.startsWith('/share/')) {
+    return sendFile(res, path.join(FRONTEND_DIR, 'share.html'));
+  }
+
   if (pathname.startsWith('/reports/')) {
     const filePath = path.join(REPORTS_DIR, pathname.replace('/reports/', ''));
     if (!filePath.startsWith(REPORTS_DIR)) {
