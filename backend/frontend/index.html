@@ -319,6 +319,9 @@
     <div class="nav-item" data-panel="draw-list">
       <span class="nav-icon">🗂️</span> جميع المخططات والبحث
     </div>
+    <div class="nav-item" data-panel="draw-versions">
+      <span class="nav-icon">🕒</span> إدارة الإصدارات
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4476,6 +4479,35 @@
   </div>
 </section>
 
+<section class="calc-panel" id="panel-draw-versions">
+  <div class="panel-header"><h2>إدارة الإصدارات المتقدمة</h2><span class="panel-code">DRAW.VERSIONS</span></div>
+  <div class="panel-body">
+    <div id="draw-ver-header">
+      <div class="mini-list-empty">اختر مخططاً من قائمة "جميع المخططات" بالضغط على زر "الإصدارات"</div>
+    </div>
+
+    <h4 style="margin-top:16px">رفع إصدار جديد</h4>
+    <div class="field"><label>ملف الإصدار الجديد</label><input type="file" id="draw-ver-up-file"></div>
+    <div class="field"><label>ملاحظة التغيير (اختياري)</label><input type="text" id="draw-ver-up-note" placeholder="مثال: تعديل مواقع الأعمدة حسب ملاحظات المراجعة"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-draw-ver-upload">رفع الإصدار <span class="loading-spinner" style="display:none"></span></button>
+    </div>
+    <div id="draw-ver-upload-alert"></div>
+
+    <h4 style="margin-top:16px">سجل الإصدارات</h4>
+    <div id="draw-ver-list-table"><div class="mini-list-empty">لا توجد بيانات بعد</div></div>
+
+    <h4 style="margin-top:16px">مقارنة إصدارين</h4>
+    <div class="filter-row">
+      <select id="draw-ver-cmp-a"></select>
+      <span>مقابل</span>
+      <select id="draw-ver-cmp-b"></select>
+      <button class="btn btn-outline" id="btn-draw-ver-compare">مقارنة</button>
+    </div>
+    <div id="draw-ver-cmp-result"></div>
+  </div>
+</section>
+
 <script src="js/app.js"></script>
 <script src="js/pm.js"></script>
 <script src="js/schedule.js"></script>
@@ -4505,5 +4537,6 @@
 <script src="js/documentNotifications.js"></script>
 <script src="js/documentModuleLinks.js"></script>
 <script src="js/drawings.js"></script>
+<script src="js/drawingVersions.js"></script>
 </body>
 </html>
