@@ -64,6 +64,7 @@ const SURVEY_GEODESY = require('./utils/surveyGeodesy');
 const SURVEY_GEOFILES = require('./utils/surveyGeoFiles');
 const SURVEY_DEVICES = require('./utils/surveyDeviceImport');
 const SURVEY_FIELDWORK = require('./utils/surveyFieldwork');
+const SURVEY_DRAWINGS = require('./utils/surveyDrawings');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -4906,6 +4907,46 @@ const API_HANDLERS = {
     GET: async (_body, query, req) => {
       requirePermission(req, 'survey', 'view');
       return SURVEY.exportStakeoutsToCSV(query);
+    },
+  },
+
+  // ===================================================================
+  // القسم العاشر - الرسومات التلقائية (Automated Drawings Generation)
+  // ===================================================================
+  '/api/survey/drawings/contour': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY_DRAWINGS.generateContourDrawing(body) };
+    },
+  },
+  '/api/survey/drawings/longitudinal-section': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY_DRAWINGS.generateLongitudinalSectionDrawing(body) };
+    },
+  },
+  '/api/survey/drawings/cross-section': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY_DRAWINGS.generateCrossSectionDrawing(body) };
+    },
+  },
+  '/api/survey/drawings/dtm-3d': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY_DRAWINGS.generateDtm3DDrawing(body) };
+    },
+  },
+  '/api/survey/drawings/point-plot': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY_DRAWINGS.generatePointPlotDrawing(body) };
+    },
+  },
+  '/api/survey/drawings/auto': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY_DRAWINGS.generateAutoDrawing(body) };
     },
   },
 
