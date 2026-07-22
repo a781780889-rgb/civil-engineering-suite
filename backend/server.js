@@ -67,6 +67,7 @@ const SURVEY_FIELDWORK = require('./utils/surveyFieldwork');
 const SURVEY_DRAWINGS = require('./utils/surveyDrawings');
 const DMS = require('./utils/documentManagement');
 const DMS_CAT = require('./utils/documentCategories');
+const DMS_WF = require('./utils/documentWorkflow');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -5643,6 +5644,76 @@ const API_HANDLERS = {
       return DMS_CAT.runAutoArchive({});
     },
   },
+
+  // ===== القسم الحادي عشر (الجزء 3/10) - نظام إدارة المستندات (DMS):
+  // دورة اعتماد المستندات (Workflow) القابلة للتخصيص لكل نوع مستند
+  '/api/dms/workflows': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_WF.listWorkflows({ docType: query?.docType || null });
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      return DMS_WF.defineWorkflow(body);
+    },
+  },
+  '/api/dms/workflows/active': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.docType) throw new Error('نوع المستند (docType) مطلوب');
+      return { success: true, data: DMS_WF.getActiveWorkflow(query.docType) };
+    },
+  },
+  '/api/dms/documents/workflow/start': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'update');
+      return DMS_WF.startWorkflow(body.document_id, { actor: token || body.author || null });
+    },
+  },
+  '/api/dms/documents/workflow/status': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.id) throw new Error('معرّف المستند (id) مطلوب');
+      return DMS_WF.getWorkflowStatus(query.id);
+    },
+  },
+  '/api/dms/documents/workflow/approve': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'approve');
+      return DMS_WF.approveCurrentStage(body.document_id, { actor: token || body.actor, actorRole: body.actor_role || null, comments: body.comments || '' });
+    },
+  },
+  '/api/dms/documents/workflow/reject': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'approve');
+      return DMS_WF.rejectCurrentStage(body.document_id, { actor: token || body.actor, actorRole: body.actor_role || null, comments: body.comments || '' });
+    },
+  },
+  '/api/dms/documents/workflow/resubmit': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'update');
+      return DMS_WF.resubmitForReview(body.document_id, { actor: token || body.actor, note: body.note || null });
+    },
+  },
+  '/api/dms/documents/workflow/publish': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'approve');
+      return DMS_WF.publishDocument(body.document_id, { actor: token || body.actor });
+    },
+  },
+  '/api/dms/documents/workflow/history': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.id) throw new Error('معرّف المستند (id) مطلوب');
+      return DMS_WF.getApprovalHistory(query.id);
+    },
+  },
+  '/api/dms/approvals/pending': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_WF.listPendingApprovals({ projectId: query?.projectId || null, actorRole: query?.actorRole || null });
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -5744,4 +5815,9 @@ server.listen(PORT, () => {
   } catch (e) {
     console.error('⚠️  تعذّرت جدولة الأرشفة التلقائية لقسم إدارة المستندات:', e.message);
   }
+
+  // الجزء الثالث (3/10) من القسم الحادي عشر: وحدة سير عمل الاعتماد (Workflow) جاهزة
+  // للاستخدام مباشرة عبر سير العمل الافتراضي (DEFAULT_WORKFLOW_STAGES)؛ لا تحتاج تهيئة
+  // عند الإقلاع، وتُنشئ تعريفاتها المخصَّصة عند أول استدعاء لـ defineWorkflow لكل نوع مستند.
+  console.log('📄 قسم إدارة المستندات - سير عمل الاعتماد (الجزء 3/10) جاهز.');
 });
