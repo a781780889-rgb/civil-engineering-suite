@@ -69,6 +69,7 @@ const DMS = require('./utils/documentManagement');
 const DMS_CAT = require('./utils/documentCategories');
 const DMS_WF = require('./utils/documentWorkflow');
 const DMS_SIG = require('./utils/documentSignature');
+const DMS_SEARCH = require('./utils/documentSearch');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -5502,7 +5503,11 @@ const API_HANDLERS = {
     },
     POST: async (body, _query, req) => {
       requirePermission(req, 'documents', 'create');
-      return DMS.uploadDocument(body);
+      const result = await DMS.uploadDocument(body);
+      // الجزء 5/10: فهرسة فورية لمحتوى الملف (إن كان PDF/Word) لتفعيل البحث داخل المحتوى
+      try { if (result?.data?.id) DMS_SEARCH.indexDocument(result.data.id, { actor: body.author || null }); }
+      catch (e) { console.error('⚠️  تعذّرت فهرسة المستند الجديد للبحث:', e.message); }
+      return result;
     },
   },
   '/api/dms/documents/get': {
@@ -5539,7 +5544,11 @@ const API_HANDLERS = {
     POST: async (body, _query, req) => {
       requirePermission(req, 'documents', 'create');
       if (!body.document_id) throw new Error('معرّف المستند (document_id) مطلوب');
-      return DMS.uploadNewVersion(body.document_id, body);
+      const result = await DMS.uploadNewVersion(body.document_id, body);
+      // الجزء 5/10: إعادة فهرسة فورية للإصدار الجديد (يستبدل فهرس الإصدار السابق)
+      try { DMS_SEARCH.indexDocument(body.document_id, { actor: body.author || null }); }
+      catch (e) { console.error('⚠️  تعذّرت إعادة فهرسة الإصدار الجديد للبحث:', e.message); }
+      return result;
     },
   },
   '/api/dms/documents/versions/restore': {
@@ -5773,6 +5782,59 @@ const API_HANDLERS = {
       return DMS_SIG.getSignaturesSummary();
     },
   },
+
+  // ===================================================================
+  // ===== القسم الحادي عشر (الجزء 5/10) - نظام إدارة المستندات (DMS):
+  // ===== البحث الذكي (الاسم/الرقم/الكلمات المفتاحية/داخل محتوى PDF وWord)
+  // ===================================================================
+
+  '/api/dms/search': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_SEARCH.search({
+        q: query?.q || null,
+        projectId: query?.projectId || null,
+        docType: query?.doc_type || null,
+        group: query?.group || null,
+        status: query?.status || null,
+        department: query?.department || null,
+        versionNumber: query?.version ? Number(query.version) : null,
+        dateFrom: query?.date_from || null,
+        dateTo: query?.date_to || null,
+        includeContent: query?.include_content !== 'false',
+        includeArchived: query?.includeArchived === 'true',
+        page: query?.page ? Number(query.page) : 1,
+        pageSize: query?.pageSize ? Number(query.pageSize) : 25,
+      });
+    },
+  },
+  '/api/dms/search/within-document': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.id) throw new Error('معرّف المستند (id) مطلوب');
+      if (!query?.q) throw new Error('نص البحث (q) مطلوب');
+      return DMS_SEARCH.searchWithinDocument(query.id, query.q);
+    },
+  },
+  '/api/dms/search/index-status': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_SEARCH.getIndexStatus();
+    },
+  },
+  '/api/dms/search/reindex-all': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'manage');
+      return DMS_SEARCH.reindexAllDocuments({ actor: token || body?.actor || null });
+    },
+  },
+  '/api/dms/search/reindex-document': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'update');
+      if (!body?.document_id) throw new Error('معرّف المستند (document_id) مطلوب');
+      return DMS_SEARCH.indexDocument(body.document_id, { actor: token || body?.actor || null });
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -5884,4 +5946,8 @@ server.listen(PORT, () => {
   // مباشرة (سياسة افتراضية بمستوى واحد)؛ يُولَّد سرّ التوقيع (dms_signing.secret) تلقائياً
   // عند أول عملية توقيع فعلية إن لم يكن موجوداً.
   console.log('✍️  قسم إدارة المستندات - التوقيع الإلكتروني (الجزء 4/10) جاهز.');
+
+  // الجزء الخامس (5/10) من القسم الحادي عشر: البحث الذكي جاهز للاستخدام مباشرة.
+  // فهرسة المحتوى تتم تلقائياً عند كل رفع/إصدار جديد؛ لا تحتاج تهيئة عند الإقلاع.
+  console.log('🔎 قسم إدارة المستندات - البحث الذكي (الجزء 5/10) جاهز.');
 });
