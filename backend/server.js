@@ -75,6 +75,7 @@ const DMS_NOTIF = require('./utils/documentNotifications');
 DMS_NOTIF.attachToSharingModule();
 const DMS_REPORTS = require('./utils/documentReports');
 const DMS_AI = require('./utils/documentAI');
+const DMS_BACKUP = require('./utils/documentBackup');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6202,6 +6203,56 @@ const API_HANDLERS = {
       return DMS_AI.suggestApprovalWorkflow({ documentId: body.documentId });
     },
   },
+
+  // ===================================================================
+  // ===== القسم الحادي عشر - البنود المتبقية: النسخ الاحتياطي/الاستعادة =
+  // ===================================================================
+  // منفصلة عن /api/biz/security/backup العام؛ هذه المسارات تنسخ dms.json
+  // وملفات dms_files الفعلية معاً (أو dms.json فقط)، مع تحقق سلامة إلزامي.
+  '/api/dms/backup': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      return DMS_BACKUP.listDmsBackups();
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      return DMS_BACKUP.createDmsBackup({
+        label: body?.label || null,
+        includeFiles: body?.includeFiles !== false,
+        actor: body?.actor || null,
+      });
+    },
+  },
+  '/api/dms/backup/verify': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      if (!body?.fileName) throw new Error('اسم ملف النسخة الاحتياطية (fileName) مطلوب');
+      return { success: true, data: DMS_BACKUP.verifyBackupIntegrity(body.fileName) };
+    },
+  },
+  '/api/dms/backup/restore': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      if (!body?.fileName) throw new Error('اسم ملف النسخة الاحتياطية (fileName) مطلوب');
+      return DMS_BACKUP.restoreDmsBackup(body.fileName, {
+        actor: body?.actor || null,
+        restoreFilesToo: body?.restoreFilesToo !== false,
+      });
+    },
+  },
+  '/api/dms/backup/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      if (!body?.fileName) throw new Error('اسم ملف النسخة الاحتياطية (fileName) مطلوب');
+      return DMS_BACKUP.deleteDmsBackup(body.fileName, { actor: body?.actor || null });
+    },
+  },
+  '/api/dms/backup/log': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      return DMS_BACKUP.getBackupOperationsLog({ limit: query?.limit ? Number(query.limit) : 100 });
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -6302,6 +6353,14 @@ server.listen(PORT, () => {
     DMS_CAT.scheduleAutoArchive({ intervalHours: 24 });
   } catch (e) {
     console.error('⚠️  تعذّرت جدولة الأرشفة التلقائية لقسم إدارة المستندات:', e.message);
+  }
+
+  // البند المتبقي (النسخ الاحتياطي) من القسم الحادي عشر: جدولة نسخ احتياطي كامل
+  // تلقائي دوري (كل 24 ساعة) لقاعدة بيانات DMS وملفات المستندات الفعلية معاً
+  try {
+    DMS_BACKUP.scheduleAutoDmsBackup({ intervalHours: 24, includeFiles: true });
+  } catch (e) {
+    console.error('⚠️  تعذّرت جدولة النسخ الاحتياطي التلقائي لقسم إدارة المستندات:', e.message);
   }
 
   // الجزء الثالث (3/10) من القسم الحادي عشر: وحدة سير عمل الاعتماد (Workflow) جاهزة
