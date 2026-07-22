@@ -1330,3 +1330,340 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btn) btn.addEventListener('click', () => surveyImportGeoFile(fmt));
   });
 });
+
+// ============================================================
+// القسم العاشر: التكامل مع أجهزة المساحة (الجزء الإضافي)
+// ============================================================
+
+const SVYDEV_ENDPOINT_MAP = {
+  total_station: '/devices/import/total-station',
+  gnss_rtk: '/devices/import/gnss',
+  digital_level: '/devices/import/digital-level',
+  laser_scanner: '/devices/import/laser-scanner',
+  drone_survey: '/devices/import/drone-gcp',
+};
+const SVYDEV_TYPE_LABELS = {
+  total_station: 'Total Station', gnss_rtk: 'GPS/GNSS/RTK', digital_level: 'ميزان رقمي',
+  laser_scanner: 'ماسح ليزري', drone_survey: 'مسح بالدرون',
+};
+let svydevLastImport = null;
+
+function svydevUpdateFieldsVisibility() {
+  const type = document.getElementById('svydev-device-type').value;
+  document.getElementById('svydev-ts-format-wrap').style.display = type === 'total_station' ? '' : 'none';
+  document.getElementById('svydev-level-elev-wrap').style.display = type === 'digital_level' ? '' : 'none';
+}
+
+async function svydevRunImport() {
+  const errEl = document.getElementById('svydev-import-error');
+  const resultEl = document.getElementById('svydev-import-result');
+  errEl.textContent = '';
+  resultEl.innerHTML = '';
+
+  const projectId = document.getElementById('svydev-project-id').value.trim();
+  const deviceType = document.getElementById('svydev-device-type').value;
+  const content = document.getElementById('svydev-file-content').value;
+
+  if (!projectId) { errEl.textContent = 'معرّف المشروع مطلوب'; return; }
+  if (!content.trim()) { errEl.textContent = 'الصق محتوى ملف الجهاز أولاً'; return; }
+
+  const body = { project_id: projectId, content };
+  if (deviceType === 'total_station') body.format = document.getElementById('svydev-ts-format').value;
+  if (deviceType === 'digital_level') body.startElevation = Number(document.getElementById('svydev-level-start-elev').value) || 0;
+
+  try {
+    const { data } = await surveyFetch(SVYDEV_ENDPOINT_MAP[deviceType], { method: 'POST', body });
+    svydevLastImport = data;
+    const pointsPreview = data.points.slice(0, 15).map((p) => `
+      <tr>
+        <td>${p.point_number || '-'}</td>
+        <td>${p.easting ?? p.lat ?? '-'}</td>
+        <td>${p.northing ?? p.lon ?? '-'}</td>
+        <td>${p.elevation ?? '-'}</td>
+        <td>${p.description || ''}</td>
+      </tr>`).join('');
+    resultEl.innerHTML = `
+      <p>✅ تم الاستيراد: <strong>${data.points.length}</strong> نقطة صالحة${data.rejected.length ? `، ورُفض <strong style="color:#c0392b">${data.rejected.length}</strong> سطر` : ''}.</p>
+      <table class="data-table">
+        <thead><tr><th>رقم النقطة</th><th>Easting/Lat</th><th>Northing/Lon</th><th>المنسوب</th><th>الوصف</th></tr></thead>
+        <tbody>${pointsPreview}</tbody>
+      </table>
+      ${data.points.length > 15 ? `<p>... و${data.points.length - 15} نقطة إضافية</p>` : ''}
+      <button class="btn btn-primary" id="svydev-btn-commit" style="margin-top:10px">حفظ هذه النقاط كنقاط تحكم في المشروع</button>
+      ${data.rejected.length ? `<details style="margin-top:10px"><summary>الأسطر المرفوضة (${data.rejected.length})</summary>${data.rejected.map((r) => `<div>سطر ${r.line}: ${r.reason}</div>`).join('')}</details>` : ''}
+    `;
+    const commitBtn = document.getElementById('svydev-btn-commit');
+    if (commitBtn) commitBtn.addEventListener('click', () => svydevCommitImport(projectId));
+    svydevLoadImports();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function svydevCommitImport(projectId) {
+  if (!svydevLastImport) return;
+  try {
+    const { data } = await surveyFetch('/devices/imports/commit', {
+      method: 'POST',
+      body: { project_id: projectId, points: svydevLastImport.points },
+    });
+    alert(`تم حفظ ${data.saved_count} نقطة كنقاط تحكم بالمشروع${data.failed_count ? `، وفشل حفظ ${data.failed_count} (راجع التفاصيل في الكونسول)` : ''}.`);
+    if (data.failed_count) console.warn('نقاط فشل حفظها:', data.failed);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function svydevLoadImports() {
+  const tbody = document.getElementById('svydev-imports-tbody');
+  const projectId = document.getElementById('svydev-project-id').value.trim();
+  tbody.innerHTML = '<tr><td colspan="6">جارِ التحميل...</td></tr>';
+  try {
+    const { data } = await surveyFetch('/devices/imports', { query: { project_id: projectId || undefined } });
+    tbody.innerHTML = data.length ? data.map((d) => `
+      <tr>
+        <td>${SVYDEV_TYPE_LABELS[d.device_type] || d.device_type}</td>
+        <td>${d.source_format}</td>
+        <td>${d.points_count}</td>
+        <td>${d.rejected_count}</td>
+        <td>${new Date(d.imported_at).toLocaleString('ar')}</td>
+        <td><button class="btn btn-sm" onclick="svydevDeleteImport('${d.id}')">حذف</button></td>
+      </tr>`).join('') : '<tr><td colspan="6">لا توجد عمليات استيراد بعد</td></tr>';
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" style="color:#c0392b">${e.message}</td></tr>`;
+  }
+}
+
+async function svydevDeleteImport(id) {
+  if (!confirm('حذف سجل الاستيراد هذا؟')) return;
+  try {
+    await surveyFetch('/devices/imports/delete', { method: 'POST', body: { id } });
+    svydevLoadImports();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+// ============================================================
+// القسم العاشر: إدارة الأعمال الميدانية (Offline Mode)
+// ============================================================
+
+const SVYFW_STATUS_LABELS = { assigned: 'مسندة', in_progress: 'قيد التنفيذ', completed: 'مكتملة', cancelled: 'ملغاة' };
+const SVYFW_TYPE_LABELS = { survey: 'رفع مساحي', stakeout: 'توقيع', inspection: 'تفتيش', other: 'أخرى' };
+let svyfwEditingTaskId = null;
+
+function svyfwShowTaskForm(show) {
+  document.getElementById('svyfw-task-form').style.display = show ? '' : 'none';
+  if (!show) {
+    svyfwEditingTaskId = null;
+    document.getElementById('svyfw-f-title').value = '';
+    document.getElementById('svyfw-f-assigned').value = '';
+    document.getElementById('svyfw-f-type').value = 'survey';
+    document.getElementById('svyfw-f-date').value = '';
+    document.getElementById('svyfw-f-notes').value = '';
+    document.getElementById('svyfw-task-error').textContent = '';
+  }
+}
+
+async function svyfwSaveTask() {
+  const errEl = document.getElementById('svyfw-task-error');
+  errEl.textContent = '';
+  const projectId = document.getElementById('svyfw-project-id').value.trim();
+  const title = document.getElementById('svyfw-f-title').value.trim();
+  const assignedTo = document.getElementById('svyfw-f-assigned').value.trim();
+  if (!projectId) { errEl.textContent = 'أدخل معرّف المشروع أولاً'; return; }
+  if (!title || !assignedTo) { errEl.textContent = 'عنوان المهمة والمكلَّف حقلان مطلوبان'; return; }
+
+  const body = {
+    project_id: projectId,
+    title,
+    assigned_to: assignedTo,
+    task_type: document.getElementById('svyfw-f-type').value,
+    scheduled_date: document.getElementById('svyfw-f-date').value || null,
+    description: document.getElementById('svyfw-f-notes').value,
+  };
+
+  try {
+    if (svyfwEditingTaskId) {
+      body.id = svyfwEditingTaskId;
+      await surveyFetch('/fieldwork/tasks/update', { method: 'POST', body });
+    } else {
+      await surveyFetch('/fieldwork/tasks', { method: 'POST', body });
+    }
+    svyfwShowTaskForm(false);
+    svyfwLoadTasks();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function svyfwLoadTasks() {
+  const tbody = document.getElementById('svyfw-tasks-tbody');
+  const projectId = document.getElementById('svyfw-project-id').value.trim();
+  if (!projectId) { tbody.innerHTML = '<tr><td colspan="6">أدخل معرّف المشروع أولاً</td></tr>'; return; }
+  tbody.innerHTML = '<tr><td colspan="6">جارِ التحميل...</td></tr>';
+  try {
+    const { data } = await surveyFetch('/fieldwork/tasks', { query: { project_id: projectId } });
+    tbody.innerHTML = data.length ? data.map((t) => `
+      <tr>
+        <td>${t.title}</td>
+        <td>${t.assigned_to}</td>
+        <td>${SVYFW_TYPE_LABELS[t.task_type] || t.task_type}</td>
+        <td>${SVYFW_STATUS_LABELS[t.status] || t.status}</td>
+        <td>${t.scheduled_date || '-'}</td>
+        <td>
+          <button class="btn btn-sm" onclick="svyfwEditTask('${t.id}')">تعديل</button>
+          <button class="btn btn-sm" onclick="svyfwDeleteTask('${t.id}')">حذف</button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="6">لا توجد مهام ميدانية بعد</td></tr>';
+    window.__svyfwTasksCache = data;
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" style="color:#c0392b">${e.message}</td></tr>`;
+  }
+}
+
+function svyfwEditTask(id) {
+  const t = (window.__svyfwTasksCache || []).find((x) => x.id === id);
+  if (!t) return;
+  svyfwEditingTaskId = id;
+  document.getElementById('svyfw-f-title').value = t.title;
+  document.getElementById('svyfw-f-assigned').value = t.assigned_to;
+  document.getElementById('svyfw-f-type').value = t.task_type;
+  document.getElementById('svyfw-f-date').value = t.scheduled_date || '';
+  document.getElementById('svyfw-f-notes').value = t.description || '';
+  svyfwShowTaskForm(true);
+}
+
+async function svyfwDeleteTask(id) {
+  if (!confirm('حذف هذه المهمة الميدانية؟ سيتم حذف زياراتها المرتبطة أيضاً.')) return;
+  try {
+    await surveyFetch('/fieldwork/tasks/delete', { method: 'POST', body: { id } });
+    svyfwLoadTasks();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function svyfwLoadTeamsStatus() {
+  const el = document.getElementById('svyfw-teams-status');
+  const projectId = document.getElementById('svyfw-project-id').value.trim();
+  el.innerHTML = 'جارِ التحميل...';
+  try {
+    const { data } = await surveyFetch('/fieldwork/teams-status', { query: { project_id: projectId || undefined } });
+    el.innerHTML = data.length ? `
+      <h3>حالة الفرق الميدانية</h3>
+      <table class="data-table">
+        <thead><tr><th>المسّاح/الفريق</th><th>الحالة</th><th>مهام منجزة</th><th>إجمالي المهام</th><th>آخر نشاط</th></tr></thead>
+        <tbody>${data.map((t) => `
+          <tr>
+            <td>${t.surveyor}</td>
+            <td>${t.status}</td>
+            <td>${t.tasks_completed}</td>
+            <td>${t.tasks_total}</td>
+            <td>${t.last_activity_at ? new Date(t.last_activity_at).toLocaleString('ar') : '-'}</td>
+          </tr>`).join('')}</tbody>
+      </table>` : '<p>لا توجد بيانات فرق بعد</p>';
+  } catch (e) {
+    el.innerHTML = `<p style="color:#c0392b">${e.message}</p>`;
+  }
+}
+
+function svyfwUseCurrentLocation() {
+  if (!navigator.geolocation) { alert('المتصفح لا يدعم تحديد الموقع'); return; }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      document.getElementById('svyfw-visit-lat').value = pos.coords.latitude.toFixed(6);
+      document.getElementById('svyfw-visit-lon').value = pos.coords.longitude.toFixed(6);
+    },
+    (err) => alert('تعذّر تحديد الموقع: ' + err.message),
+  );
+}
+
+async function svyfwCheckIn() {
+  const out = document.getElementById('svyfw-visit-result');
+  const taskId = document.getElementById('svyfw-visit-task-id').value.trim();
+  const lat = Number(document.getElementById('svyfw-visit-lat').value);
+  const lon = Number(document.getElementById('svyfw-visit-lon').value);
+  if (!taskId) { alert('أدخل معرّف المهمة'); return; }
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) { alert('أدخل موقع GPS صالح (lat/lon)'); return; }
+  try {
+    const { data } = await surveyFetch('/fieldwork/visits/check-in', { method: 'POST', body: { task_id: taskId, lat, lon } });
+    out.innerHTML = `✅ تم تسجيل الوصول. معرّف الزيارة: <strong>${data.id}</strong>`;
+    document.getElementById('svyfw-visit-id').value = data.id;
+    svyfwLoadTasks();
+  } catch (e) {
+    out.innerHTML = `<span style="color:#c0392b">${e.message}</span>`;
+  }
+}
+
+async function svyfwCheckOut() {
+  const out = document.getElementById('svyfw-visit-result');
+  const visitId = document.getElementById('svyfw-visit-id').value.trim();
+  const lat = Number(document.getElementById('svyfw-visit-lat').value);
+  const lon = Number(document.getElementById('svyfw-visit-lon').value);
+  if (!visitId) { alert('أدخل معرّف الزيارة'); return; }
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) { alert('أدخل موقع GPS صالح (lat/lon)'); return; }
+  try {
+    const { data } = await surveyFetch('/fieldwork/visits/check-out', { method: 'POST', body: { id: visitId, lat, lon, complete_task: true } });
+    out.innerHTML = `✅ تم تسجيل الانصراف. مدة الزيارة: <strong>${data.duration_minutes}</strong> دقيقة`;
+    svyfwLoadTasks();
+  } catch (e) {
+    out.innerHTML = `<span style="color:#c0392b">${e.message}</span>`;
+  }
+}
+
+async function svyfwRunSync() {
+  const out = document.getElementById('svyfw-sync-result');
+  const projectId = document.getElementById('svyfw-project-id').value.trim();
+  const raw = document.getElementById('svyfw-sync-events').value;
+  let events;
+  try {
+    events = JSON.parse(raw);
+    if (!Array.isArray(events)) throw new Error('يجب أن تكون دفعة الأحداث مصفوفة JSON');
+  } catch (e) {
+    out.innerHTML = `<span style="color:#c0392b">تنسيق JSON غير صالح: ${e.message}</span>`;
+    return;
+  }
+  try {
+    const { data } = await surveyFetch('/fieldwork/sync', { method: 'POST', body: { project_id: projectId || null, events } });
+    out.innerHTML = `
+      <p>✅ تمت المزامنة — الإجمالي: ${data.summary.total}، مُطبَّق: ${data.summary.applied}،
+      مكرر (تم تجاهله): ${data.summary.skipped_duplicate}، فشل: ${data.summary.failed}</p>
+      ${data.failed.length ? `<details><summary>تفاصيل الفشل</summary>${data.failed.map((f) => `<div>${f.client_id || ''}: ${f.reason}</div>`).join('')}</details>` : ''}
+    `;
+    svyfwLoadTasks();
+  } catch (e) {
+    out.innerHTML = `<span style="color:#c0392b">${e.message}</span>`;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const deviceTypeSel = document.getElementById('svydev-device-type');
+  if (deviceTypeSel) {
+    deviceTypeSel.addEventListener('change', svydevUpdateFieldsVisibility);
+    svydevUpdateFieldsVisibility();
+  }
+  const btnDevImport = document.getElementById('svydev-btn-import');
+  if (btnDevImport) btnDevImport.addEventListener('click', svydevRunImport);
+  const btnDevLoadImports = document.getElementById('svydev-btn-load-imports');
+  if (btnDevLoadImports) btnDevLoadImports.addEventListener('click', svydevLoadImports);
+
+  const btnNewTask = document.getElementById('svyfw-btn-new-task');
+  if (btnNewTask) btnNewTask.addEventListener('click', () => svyfwShowTaskForm(true));
+  const btnCancelTask = document.getElementById('svyfw-btn-cancel-task');
+  if (btnCancelTask) btnCancelTask.addEventListener('click', () => svyfwShowTaskForm(false));
+  const btnSaveTask = document.getElementById('svyfw-btn-save-task');
+  if (btnSaveTask) btnSaveTask.addEventListener('click', svyfwSaveTask);
+  const btnLoadTasks = document.getElementById('svyfw-btn-load-tasks');
+  if (btnLoadTasks) btnLoadTasks.addEventListener('click', svyfwLoadTasks);
+  const btnLoadTeams = document.getElementById('svyfw-btn-load-teams');
+  if (btnLoadTeams) btnLoadTeams.addEventListener('click', svyfwLoadTeamsStatus);
+  const btnUseLocation = document.getElementById('svyfw-btn-use-location');
+  if (btnUseLocation) btnUseLocation.addEventListener('click', svyfwUseCurrentLocation);
+  const btnCheckIn = document.getElementById('svyfw-btn-check-in');
+  if (btnCheckIn) btnCheckIn.addEventListener('click', svyfwCheckIn);
+  const btnCheckOut = document.getElementById('svyfw-btn-check-out');
+  if (btnCheckOut) btnCheckOut.addEventListener('click', svyfwCheckOut);
+  const btnSync = document.getElementById('svyfw-btn-sync');
+  if (btnSync) btnSync.addEventListener('click', svyfwRunSync);
+});
