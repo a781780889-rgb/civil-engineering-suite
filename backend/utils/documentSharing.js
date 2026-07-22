@@ -30,6 +30,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const ACL = require('./documentAccessControl');
 const crypto = require('crypto');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -120,7 +121,7 @@ function normalizePermission(permission) {
 function createShareLink(payload = {}) {
   const {
     document_id, permission = 'view', password = null,
-    expires_at = null, max_opens = null, note = null, created_by = null,
+    expires_at = null, max_opens = null, note = null, created_by = null, token: authToken = null,
   } = payload;
 
   if (!document_id) throw new Error('معرّف المستند (document_id) مطلوب');
@@ -135,6 +136,7 @@ function createShareLink(payload = {}) {
 
   const store = loadStore();
   const doc = getDocOrThrow(store, document_id);
+  if (authToken) ACL.assertDocumentAccess(authToken, doc, 'share');
 
   const token = crypto.randomBytes(32).toString('base64url'); // 256-bit، آمن وغير قابل للتخمين
   const linkId = newId('SHL');
@@ -355,7 +357,7 @@ function getShareLink(linkId) {
 function shareInternally(payload = {}) {
   const {
     document_id, grantee_type = 'user', grantee, permission = 'view',
-    expires_at = null, note = null, granted_by = null,
+    expires_at = null, note = null, granted_by = null, token: authToken = null,
   } = payload;
 
   if (!document_id) throw new Error('معرّف المستند (document_id) مطلوب');
@@ -365,6 +367,7 @@ function shareInternally(payload = {}) {
 
   const store = loadStore();
   const doc = getDocOrThrow(store, document_id);
+  if (authToken) ACL.assertDocumentAccess(authToken, doc, 'share');
 
   // منع تكرار نفس المشاركة الفعالة لنفس المستفيد على نفس المستند
   const duplicate = Object.values(store.internalShares).find(s => (

@@ -39,6 +39,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const ACL = require('./documentAccessControl');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const FILES_DIR = path.join(DATA_DIR, 'dms_files');
@@ -333,7 +334,7 @@ function uploadDocument(payload = {}) {
  * على القرص، بل يُحتفَظ به كاملاً لإمكانية الاستعادة الحقيقية لاحقاً).
  */
 function uploadNewVersion(documentId, payload = {}) {
-  const { file_name, content_base64, change_note = null, author = null } = payload;
+  const { file_name, content_base64, change_note = null, author = null, token = null } = payload;
   if (!documentId) throw new Error('معرّف المستند (document_id) مطلوب');
   if (!content_base64) throw new Error('محتوى الملف (content_base64) مطلوب');
   const ext = validateFileName(file_name);
@@ -341,6 +342,7 @@ function uploadNewVersion(documentId, payload = {}) {
   const store = loadStore();
   const doc = store.documents[documentId];
   if (!doc) throw new Error('المستند غير موجود');
+  if (token) ACL.assertDocumentAccess(token, doc, 'update');
 
   let buffer;
   try {
@@ -405,10 +407,11 @@ function uploadNewVersion(documentId, payload = {}) {
 }
 
 /** استعادة إصدار سابق كإصدار حالي جديد (لا يحذف التاريخ، بل يضيف نسخة "استعادة" جديدة فوق التسلسل) */
-function restoreVersion(documentId, versionId, { author = null } = {}) {
+function restoreVersion(documentId, versionId, { author = null, token = null } = {}) {
   const store = loadStore();
   const doc = store.documents[documentId];
   if (!doc) throw new Error('المستند غير موجود');
+  if (token) ACL.assertDocumentAccess(token, doc, 'update');
   const oldVersion = store.versions[versionId];
   if (!oldVersion || oldVersion.document_id !== documentId) throw new Error('الإصدار المطلوب استعادته غير موجود لهذا المستند');
   if (oldVersion.id === doc.current_version_id) throw new Error('هذا هو الإصدار الحالي بالفعل');
@@ -419,23 +422,26 @@ function restoreVersion(documentId, versionId, { author = null } = {}) {
     content_base64: oldBuffer.toString('base64'),
     change_note: `استعادة من الإصدار ${oldVersion.version_number}`,
     author,
+    token,
   });
 }
 
-function getDocument(id) {
+function getDocument(id, { token = null } = {}) {
   const store = loadStore();
   const doc = store.documents[id];
   if (!doc) throw new Error('المستند غير موجود');
+  if (token) ACL.assertDocumentAccess(token, doc, 'view');
   const versions = doc.version_ids.map(vid => store.versions[vid]).filter(Boolean)
     .sort((a, b) => b.version_number - a.version_number);
   return { success: true, data: { ...doc, versions } };
 }
 
 /** تنزيل محتوى إصدار معيّن (أو الإصدار الحالي افتراضياً) - يعيد Buffer فعلياً + بيانات الملف */
-function downloadDocument(documentId, { versionId = null, actor = null } = {}) {
+function downloadDocument(documentId, { versionId = null, actor = null, token = null } = {}) {
   const store = loadStore();
   const doc = store.documents[documentId];
   if (!doc) throw new Error('المستند غير موجود');
+  if (token) ACL.assertDocumentAccess(token, doc, 'view');
   const targetVersionId = versionId || doc.current_version_id;
   const version = store.versions[targetVersionId];
   if (!version || version.document_id !== documentId) throw new Error('الإصدار المطلوب غير موجود لهذا المستند');
@@ -462,10 +468,11 @@ function downloadDocument(documentId, { versionId = null, actor = null } = {}) {
   };
 }
 
-function updateDocumentMetadata(id, patch = {}, { actor = null } = {}) {
+function updateDocumentMetadata(id, patch = {}, { actor = null, token = null } = {}) {
   const store = loadStore();
   const doc = store.documents[id];
   if (!doc) throw new Error('المستند غير موجود');
+  if (token) ACL.assertDocumentAccess(token, doc, 'update');
 
   const allowedFields = ['title', 'description', 'keywords', 'department', 'doc_type', 'expiry_date'];
   for (const field of allowedFields) {
@@ -486,10 +493,11 @@ function updateDocumentMetadata(id, patch = {}, { actor = null } = {}) {
   return { success: true, data: doc };
 }
 
-function deleteDocument(id, { actor = null, hardDelete = false } = {}) {
+function deleteDocument(id, { actor = null, hardDelete = false, token = null } = {}) {
   const store = loadStore();
   const doc = store.documents[id];
   if (!doc) throw new Error('المستند غير موجود');
+  if (token) ACL.assertDocumentAccess(token, doc, hardDelete ? 'hard_delete' : 'delete');
 
   if (hardDelete) {
     for (const vid of doc.version_ids) {
@@ -694,9 +702,14 @@ module.exports = {
   // تكامل
   setProjectResolver,
 
-  // صلاحيات متقدمة
+  // صلاحيات متقدمة (خشنة - على مستوى الوحدة)
   DMS_ROLE_DEFINITIONS,
   ensureDmsRolesSeeded,
+
+  // صلاحيات دقيقة (على مستوى المستند الفردي: مشروع/نوع/دور) - انظر documentAccessControl.js
+  setUserProjectScope: ACL.setUserProjectScope,
+  getUserProjectScope: ACL.getUserProjectScope,
+  listAccessDenials: ACL.listAccessDenials,
 
   // لوحة تحكم
   getDashboard,

@@ -20,6 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const ACL = require('./documentAccessControl');
 
 // ==================================================================================
 // ============================ الربط بطبقة التخزين الموحّدة =========================
@@ -265,7 +266,7 @@ function assignDocumentToCategory(documentId, categoryId = null, { actor = null 
 // ==================================================================================
 
 /** نقل مستند واحد أو أكثر إلى مجلد آخر (تحديث فعلي لـ category_id لكل مستند) */
-function moveDocuments(documentIds = [], targetCategoryId = null, { actor = null } = {}) {
+function moveDocuments(documentIds = [], targetCategoryId = null, { actor = null, token = null } = {}) {
   if (!Array.isArray(documentIds) || !documentIds.length) throw new Error('قائمة المستندات (document_ids) مطلوبة');
   const store = loadStore();
   if (targetCategoryId && !store.categories[targetCategoryId]) throw new Error('المجلد الهدف غير موجود');
@@ -274,6 +275,7 @@ function moveDocuments(documentIds = [], targetCategoryId = null, { actor = null
   for (const docId of documentIds) {
     const doc = store.documents?.[docId];
     if (!doc) continue;
+    if (token) { try { ACL.assertDocumentAccess(token, doc, 'move'); } catch (e) { continue; } }
     const from = doc.category_id;
     doc.category_id = targetCategoryId || null;
     doc.updated_at = nowISO();
@@ -290,10 +292,11 @@ function moveDocuments(documentIds = [], targetCategoryId = null, { actor = null
  * فعلي لملف الإصدار الحالي على القرص (وليس رابطاً/مرجعاً للملف الأصلي)، حتى يكون
  * تعديل النسخة لاحقاً مستقلاً تماماً عن المستند الأصلي.
  */
-function copyDocument(documentId, { targetCategoryId = null, targetProjectId = undefined, actor = null } = {}) {
+function copyDocument(documentId, { targetCategoryId = null, targetProjectId = undefined, actor = null, token = null } = {}) {
   const store = loadStore();
   const doc = store.documents?.[documentId];
   if (!doc) throw new Error('المستند غير موجود');
+  if (token) ACL.assertDocumentAccess(token, doc, 'view');
   if (targetCategoryId && !store.categories[targetCategoryId]) throw new Error('المجلد الهدف غير موجود');
 
   const currentVersion = store.versions?.[doc.current_version_id];
@@ -341,13 +344,14 @@ function copyDocument(documentId, { targetCategoryId = null, targetProjectId = u
 // ==================================================================================
 
 /** أرشفة يدوية لمستند واحد أو أكثر (الحالة + علم archived فعلياً، وليس مجرد نقل شكلي) */
-function archiveDocuments(documentIds = [], { actor = null, reason = null } = {}) {
+function archiveDocuments(documentIds = [], { actor = null, reason = null, token = null } = {}) {
   if (!Array.isArray(documentIds) || !documentIds.length) throw new Error('قائمة المستندات (document_ids) مطلوبة');
   const store = loadStore();
   const archived = [];
   for (const docId of documentIds) {
     const doc = store.documents?.[docId];
     if (!doc || doc.archived) continue;
+    if (token) { try { ACL.assertDocumentAccess(token, doc, 'archive'); } catch (e) { continue; } }
     doc.archived = true;
     doc.status = 'archived';
     doc.archived_at = nowISO();
@@ -362,13 +366,14 @@ function archiveDocuments(documentIds = [], { actor = null, reason = null } = {}
 }
 
 /** استعادة مستندات من الأرشيف إلى حالتها التشغيلية (draft) لإعادة تفعيلها */
-function unarchiveDocuments(documentIds = [], { actor = null } = {}) {
+function unarchiveDocuments(documentIds = [], { actor = null, token = null } = {}) {
   if (!Array.isArray(documentIds) || !documentIds.length) throw new Error('قائمة المستندات (document_ids) مطلوبة');
   const store = loadStore();
   const restored = [];
   for (const docId of documentIds) {
     const doc = store.documents?.[docId];
     if (!doc || !doc.archived) continue;
+    if (token) { try { ACL.assertDocumentAccess(token, doc, 'unarchive'); } catch (e) { continue; } }
     doc.archived = false;
     doc.status = 'draft';
     doc.archived_at = null;

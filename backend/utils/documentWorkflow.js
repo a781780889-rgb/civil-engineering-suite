@@ -149,6 +149,7 @@ function defineWorkflow({ docType, name = null, stages, isActive = true } = {}) 
 
 const fs = require('fs');
 const path = require('path');
+const ACL = require('./documentAccessControl');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const DB_FILE = path.join(DATA_DIR, 'dms.json');
@@ -361,13 +362,15 @@ function decideStage(documentId, {
 }
 
 /** اختصار لاعتماد المرحلة الحالية */
-function approveCurrentStage(documentId, { actor, actorRole = null, comments = '' } = {}) {
+function approveCurrentStage(documentId, { actor, actorRole = null, comments = '', token = null } = {}) {
+  if (token) ACL.assertDocumentAccess(token, getDocOrThrow(loadStore(), documentId), 'approve');
   return decideStage(documentId, { decision: 'approved', actor, actorRole, comments });
 }
 
 /** اختصار لرفض المرحلة الحالية (يُعيد المستند فعلياً لحالة/مرحلة سابقة للمراجعة) */
-function rejectCurrentStage(documentId, { actor, actorRole = null, comments = '' } = {}) {
+function rejectCurrentStage(documentId, { actor, actorRole = null, comments = '', token = null } = {}) {
   if (!comments || !comments.trim()) throw new Error('يجب توضيح سبب الرفض (comments) لأي قرار رفض');
+  if (token) ACL.assertDocumentAccess(token, getDocOrThrow(loadStore(), documentId), 'reject');
   return decideStage(documentId, { decision: 'rejected', actor, actorRole, comments });
 }
 
@@ -398,9 +401,10 @@ function resubmitForReview(documentId, { actor = null, note = null } = {}) {
  * لها فعلياً سجل اعتماد (approved) في نفس سجل الموافقات، بحيث تعكس is_complete/history
  * أن مرحلة النشر اجتازت أيضاً وليس فقط أن doc.status أصبح "published" بمعزل عن السجل.
  */
-function publishDocument(documentId, { actor = null } = {}) {
+function publishDocument(documentId, { actor = null, token = null } = {}) {
   const store = loadStore();
   const doc = getDocOrThrow(store, documentId);
+  if (token) ACL.assertDocumentAccess(token, doc, 'publish');
   if (doc.status !== 'approved') throw new Error('لا يمكن نشر مستند لم يكتمل اعتماده بعد (الحالة الحالية ليست "معتمد")');
 
   const { workflow, current_stage: currentStage, is_complete } = getCurrentStageInfo(documentId);
