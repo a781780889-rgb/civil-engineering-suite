@@ -71,6 +71,8 @@ const DMS_WF = require('./utils/documentWorkflow');
 const DMS_SIG = require('./utils/documentSignature');
 const DMS_SEARCH = require('./utils/documentSearch');
 const DMS_SHARE = require('./utils/documentSharing');
+const DMS_NOTIF = require('./utils/documentNotifications');
+DMS_NOTIF.attachToSharingModule();
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -5925,6 +5927,59 @@ const API_HANDLERS = {
     GET: async (_body, query, req) => {
       requirePermission(req, 'documents', 'view');
       return DMS_SHARE.getSharingSummary({ projectId: query?.projectId || null });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الحادي عشر (الجزء 7/10) - نظام إدارة المستندات (DMS):
+  // ===== الإشعارات + التكامل الكامل مع بقية أقسام النظام
+  // ===================================================================
+
+  '/api/dms/notifications/feed': {
+    GET: async (_body, query, req) => {
+      const token = requirePermission(req, 'documents', 'view');
+      const session = SEC.getSessionUser(token);
+      return DMS_NOTIF.getFeed({
+        username: session?.username || session?.id,
+        projectId: query?.projectId || null,
+        unreadOnly: query?.unreadOnly === 'true',
+        page: query?.page ? Number(query.page) : 1,
+        pageSize: query?.pageSize ? Number(query.pageSize) : 30,
+      });
+    },
+  },
+  '/api/dms/notifications/unread-count': {
+    GET: async (_body, query, req) => {
+      const token = requirePermission(req, 'documents', 'view');
+      const session = SEC.getSessionUser(token);
+      return DMS_NOTIF.getUnreadCount({ username: session?.username || session?.id, projectId: query?.projectId || null });
+    },
+  },
+  '/api/dms/notifications/mark-read': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'view');
+      const session = SEC.getSessionUser(token);
+      if (!body?.id) throw new Error('معرّف الإشعار (id) مطلوب');
+      return DMS_NOTIF.markAsRead(body.id, { username: session?.username || session?.id });
+    },
+  },
+  '/api/dms/notifications/mark-all-read': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'view');
+      const session = SEC.getSessionUser(token);
+      return DMS_NOTIF.markAllAsRead({ username: session?.username || session?.id, projectId: body?.projectId || null });
+    },
+  },
+  '/api/dms/notifications/summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_NOTIF.getNotificationsSummary({ projectId: query?.projectId || null });
+    },
+  },
+  '/api/dms/notifications/check-expiry': {
+    POST: async (_body, _query, req) => {
+      requirePermission(req, 'documents', 'manage');
+      return DMS_NOTIF.checkDocumentExpiry();
     },
   },
 };
