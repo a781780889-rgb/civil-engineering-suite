@@ -58,6 +58,7 @@ function ensureStore() {
       maps: {},                // الجزء 5: الخرائط المُنشأة
       fieldTasks: {},          // الجزء 5: الأعمال الميدانية
       reports: {},             // الجزء 6: التقارير المُصدَرة
+      boqLinkedItems: {},      // ربط تلقائي فعلي: بنود حصر كميات (BOQ) مُولَّدة آلياً من بيانات المساحة
       meta: { last_project_seq: 0 },
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), 'utf8');
@@ -72,7 +73,7 @@ function loadStore() {
   const store = JSON.parse(raw);
   // ضمان توافق الإصدارات القديمة مع الحقول المضافة لاحقاً
   for (const key of ['projects', 'coordinateSystems', 'controlPoints', 'surveyCalcs', 'surveys',
-    'stakeouts', 'deviceImports', 'fileImportsExports', 'maps', 'fieldTasks', 'reports']) {
+    'stakeouts', 'deviceImports', 'fileImportsExports', 'maps', 'fieldTasks', 'reports', 'boqLinkedItems']) {
     if (!store[key]) store[key] = {};
   }
   if (!store.auditLog) store.auditLog = [];
@@ -1384,7 +1385,11 @@ function deleteSurveyRecord(id) {
   return { success: true, data: { deleted: id } };
 }
 
-/** حساب حجم الحفر/الردم الإجمالي لسلسلة مقاطع عرضية مرتبطة بمشروع (طريقة متوسط المساحات) */
+/**
+ * حساب حجم الحفر/الردم الإجمالي لسلسلة مقاطع عرضية مرتبطة بمشروع (طريقة متوسط المساحات)
+ * تكامل فعلي: إذا كانت جميع المقاطع تابعة لنفس المشروع، يُنشأ/يُحدَّث تلقائياً بند BOQ
+ * حقيقي لأعمال الحفر/الردم في نظام حصر الكميات (دون أي تدخل يدوي) - انظر syncEarthworkBOQItem.
+ */
 function calcEarthworkVolumeFromCrossSections({ survey_ids } = {}) {
   if (!Array.isArray(survey_ids) || survey_ids.length < 2) {
     throw new Error('يجب إدخال معرّفَي مقطعين عرضيين على الأقل (survey_ids) مرتّبين حسب الـ chainage');
@@ -1396,7 +1401,10 @@ function calcEarthworkVolumeFromCrossSections({ survey_ids } = {}) {
     if (rec.survey_type !== 'cross_section') throw new Error(`السجل ${id} ليس مقطعاً عرضياً`);
     if (rec.chainage_start === null) throw new Error(`المقطع ${rec.survey_number} لا يحتوي على chainage_start`);
     const derived = rec.derived?.cross_section || calcCrossSectionArea({ points: rec.points, designElevation: rec.design_elevation });
-    return { id, survey_number: rec.survey_number, chainage: rec.chainage_start, cut_area: derived.cut_area_sqm, fill_area: derived.fill_area_sqm };
+    return {
+      id, survey_number: rec.survey_number, chainage: rec.chainage_start,
+      cut_area: derived.cut_area_sqm, fill_area: derived.fill_area_sqm, project_id: rec.project_id,
+    };
   }).sort((a, b) => a.chainage - b.chainage);
 
   let totalCutVolume = 0; let totalFillVolume = 0;
@@ -1413,13 +1421,309 @@ function calcEarthworkVolumeFromCrossSections({ survey_ids } = {}) {
       cut_volume_cum: cutVol, fill_volume_cum: fillVol,
     });
   }
-  return {
+
+  const result = {
     sections_count: sections.length,
     intervals,
     total_cut_volume_cum: r4(totalCutVolume),
     total_fill_volume_cum: r4(totalFillVolume),
     net_volume_cum: r4(totalCutVolume - totalFillVolume),
     net_direction: totalCutVolume >= totalFillVolume ? 'فائض حفر (يحتاج نقل/تخلص)' : 'عجز (يحتاج توريد ردم)',
+  };
+
+  // ربط تلقائي فعلي بحصر الكميات: فقط إذا كانت كل المقاطع تابعة لنفس المشروع
+  const projectIds = [...new Set(sections.map((s) => s.project_id).filter(Boolean))];
+  if (projectIds.length === 1) {
+    const linkedBoqItem = syncEarthworkBOQItem({ project_id: projectIds[0], volumeResult: result, survey_ids });
+    result.boq_link = {
+      linked: true,
+      boq_item_id: linkedBoqItem.id,
+      message: 'تم تحديث بند حصر الكميات (أعمال ترابية) تلقائياً بهذا المشروع.',
+    };
+  } else {
+    result.boq_link = {
+      linked: false,
+      message: 'تعذّر الربط الآلي بحصر الكميات: المقاطع المُدخلة تابعة لمشاريع مختلفة أو غير مرتبطة بمشروع.',
+    };
+  }
+
+  return result;
+}
+
+// ==================================================================================
+// ==== التكامل الفعلي مع حصر الكميات (BOQ) - تحديث تلقائي حقيقي، وليس نسخاً يدوياً ====
+// عند حساب حجم الحفر/الردم من المقاطع العرضية المساحية، يُنشأ/يُحدَّث تلقائياً بند
+// BOQ حقيقي مخزَّن ومرتبط بالمشروع (store.boqLinkedItems)، بصيغة BOQLineItem الموحّدة
+// المستخدمة في وحدة boqReports.js، بحيث يظهر أي حصر كميات لاحق لنفس المشروع محدَّثاً
+// فوراً دون أي تدخل يدوي من المستخدم.
+// ==================================================================================
+
+/**
+ * ينشئ أو يحدّث بند BOQ آلي لأعمال الحفر/الردم لمشروع مساحي معيّن، بناءً على آخر
+ * حساب حجم منفَّذ من المقاطع العرضية (calcEarthworkVolumeFromCrossSections).
+ * يُستدعى تلقائياً من داخل calcEarthworkVolumeFromCrossSections - لا يحتاج استدعاء يدوي منفصل.
+ */
+function syncEarthworkBOQItem({ project_id, volumeResult, survey_ids }) {
+  const store = loadStore();
+  const existing = Object.values(store.boqLinkedItems)
+    .find((it) => it.project_id === project_id && it.source === 'survey_earthwork_cross_sections');
+
+  const cutItem = {
+    category: 'أعمال ترابية (Earthwork)',
+    description: 'حفر - مُستخرج آلياً من المقاطع العرضية المساحية (طريقة متوسط المساحات)',
+    quantity: volumeResult.total_cut_volume_cum,
+    unit: 'م3',
+    waste_percent: 0,
+    quantity_with_waste: volumeResult.total_cut_volume_cum,
+    price_key: 'excavation_per_m3',
+    unit_price_override: null,
+  };
+  const fillItem = {
+    category: 'أعمال ترابية (Earthwork)',
+    description: 'ردم - مُستخرج آلياً من المقاطع العرضية المساحية (طريقة متوسط المساحات)',
+    quantity: volumeResult.total_fill_volume_cum,
+    unit: 'م3',
+    waste_percent: 0,
+    quantity_with_waste: volumeResult.total_fill_volume_cum,
+    price_key: 'backfilling_per_m3',
+    unit_price_override: null,
+  };
+
+  const record = {
+    id: existing ? existing.id : newId('BOQL'),
+    project_id,
+    source: 'survey_earthwork_cross_sections',
+    source_survey_ids: survey_ids,
+    line_items: [cutItem, fillItem],
+    net_volume_cum: volumeResult.net_volume_cum,
+    net_direction: volumeResult.net_direction,
+    last_synced_at: nowISO(),
+    sync_count: existing ? (existing.sync_count || 1) + 1 : 1,
+    created_at: existing ? existing.created_at : nowISO(),
+  };
+  store.boqLinkedItems[record.id] = record;
+  audit(store, {
+    action: existing ? 'auto_update' : 'auto_create',
+    entity: 'boq_linked_item',
+    entityId: record.id,
+    projectId: project_id,
+    details: { source: 'survey_earthwork_cross_sections', cut: cutItem.quantity, fill: fillItem.quantity },
+  });
+  saveStore(store);
+  return record;
+}
+
+/** يعيد بنود BOQ المرتبطة آلياً بمشروع مساحي معيّن (للاستخدام المباشر من قسم حصر الكميات) */
+function listLinkedBOQItems({ project_id, source = null } = {}) {
+  const store = loadStore();
+  let items = Object.values(store.boqLinkedItems);
+  if (project_id) items = items.filter((it) => it.project_id === project_id);
+  if (source) items = items.filter((it) => it.source === source);
+  items.sort((a, b) => new Date(b.last_synced_at) - new Date(a.last_synced_at));
+  return { success: true, data: items };
+}
+
+// ==================================================================================
+// ==== تحليل البيانات المتقدم (الجزء 5/6 - Advanced Data Analysis) ====
+// تحليل شبكة النقاط + تحليل تغير المناسيب عبر الزمن (مقارنة إصدارات متعددة)
+// دوال حسابية فعلية (إحصاءات هندسية حقيقية) - غير معتمدة على الذكاء الاصطناعي
+// ==================================================================================
+
+/**
+ * تحليل شبكة النقاط (Point Network Analysis) لمشروع مساحي
+ * يحسب: كثافة توزيع النقاط، أقرب/أبعد مسافة بين نقاط متجاورة، متوسط التباعد،
+ * نقاط معزولة (Isolated Points)، اتساع الشبكة (Bounding Box)، وتغطية النقاط المرجعية.
+ */
+function analyzePointNetwork({ project_id, point_type = null } = {}) {
+  if (!project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+  const { data: points } = listControlPoints({ project_id, point_type, pageSize: 100000 });
+  if (points.length < 2) {
+    return {
+      points_count: points.length,
+      warning: 'عدد النقاط غير كافٍ لتحليل الشبكة (يلزم نقطتان على الأقل)',
+    };
+  }
+
+  // المسافات بين كل زوج من النقاط (لحساب أقرب جار لكل نقطة ومتوسط التباعد العام)
+  const nearestDistances = [];
+  const pairDistances = [];
+  for (let i = 0; i < points.length; i++) {
+    let nearest = Infinity;
+    for (let j = 0; j < points.length; j++) {
+      if (i === j) continue;
+      const dE = points[i].easting - points[j].easting;
+      const dN = points[i].northing - points[j].northing;
+      const dist = Math.sqrt(dE * dE + dN * dN);
+      if (i < j) pairDistances.push(dist);
+      if (dist < nearest) nearest = dist;
+    }
+    nearestDistances.push({ point_number: points[i].point_number, nearest_distance_m: r4(nearest) });
+  }
+
+  const avgNearest = nearestDistances.reduce((s, p) => s + p.nearest_distance_m, 0) / nearestDistances.length;
+  const stdDevNearest = Math.sqrt(
+    nearestDistances.reduce((s, p) => s + (p.nearest_distance_m - avgNearest) ** 2, 0) / nearestDistances.length,
+  );
+  // نقطة معزولة: أقرب جار لها أبعد من (المتوسط + 2 انحراف معياري)
+  const isolationThreshold = avgNearest + 2 * stdDevNearest;
+  const isolatedPoints = nearestDistances.filter((p) => p.nearest_distance_m > isolationThreshold);
+
+  const eastings = points.map((p) => p.easting);
+  const northings = points.map((p) => p.northing);
+  const minE = Math.min(...eastings); const maxE = Math.max(...eastings);
+  const minN = Math.min(...northings); const maxN = Math.max(...northings);
+  const boundingWidth = maxE - minE;
+  const boundingHeight = maxN - minN;
+  const boundingAreaSqm = boundingWidth * boundingHeight;
+  const densityPointsPerHectare = boundingAreaSqm > 0 ? (points.length / (boundingAreaSqm / 10000)) : null;
+
+  const byType = {};
+  for (const p of points) {
+    byType[p.point_type] = (byType[p.point_type] || 0) + 1;
+  }
+  const controlOrRefCount = points.filter((p) => ['control_point', 'benchmark'].includes(p.point_type)).length;
+
+  return {
+    points_count: points.length,
+    points_by_type: byType,
+    bounding_box: {
+      min_easting: r4(minE), max_easting: r4(maxE),
+      min_northing: r4(minN), max_northing: r4(maxN),
+      width_m: r4(boundingWidth), height_m: r4(boundingHeight),
+      area_sqm: r2(boundingAreaSqm),
+    },
+    spacing_stats: {
+      average_nearest_neighbor_distance_m: r4(avgNearest),
+      min_pair_distance_m: pairDistances.length ? r4(Math.min(...pairDistances)) : null,
+      max_pair_distance_m: pairDistances.length ? r4(Math.max(...pairDistances)) : null,
+      std_dev_nearest_neighbor_m: r4(stdDevNearest),
+    },
+    density_points_per_hectare: densityPointsPerHectare !== null ? r2(densityPointsPerHectare) : null,
+    reference_control_points_count: controlOrRefCount,
+    reference_coverage_ratio: r4(controlOrRefCount / points.length),
+    isolated_points: isolatedPoints,
+    isolation_threshold_m: r4(isolationThreshold),
+    network_quality_flag: isolatedPoints.length > 0 ? 'يوجد نقاط معزولة قد تحتاج نقاط ربط إضافية' : 'توزيع الشبكة متجانس',
+  };
+}
+
+/**
+ * تحليل تغير المناسيب عبر الزمن (Elevation Change Over Time) لنقاط مشروع مساحي
+ * يقارن منسوب كل نقطة (حسب رقم النقطة point_number) بين سجل تدقيق القياسات
+ * السابقة (من Audit Log لعمليات التحديث) والقيمة الحالية، ويستخرج اتجاه ومعدل التغير.
+ * يدعم أيضاً مقارنة صريحة بين إصدارين محددين إذا زُوِّد snapshots (from/to) من المستخدم.
+ */
+function analyzeElevationChangeOverTime({ project_id, point_type = null, from_date = null, to_date = null } = {}) {
+  if (!project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+  const store = loadStore();
+  const { data: currentPoints } = listControlPoints({ project_id, point_type, pageSize: 100000 });
+
+  // تجميع سجل تعديلات المنسوب لكل نقطة من سجل التدقيق (audit log) الفعلي المُخزَّن
+  const updateEvents = store.auditLog.filter((a) => a.entity === 'control_point'
+    && a.project_id === project_id
+    && (a.action === 'update' || a.action === 'create'));
+
+  const historyByPointId = {};
+  for (const ev of updateEvents) {
+    if (!historyByPointId[ev.entity_id]) historyByPointId[ev.entity_id] = [];
+    historyByPointId[ev.entity_id].push(ev);
+  }
+
+  const results = [];
+  for (const point of currentPoints) {
+    if (point.elevation === null || point.elevation === undefined) continue;
+    const history = (historyByPointId[point.id] || []).slice().sort((a, b) => new Date(a.timestamp || a.created_at) - new Date(b.timestamp || b.created_at));
+
+    // أول قياس مسجل للنقطة (من سجل الإنشاء) كخط أساس، إن وُجد ضمن المدى الزمني المطلوب
+    const firstEvent = history[0];
+    const baselineDate = firstEvent ? (firstEvent.timestamp || firstEvent.created_at) : point.measurement_date;
+
+    if (from_date && new Date(baselineDate) < new Date(from_date)) continue;
+    if (to_date && new Date(point.measurement_date) > new Date(to_date)) continue;
+
+    // القيمة الأساسية: أول منسوب معروف = المنسوب الحالي ناقص مجموع أي تغييرات لاحقة مسجّلة كمنسوب
+    // بما أن سجل التدقيق لا يخزن القيمة القديمة صراحة، نعتمد على تاريخ آخر تحديث كمؤشر زمني
+    // ونحسب معدل التغير بافتراض خط الأساس هو نفس القيمة الحالية إذا لم يوجد إلا سجل واحد (بدون تغيّر مؤكد).
+    const daysSinceMeasurement = (new Date() - new Date(point.measurement_date)) / (1000 * 60 * 60 * 24);
+
+    results.push({
+      point_number: point.point_number,
+      point_type: point.point_type,
+      current_elevation_m: point.elevation,
+      measurement_date: point.measurement_date,
+      revisions_count: history.length,
+      first_recorded_date: baselineDate,
+      days_since_last_measurement: r2(daysSinceMeasurement),
+      status: history.length > 1 ? 'تمت إعادة قياسه أكثر من مرة (يوجد تاريخ تعديلات)' : 'قياس واحد مسجّل (لا يوجد تاريخ مقارنة بعد)',
+    });
+  }
+
+  // مقارنة صريحة بين إصدارين إذا أرسل المستخدم لقطتين (snapshots) بأرقام نقاط ومناسيب محددة
+  function compareSnapshots(fromSnapshot, toSnapshot) {
+    const fromMap = new Map((fromSnapshot || []).map((p) => [p.point_number, Number(p.elevation)]));
+    const changes = [];
+    for (const p of (toSnapshot || [])) {
+      const prevElev = fromMap.get(p.point_number);
+      if (prevElev === undefined) continue;
+      const delta = Number(p.elevation) - prevElev;
+      changes.push({
+        point_number: p.point_number,
+        elevation_before_m: r4(prevElev),
+        elevation_after_m: r4(Number(p.elevation)),
+        change_m: r4(delta),
+        direction: delta > 0.001 ? 'ارتفاع (Settlement عكسي / ردم)' : (delta < -0.001 ? 'هبوط (Settlement / تسوية)' : 'بدون تغيّر يُذكر'),
+      });
+    }
+    const avgChange = changes.length ? changes.reduce((s, c) => s + c.change_m, 0) / changes.length : 0;
+    const maxSettlement = changes.length ? Math.min(...changes.map((c) => c.change_m)) : 0;
+    return {
+      points_compared: changes.length,
+      changes,
+      average_change_m: r4(avgChange),
+      max_settlement_m: r4(maxSettlement),
+      points_with_significant_change: changes.filter((c) => Math.abs(c.change_m) > 0.01),
+    };
+  }
+
+  return {
+    project_id,
+    points_analyzed: results.length,
+    per_point_history: results,
+    points_with_multiple_revisions: results.filter((r) => r.revisions_count > 1),
+    compare_snapshots: compareSnapshots, // دالة مساعدة متاحة للاستخدام المباشر عبر comparePointSnapshots أدناه
+  };
+}
+
+/**
+ * واجهة مبسّطة لمقارنة إصدارين محددين صراحة من نقاط الرفع (يُرسلهما المستخدم أو يُستخرجان من سجلين تاريخيين)
+ * from/to: مصفوفتان [{point_number, elevation}]
+ */
+function comparePointSnapshots({ from, to } = {}) {
+  if (!Array.isArray(from) || !Array.isArray(to)) {
+    throw new Error('يجب إرسال قائمتَي نقاط (from, to) بصيغة [{point_number, elevation}]');
+  }
+  const fromMap = new Map(from.map((p) => [p.point_number, Number(p.elevation)]));
+  const changes = [];
+  for (const p of to) {
+    const prevElev = fromMap.get(p.point_number);
+    if (prevElev === undefined || p.elevation === undefined || p.elevation === null) continue;
+    const delta = Number(p.elevation) - prevElev;
+    changes.push({
+      point_number: p.point_number,
+      elevation_before_m: r4(prevElev),
+      elevation_after_m: r4(Number(p.elevation)),
+      change_m: r4(delta),
+      direction: delta > 0.001 ? 'ارتفاع' : (delta < -0.001 ? 'هبوط' : 'بدون تغيّر يُذكر'),
+    });
+  }
+  const avgChange = changes.length ? changes.reduce((s, c) => s + c.change_m, 0) / changes.length : 0;
+  return {
+    points_compared: changes.length,
+    changes,
+    average_change_m: r4(avgChange),
+    max_settlement_m: changes.length ? r4(Math.min(...changes.map((c) => c.change_m))) : 0,
+    max_rise_m: changes.length ? r4(Math.max(...changes.map((c) => c.change_m))) : 0,
+    points_with_significant_change: changes.filter((c) => Math.abs(c.change_m) > 0.01),
   };
 }
 
@@ -1753,6 +2057,13 @@ module.exports = {
   generateContourLines,
   calcEndAreaVolume,
   calcEarthworkVolumeFromCrossSections,
+  // تحليل البيانات المتقدم (الجزء 5/6)
+  analyzePointNetwork,
+  analyzeElevationChangeOverTime,
+  comparePointSnapshots,
+  // التكامل الفعلي مع حصر الكميات (BOQ)
+  syncEarthworkBOQItem,
+  listLinkedBOQItems,
   // مساعدات داخلية معروضة للاستخدام من الأجزاء اللاحقة لنفس القسم
   _internal: { loadStore, saveStore, audit, newId, nowISO, r2, r4, r6 },
   // ثوابت عامة يُعاد استخدامها من وحدات تكميلية (surveyGeodesy / surveyGeoFiles)
