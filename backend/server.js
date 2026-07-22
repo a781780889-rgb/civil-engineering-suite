@@ -65,6 +65,7 @@ const SURVEY_GEOFILES = require('./utils/surveyGeoFiles');
 const SURVEY_DEVICES = require('./utils/surveyDeviceImport');
 const SURVEY_FIELDWORK = require('./utils/surveyFieldwork');
 const SURVEY_DRAWINGS = require('./utils/surveyDrawings');
+const DMS = require('./utils/documentManagement');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -5464,6 +5465,87 @@ const API_HANDLERS = {
       return SURVEY_FIELDWORK.listSyncBatches(query);
     },
   },
+
+  // ===================================================================
+  // ===== القسم الحادي عشر (الجزء 1/10) - نظام إدارة المستندات (DMS):
+  // ===== البنية الأساسية، لوحة التحكم، رفع/تنزيل المستندات، الإصدارات
+  // ===================================================================
+
+  '/api/dms/reference-data': {
+    GET: async () => DMS.getReferenceData(),
+  },
+
+  '/api/dms/dashboard': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS.getDashboard(query?.projectId || null);
+    },
+  },
+
+  '/api/dms/documents': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS.listDocuments({
+        projectId: query?.projectId || null,
+        docType: query?.doc_type || null,
+        group: query?.group || null,
+        status: query?.status || null,
+        department: query?.department || null,
+        search: query?.search || null,
+        includeArchived: query?.includeArchived === 'true',
+        page: query?.page ? Number(query.page) : 1,
+        pageSize: query?.pageSize ? Number(query.pageSize) : 50,
+      });
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'create');
+      return DMS.uploadDocument(body);
+    },
+  },
+  '/api/dms/documents/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.id) throw new Error('معرّف المستند (id) مطلوب');
+      return DMS.getDocument(query.id);
+    },
+  },
+  '/api/dms/documents/download': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.id) throw new Error('معرّف المستند (id) مطلوب');
+      const token = getAuthToken(req);
+      return DMS.downloadDocument(query.id, { versionId: query.versionId || null, actor: token });
+    },
+  },
+  '/api/dms/documents/update': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'update');
+      if (!body.id) throw new Error('معرّف المستند (id) مطلوب');
+      const { id, ...rest } = body;
+      return DMS.updateDocumentMetadata(id, rest);
+    },
+  },
+  '/api/dms/documents/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'delete');
+      if (!body.id) throw new Error('معرّف المستند (id) مطلوب');
+      return DMS.deleteDocument(body.id, { hardDelete: !!body.hard_delete });
+    },
+  },
+  '/api/dms/documents/versions': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'create');
+      if (!body.document_id) throw new Error('معرّف المستند (document_id) مطلوب');
+      return DMS.uploadNewVersion(body.document_id, body);
+    },
+  },
+  '/api/dms/documents/versions/restore': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'update');
+      if (!body.document_id || !body.version_id) throw new Error('document_id و version_id مطلوبان');
+      return DMS.restoreVersion(body.document_id, body.version_id);
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -5542,5 +5624,20 @@ server.listen(PORT, () => {
     SURVEY.ensureSurveyRolesSeeded();
   } catch (e) {
     console.error('⚠️  تعذّرت تهيئة أدوار قسم المساحة:', e.message);
+  }
+
+  // الجزء الأول (1/10) من القسم الحادي عشر: ربط نظام إدارة المستندات بمحلّل
+  // المشاريع الفعلي (PM.getProject) للتحقق الحقيقي من وجود المشروع عند الربط
+  try {
+    DMS.setProjectResolver((id) => PM.getProject(id, { includeRelations: false }));
+  } catch (e) {
+    console.error('⚠️  تعذّر ربط محلّل المشاريع بنظام إدارة المستندات:', e.message);
+  }
+
+  // الجزء الأول (1/10) من القسم الحادي عشر: زرع أدوار قسم إدارة المستندات عند أول تشغيل
+  try {
+    DMS.ensureDmsRolesSeeded();
+  } catch (e) {
+    console.error('⚠️  تعذّرت تهيئة أدوار قسم إدارة المستندات:', e.message);
   }
 });
