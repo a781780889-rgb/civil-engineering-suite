@@ -70,6 +70,7 @@ const DMS_CAT = require('./utils/documentCategories');
 const DMS_WF = require('./utils/documentWorkflow');
 const DMS_SIG = require('./utils/documentSignature');
 const DMS_SEARCH = require('./utils/documentSearch');
+const DMS_SHARE = require('./utils/documentSharing');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -5833,6 +5834,97 @@ const API_HANDLERS = {
       const token = requirePermission(req, 'documents', 'update');
       if (!body?.document_id) throw new Error('معرّف المستند (document_id) مطلوب');
       return DMS_SEARCH.indexDocument(body.document_id, { actor: token || body?.actor || null });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الحادي عشر (الجزء 6/10) - نظام إدارة المستندات (DMS):
+  // ===== مشاركة المستندات (روابط آمنة + مشاركة داخلية بدون رابط)
+  // ===================================================================
+
+  '/api/dms/share/links': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_SHARE.listShareLinks({
+        documentId: query?.document_id || null,
+        projectId: query?.projectId || null,
+        includeRevoked: query?.includeRevoked !== 'false',
+      });
+    },
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'view');
+      const session = SEC.getSessionUser(token);
+      return DMS_SHARE.createShareLink({ ...body, created_by: session?.username || session?.id || null });
+    },
+  },
+  '/api/dms/share/links/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      if (!query?.id) throw new Error('معرّف الرابط (id) مطلوب');
+      return DMS_SHARE.getShareLink(query.id);
+    },
+  },
+  '/api/dms/share/links/revoke': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'update');
+      const session = SEC.getSessionUser(token);
+      if (!body?.id) throw new Error('معرّف الرابط (id) مطلوب');
+      return DMS_SHARE.revokeShareLink(body.id, { actor: session?.username || session?.id || null });
+    },
+  },
+
+  // نقطتا الوصول التاليتان مقصودتان للفتح العام (بدون تسجيل دخول) لأن هذا هو
+  // الغرض بالتحديد من "رابط مشاركة خارجي آمن" - الحماية هنا تتم عبر التوكن
+  // العشوائي غير القابل للتخمين وكلمة المرور الاختيارية وصلاحية الوقت، وليس عبر
+  // requirePermission (الذي يتطلب حساب مستخدم داخل النظام أصلاً).
+  '/api/dms/share/open': {
+    POST: async (body, _query, req) => {
+      if (!body?.token) throw new Error('رمز الرابط (token) مطلوب');
+      return DMS_SHARE.openShareLink(body.token, {
+        password: body.password || null,
+        ip: req?.socket?.remoteAddress || null,
+      });
+    },
+  },
+  '/api/dms/share/download': {
+    POST: async (body, _query, req) => {
+      if (!body?.token) throw new Error('رمز الرابط (token) مطلوب');
+      return DMS_SHARE.downloadViaShareLink(body.token, {
+        password: body.password || null,
+        ip: req?.socket?.remoteAddress || null,
+      });
+    },
+  },
+
+  '/api/dms/share/internal': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_SHARE.listInternalShares({
+        documentId: query?.document_id || null,
+        projectId: query?.projectId || null,
+        grantee: query?.grantee || null,
+        includeExpired: query?.includeExpired !== 'false',
+        includeRevoked: query?.includeRevoked !== 'false',
+      });
+    },
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'update');
+      const session = SEC.getSessionUser(token);
+      return DMS_SHARE.shareInternally({ ...body, granted_by: session?.username || session?.id || null });
+    },
+  },
+  '/api/dms/share/internal/revoke': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'documents', 'update');
+      const session = SEC.getSessionUser(token);
+      if (!body?.id) throw new Error('معرّف المشاركة (id) مطلوب');
+      return DMS_SHARE.revokeInternalShare(body.id, { actor: session?.username || session?.id || null });
+    },
+  },
+  '/api/dms/share/summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return DMS_SHARE.getSharingSummary({ projectId: query?.projectId || null });
     },
   },
 };
