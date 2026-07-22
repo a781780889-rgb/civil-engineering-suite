@@ -79,6 +79,7 @@ const DMS_BACKUP = require('./utils/documentBackup');
 const DMS_LINKS = require('./utils/documentModuleLinks');
 const DRAW = require('./utils/drawingManagement');
 const DRAW_VER = require('./utils/drawingVersions');
+const DRAW_VIEW = require('./utils/drawingViewer');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6460,6 +6461,74 @@ const API_HANDLERS = {
       const token = requirePermission(req, 'drawings', 'update');
       if (!body?.drawing_id || body?.version === undefined) throw new Error('معرّف المخطط (drawing_id) ورقم الإصدار (version) مطلوبان');
       return DRAW_VER.restoreVersion(body.drawing_id, body.version, { actor: token });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الثاني عشر - إدارة المخططات الهندسية - الجزء 3/10 =====
+  // ========================= عارض المخططات ===========================
+  // ===================================================================
+  '/api/drawings/viewer/measurements/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_VIEW.listMeasurements(query.drawing_id, query || {});
+    },
+  },
+  '/api/drawings/viewer/measurements/add': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_VIEW.addMeasurement(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/viewer/measurements/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.measurement_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف القياس (measurement_id) مطلوبان');
+      return DRAW_VIEW.deleteMeasurement(body.drawing_id, body.measurement_id, { actor: token });
+    },
+  },
+  '/api/drawings/viewer/coordinates/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_VIEW.listCoordinatePoints(query.drawing_id);
+    },
+  },
+  '/api/drawings/viewer/coordinates/add': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_VIEW.addCoordinatePoint(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/viewer/coordinates/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.point_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف النقطة (point_id) مطلوبان');
+      return DRAW_VIEW.deleteCoordinatePoint(body.drawing_id, body.point_id, { actor: token });
+    },
+  },
+  '/api/drawings/viewer/open-multiple': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'view');
+      if (!Array.isArray(body?.drawing_ids)) throw new Error('قائمة معرّفات المخططات (drawing_ids) مطلوبة');
+      return DRAW_VIEW.openMultipleDrawings(body.drawing_ids, { include_file: !!body.include_file, actor: token });
+    },
+  },
+  '/api/drawings/viewer/state/get': {
+    GET: async (_body, query, req) => {
+      const token = requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_VIEW.getViewerState(query.drawing_id, { actor: token });
+    },
+  },
+  '/api/drawings/viewer/state/save': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_VIEW.saveViewerState(body.drawing_id, { ...body, actor: token });
     },
   },
 };
