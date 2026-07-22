@@ -62,6 +62,8 @@ const SURVEY_REPORTS = require('./utils/surveyReports');
 const SURVEY_AI = require('./utils/surveyAI');
 const SURVEY_GEODESY = require('./utils/surveyGeodesy');
 const SURVEY_GEOFILES = require('./utils/surveyGeoFiles');
+const SURVEY_DEVICES = require('./utils/surveyDeviceImport');
+const SURVEY_FIELDWORK = require('./utils/surveyFieldwork');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -5239,6 +5241,154 @@ const API_HANDLERS = {
       requirePermission(req, 'survey', 'view');
       if (!body.content) throw new Error('محتوى الملف (content) مطلوب: نص ملف IFC (STEP ASCII)');
       return SURVEY_GEOFILES.importPointsFromIFC(body.content);
+    },
+  },
+
+  // ============================================================================
+  // ===== التكامل مع أجهزة المساحة (Total Station / GNSS-RTK / Digital Level /
+  // =====                            Laser Scanner / Drone Survey) =============
+  // ============================================================================
+  '/api/survey/devices/import/total-station': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      if (!body.content) throw new Error('محتوى ملف الجهاز (content) مطلوب');
+      return SURVEY_DEVICES.importTotalStationFile(body.content, { format: body.format, project_id: body.project_id });
+    },
+  },
+  '/api/survey/devices/import/gnss': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      if (!body.content) throw new Error('محتوى ملف NMEA-0183 (content) مطلوب');
+      return SURVEY_DEVICES.importGNSSFile(body.content, { project_id: body.project_id });
+    },
+  },
+  '/api/survey/devices/import/digital-level': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      if (!body.content) throw new Error('محتوى ملف الميزان الرقمي (content) مطلوب');
+      return SURVEY_DEVICES.importDigitalLevelFile(body.content, { project_id: body.project_id, startElevation: body.startElevation });
+    },
+  },
+  '/api/survey/devices/import/laser-scanner': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      if (!body.content) throw new Error('محتوى ملف سحابة النقاط (content) مطلوب');
+      return SURVEY_DEVICES.importLaserScannerFile(body.content, { project_id: body.project_id, maxPoints: body.maxPoints });
+    },
+  },
+  '/api/survey/devices/import/drone-gcp': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      if (!body.content) throw new Error('محتوى ملف نقاط GCP (content) مطلوب');
+      return SURVEY_DEVICES.importDroneGCPFile(body.content, { project_id: body.project_id });
+    },
+  },
+  '/api/survey/devices/imports': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY_DEVICES.listDeviceImports(query);
+    },
+  },
+  '/api/survey/devices/imports/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!query.id) throw new Error('معرّف سجل الاستيراد (id) مطلوب');
+      return { success: true, data: SURVEY_DEVICES.getDeviceImport(query.id) };
+    },
+  },
+  '/api/survey/devices/imports/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'delete');
+      if (!body.id) throw new Error('معرّف سجل الاستيراد (id) مطلوب');
+      return SURVEY_DEVICES.deleteDeviceImport(body.id);
+    },
+  },
+  '/api/survey/devices/imports/commit': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      if (!body.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+      if (!Array.isArray(body.points)) throw new Error('مصفوفة points مطلوبة (النقاط المراد حفظها كنقاط تحكم فعلية)');
+      return SURVEY_DEVICES.commitImportedPointsToProject(body.project_id, body.points);
+    },
+  },
+
+  // ============================================================================
+  // ================== إدارة الأعمال الميدانية (Field Operations) =============
+  // ================== + العمل دون اتصال (Offline Mode) والمزامنة =============
+  // ============================================================================
+  '/api/survey/fieldwork/tasks': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY_FIELDWORK.listFieldTasks(query);
+    },
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      return SURVEY_FIELDWORK.createFieldTask(body);
+    },
+  },
+  '/api/survey/fieldwork/tasks/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      if (!query.id) throw new Error('معرّف المهمة (id) مطلوب');
+      return { success: true, data: SURVEY_FIELDWORK.getFieldTask(query.id) };
+    },
+  },
+  '/api/survey/fieldwork/tasks/update': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'update');
+      if (!body.id) throw new Error('معرّف المهمة (id) مطلوب');
+      return SURVEY_FIELDWORK.updateFieldTask(body.id, body);
+    },
+  },
+  '/api/survey/fieldwork/tasks/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'delete');
+      if (!body.id) throw new Error('معرّف المهمة (id) مطلوب');
+      return SURVEY_FIELDWORK.deleteFieldTask(body.id);
+    },
+  },
+  '/api/survey/fieldwork/visits': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY_FIELDWORK.listFieldVisits(query);
+    },
+  },
+  '/api/survey/fieldwork/visits/check-in': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      return SURVEY_FIELDWORK.checkInFieldVisit(body);
+    },
+  },
+  '/api/survey/fieldwork/visits/check-out': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'update');
+      if (!body.id) throw new Error('معرّف الزيارة (id) مطلوب');
+      return SURVEY_FIELDWORK.checkOutFieldVisit(body.id, body);
+    },
+  },
+  '/api/survey/fieldwork/visits/photo': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'update');
+      if (!body.visit_id) throw new Error('معرّف الزيارة (visit_id) مطلوب');
+      return SURVEY_FIELDWORK.addFieldVisitPhoto(body.visit_id, body);
+    },
+  },
+  '/api/survey/fieldwork/teams-status': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY_FIELDWORK.getTeamsStatus(query);
+    },
+  },
+  '/api/survey/fieldwork/sync': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'create');
+      return SURVEY_FIELDWORK.syncFieldworkBatch(body);
+    },
+  },
+  '/api/survey/fieldwork/sync/batches': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY_FIELDWORK.listSyncBatches(query);
     },
   },
 };
