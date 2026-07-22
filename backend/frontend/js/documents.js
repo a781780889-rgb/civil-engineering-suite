@@ -149,8 +149,22 @@ async function dmsLoadDashboard() {
           </div>`).join('')
         : '<div class="pm-activity-item">لا توجد موافقات بعد (تُفعَّل ضمن الجزء 3/10)</div>';
     }
+    dmsAppendSignaturesSummaryCards(cardsEl);
   } catch (e) {
     cardsEl.innerHTML = `<div class="result-card" style="color:#c0392b">${e.message}</div>`;
+  }
+}
+
+/** يضيف بطاقتي "إجمالي التوقيعات" و"توقيعات ملغاة" بجانب بطاقات لوحة تحكم DMS الأساسية،
+ * بدون التأثير على تحميل بقية اللوحة إن تعذّر جلب ملخص التوقيعات لأي سبب. */
+async function dmsAppendSignaturesSummaryCards(cardsEl) {
+  if (!cardsEl) return;
+  try {
+    const { data } = await dmsFetch('/signatures/summary');
+    const card = (value, label) => `<div class="result-card"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+    cardsEl.insertAdjacentHTML('beforeend', card(data.total_signatures, 'إجمالي التوقيعات الإلكترونية') + card(data.revoked_signatures, 'توقيعات ملغاة'));
+  } catch (e) {
+    // تجاهل صامت - لوحة التحكم الأساسية أهم من هذا الملخص الإضافي
   }
 }
 
@@ -283,6 +297,9 @@ async function dmsViewDocument(docId) {
         <h4 style="margin-top:16px">سير عمل الاعتماد (الجزء 3/10)</h4>
         <div id="dms-doc-wf-panel" class="pm-activity-log" style="margin-bottom:12px">جارِ تحميل حالة سير العمل...</div>
 
+        <h4 style="margin-top:16px">التوقيع الإلكتروني (الجزء 4/10)</h4>
+        <div id="dms-doc-sig-panel" class="pm-activity-log" style="margin-bottom:12px">جارِ تحميل سجل التوقيعات...</div>
+
         <h4 style="margin-top:16px">رفع إصدار جديد</h4>
         <div class="toolbar" style="flex-wrap:wrap">
           <input type="file" id="dms-new-version-file" />
@@ -323,6 +340,7 @@ async function dmsViewDocument(docId) {
       btn.addEventListener('click', () => dmsRestoreVersion(docId, btn.dataset.dmsRestoreVersion));
     });
     dmsLoadDocWorkflowPanel(docId);
+    dmsLoadDocSignaturePanel(docId);
   } catch (e) {
     panel.innerHTML = `<div class="result-card" style="color:#c0392b">${e.message}</div>`;
   }
@@ -565,6 +583,130 @@ async function dmsLoadActiveWorkflowForType() {
     `;
   } catch (e) {
     viewEl.innerHTML = `<p style="color:#c0392b">${e.message}</p>`;
+  }
+}
+
+// ============================================================
+// الجزء 4/10: التوقيع الإلكتروني
+// ============================================================
+
+const DMS_SIG_BADGE = {
+  valid: 'dms-badge dms-badge-success',
+  invalid_signature_tampered: 'dms-badge dms-badge-danger',
+  revoked: 'dms-badge',
+  document_modified_after_signing: 'dms-badge dms-badge-warning',
+};
+const DMS_SIG_STATUS_LABEL = {
+  valid: 'صالح',
+  invalid_signature_tampered: 'تم العبث به - غير أصيل',
+  revoked: 'ملغى',
+  document_modified_after_signing: 'المستند تغيّر بعد التوقيع',
+};
+
+/** يعرض داخل تفاصيل المستند: سياسة التوقيع، حالة الاكتمال، نموذج توقيع، وسجل التوقيعات */
+async function dmsLoadDocSignaturePanel(docId) {
+  const el = document.getElementById('dms-doc-sig-panel');
+  if (!el) return;
+  el.innerHTML = 'جارِ تحميل سجل التوقيعات...';
+  try {
+    const { data } = await dmsFetch('/documents/signatures', { query: { id: docId } });
+
+    const nextLevelLine = data.is_signature_complete
+      ? '<div class="alert-info">اكتملت جميع مستويات التوقيع المطلوبة لهذا المستند.</div>'
+      : `<p><strong>المستوى المستحق التالي:</strong> ${Array.isArray(data.next_required_level) ? data.next_required_level.map((l) => l.label).join('، ') : data.next_required_level.label}</p>`;
+
+    const sigRows = data.signatures.length
+      ? data.signatures.map((s) => `
+        <tr>
+          <td>${s.level_label}</td>
+          <td>${s.signer_name}</td>
+          <td>${s.signer_role}</td>
+          <td>${s.decision === 'approved' ? 'اعتماد' : 'رفض'}</td>
+          <td>${new Date(s.signed_at).toLocaleString('ar-SA')}</td>
+          <td>${s.revoked ? `<span class="dms-badge">ملغى: ${s.revoked_reason}</span>` : '<span class="dms-badge dms-badge-success">ساري</span>'}</td>
+          <td>
+            <button class="btn btn-sm" data-dms-sig-verify="${s.id}">تحقّق</button>
+            ${!s.revoked ? `<button class="btn btn-sm" data-dms-sig-revoke="${s.id}">إلغاء</button>` : ''}
+          </td>
+        </tr>`).join('')
+      : '<tr><td colspan="7">لا توجد توقيعات مسجَّلة بعد لهذا المستند</td></tr>';
+
+    el.innerHTML = `
+      <p><strong>سياسة التوقيع:</strong> ${data.policy_name} (${data.signed_levels_count}/${data.total_levels_required} مستويات موقَّعة)</p>
+      ${nextLevelLine}
+      <div class="toolbar" style="flex-wrap:wrap;margin:8px 0">
+        <input type="text" id="dms-sig-name" placeholder="اسم الموقّع">
+        <input type="text" id="dms-sig-role" placeholder="دور الموقّع (مثال: engineer)">
+        <select id="dms-sig-decision">
+          <option value="approved">اعتماد</option>
+          <option value="rejected">رفض</option>
+        </select>
+        <input type="text" id="dms-sig-comments" placeholder="ملاحظات (اختياري)">
+        <button class="btn btn-primary" id="dms-sig-btn-sign" ${data.is_signature_complete ? 'disabled' : ''}>توقيع إلكتروني</button>
+      </div>
+      <div id="dms-sig-action-error" style="color:#c0392b"></div>
+      <div id="dms-sig-verify-result" style="margin:6px 0"></div>
+      <table class="data-table" style="margin-top:8px">
+        <thead><tr><th>المستوى</th><th>الموقّع</th><th>الدور</th><th>القرار</th><th>الختم الزمني</th><th>الحالة</th><th></th></tr></thead>
+        <tbody>${sigRows}</tbody>
+      </table>
+    `;
+
+    const signBtn = document.getElementById('dms-sig-btn-sign');
+    if (signBtn) signBtn.addEventListener('click', () => dmsSignDocumentAction(docId));
+    el.querySelectorAll('[data-dms-sig-verify]').forEach((btn) => {
+      btn.addEventListener('click', () => dmsVerifySignatureAction(docId, btn.dataset.dmsSigVerify));
+    });
+    el.querySelectorAll('[data-dms-sig-revoke]').forEach((btn) => {
+      btn.addEventListener('click', () => dmsRevokeSignatureAction(docId, btn.dataset.dmsSigRevoke));
+    });
+  } catch (e) {
+    el.innerHTML = `<p style="color:#c0392b">${e.message}</p>`;
+  }
+}
+
+async function dmsSignDocumentAction(docId) {
+  const errEl = document.getElementById('dms-sig-action-error');
+  errEl.textContent = '';
+  try {
+    const signer_name = document.getElementById('dms-sig-name').value || null;
+    const signer_role = document.getElementById('dms-sig-role').value || null;
+    const decision = document.getElementById('dms-sig-decision').value;
+    const comments = document.getElementById('dms-sig-comments').value || '';
+    if (!signer_name || !signer_role) throw new Error('يجب إدخال اسم الموقّع ودوره');
+    await dmsFetch('/documents/sign', {
+      method: 'POST', body: { document_id: docId, signer_name, signer_role, decision, comments },
+    });
+    dmsLoadDocSignaturePanel(docId);
+    dmsLoadDocuments();
+    dmsLoadDashboard();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function dmsVerifySignatureAction(docId, signatureId) {
+  const resultEl = document.getElementById('dms-sig-verify-result');
+  if (!resultEl) return;
+  resultEl.textContent = 'جارِ التحقق...';
+  try {
+    const { data } = await dmsFetch('/documents/signatures/verify', { query: { id: docId, signatureId } });
+    resultEl.innerHTML = `<span class="${DMS_SIG_BADGE[data.integrity_status] || 'dms-badge'}">نتيجة التحقق: ${DMS_SIG_STATUS_LABEL[data.integrity_status] || data.integrity_status}</span> — موقّع بواسطة ${data.signed_by} (${data.signed_role}) بتاريخ ${new Date(data.signed_at).toLocaleString('ar-SA')}`;
+  } catch (e) {
+    resultEl.innerHTML = `<span style="color:#c0392b">${e.message}</span>`;
+  }
+}
+
+async function dmsRevokeSignatureAction(docId, signatureId) {
+  const reason = prompt('يرجى توضيح سبب إلغاء هذا التوقيع:');
+  if (!reason || !reason.trim()) return;
+  try {
+    await dmsFetch('/documents/signatures/revoke', {
+      method: 'POST', body: { document_id: docId, signature_id: signatureId, reason },
+    });
+    dmsLoadDocSignaturePanel(docId);
+  } catch (e) {
+    alert(`تعذّر إلغاء التوقيع: ${e.message}`);
   }
 }
 
