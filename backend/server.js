@@ -73,6 +73,7 @@ const DMS_SEARCH = require('./utils/documentSearch');
 const DMS_SHARE = require('./utils/documentSharing');
 const DMS_NOTIF = require('./utils/documentNotifications');
 DMS_NOTIF.attachToSharingModule();
+const DMS_REPORTS = require('./utils/documentReports');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -5980,6 +5981,139 @@ const API_HANDLERS = {
     POST: async (_body, _query, req) => {
       requirePermission(req, 'documents', 'manage');
       return DMS_NOTIF.checkDocumentExpiry();
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الحادي عشر (الجزء 8/10) - نظام إدارة المستندات (DMS):
+  // ===== التقارير الاحترافية (PDF/Excel/CSV/Word/طباعة)
+  // ===================================================================
+
+  '/api/dms/reports/documents': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return {
+        success: true,
+        report: DMS_REPORTS.buildDocumentsReport({
+          projectId: query?.projectId || null, docType: query?.doc_type || null, group: query?.group || null,
+          status: query?.status || null, department: query?.department || null,
+          includeArchived: query?.includeArchived !== 'false',
+          dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/dms/reports/versions': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return {
+        success: true,
+        report: DMS_REPORTS.buildVersionsReport({
+          documentId: query?.document_id || null, projectId: query?.projectId || null,
+          dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/dms/reports/approvals': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return {
+        success: true,
+        report: DMS_REPORTS.buildApprovalsReport({
+          documentId: query?.document_id || null, projectId: query?.projectId || null, decision: query?.decision || null,
+          dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/dms/reports/users-activity': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return {
+        success: true,
+        report: DMS_REPORTS.buildUsersActivityReport({
+          projectId: query?.projectId || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/dms/reports/activity-log': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return {
+        success: true,
+        report: DMS_REPORTS.buildActivityLogReport({
+          projectId: query?.projectId || null, documentId: query?.document_id || null,
+          actor: query?.actor || null, action: query?.action || null,
+          dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/dms/reports/archive': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return {
+        success: true,
+        report: DMS_REPORTS.buildArchiveReport({
+          projectId: query?.projectId || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+        }),
+      };
+    },
+  },
+  '/api/dms/reports/expiring': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return {
+        success: true,
+        report: DMS_REPORTS.buildExpiringDocumentsReport({
+          projectId: query?.projectId || null,
+          onlyExpired: query?.onlyExpired === 'true',
+          withinDays: query?.withinDays ? Number(query.withinDays) : null,
+        }),
+      };
+    },
+  },
+  '/api/dms/reports/executive': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'documents', 'view');
+      return { success: true, report: DMS_REPORTS.buildExecutiveReport({ projectId: query?.projectId || null }) };
+    },
+  },
+  '/api/dms/reports/export/pdf': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      const result = DMS_REPORTS.exportDmsReportToPDF(body.report, { projectName: body.projectName, engineerName: body.engineerName });
+      return { success: true, ...result };
+    },
+  },
+  '/api/dms/reports/export/excel': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      const result = DMS_REPORTS.exportDmsReportToExcel(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/dms/reports/export/csv': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      const result = DMS_REPORTS.exportDmsReportToCSV(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/dms/reports/export/word': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      const result = DMS_REPORTS.exportDmsReportToWord(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/dms/reports/export/print': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'documents', 'view');
+      const result = DMS_REPORTS.exportDmsReportToPrintableHTML(body.report, { projectName: body.projectName });
+      return { success: true, ...result };
     },
   },
 };
