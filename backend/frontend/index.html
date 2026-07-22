@@ -272,6 +272,9 @@
     <div class="nav-item" data-panel="dms-documents">
       <span class="nav-icon">🗂️</span> جميع المستندات والبحث
     </div>
+    <div class="nav-item" data-panel="dms-smart-search">
+      <span class="nav-icon">🔎</span> البحث الذكي المتقدم
+    </div>
     <div class="nav-item" data-panel="dms-categories">
       <span class="nav-icon">📁</span> المجلدات والأرشفة
     </div>
@@ -4170,6 +4173,84 @@
       </div>
     </section>
 
+    <!-- ============ القسم الحادي عشر (الجزء 5/10): البحث الذكي المتقدم ============ -->
+    <section class="calc-panel" id="panel-dms-smart-search">
+      <div class="calc-card">
+        <h2>القسم الحادي عشر — البحث الذكي المتقدم</h2>
+        <p class="muted">
+          بحث موحّد بالاسم، الرقم المرجعي، الكلمات المفتاحية، وداخل محتوى ملفات PDF وWord فعلياً
+          (وليس فقط أسماء الملفات)، مع فلاتر دقيقة وترتيب النتائج حسب درجة التطابق.
+        </p>
+
+        <div class="toolbar" style="flex-wrap:wrap">
+          <input type="text" id="dmsq-query" placeholder="ابحث في العنوان، الرقم، الكلمات المفتاحية، أو داخل محتوى الملف...">
+          <button class="btn btn-primary" id="dmsq-btn-search">بحث</button>
+          <button class="btn" id="dmsq-btn-toggle-filters">فلاتر متقدمة</button>
+        </div>
+
+        <div id="dmsq-filters" class="toolbar" style="flex-wrap:wrap;display:none">
+          <select id="dmsq-f-group" class="dms-group-select" data-keep-first-option="true">
+            <option value="">كل الأقسام</option>
+          </select>
+          <select id="dmsq-f-type" class="dms-doc-type-select" data-keep-first-option="true">
+            <option value="">كل الأنواع</option>
+          </select>
+          <select id="dmsq-f-status" class="dms-status-select" data-keep-first-option="true">
+            <option value="">كل الحالات</option>
+          </select>
+          <input type="text" id="dmsq-f-project" placeholder="المشروع (اختياري) PRJ-...">
+          <input type="text" id="dmsq-f-department" placeholder="القسم/الإدارة (اختياري)">
+          <input type="number" id="dmsq-f-version" placeholder="رقم الإصدار" min="1" style="width:110px">
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px">
+            من <input type="date" id="dmsq-f-date-from" style="width:auto">
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px">
+            إلى <input type="date" id="dmsq-f-date-to" style="width:auto">
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px">
+            <input type="checkbox" id="dmsq-f-include-content" checked style="width:auto"> البحث داخل محتوى الملفات
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px">
+            <input type="checkbox" id="dmsq-f-include-archived" style="width:auto"> تضمين المؤرشف
+          </label>
+        </div>
+
+        <div id="dmsq-error" style="color:#c0392b;margin-top:8px"></div>
+        <div id="dmsq-summary" class="muted" style="margin-top:8px"></div>
+
+        <table class="data-table" style="margin-top:12px">
+          <thead>
+            <tr><th>رقم المستند</th><th>العنوان</th><th>النوع</th><th>الحالة</th><th>مواضع التطابق</th><th>مقتطف</th><th></th></tr>
+          </thead>
+          <tbody id="dmsq-results-tbody"><tr><td colspan="7">استخدم مربع البحث أعلاه لعرض النتائج</td></tr></tbody>
+        </table>
+        <div class="toolbar" id="dmsq-pagination" style="margin-top:10px"></div>
+
+        <hr style="margin:20px 0">
+
+        <h3>البحث داخل مستند محدد (كل مواضع التطابق)</h3>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <input type="text" id="dmsq-wd-doc-id" placeholder="معرّف المستند (id)">
+          <input type="text" id="dmsq-wd-query" placeholder="نص البحث داخل هذا المستند">
+          <button class="btn btn-primary" id="dmsq-btn-within-doc">بحث داخل المستند</button>
+        </div>
+        <div id="dmsq-within-doc-result" class="pm-activity-log" style="margin-top:12px"></div>
+
+        <hr style="margin:20px 0">
+
+        <h3>حالة الفهرسة وصيانتها</h3>
+        <div class="toolbar" style="flex-wrap:wrap">
+          <button class="btn" id="dmsq-btn-index-status">عرض حالة الفهرسة</button>
+          <button class="btn btn-primary" id="dmsq-btn-reindex-all">إعادة فهرسة جميع المستندات الآن</button>
+        </div>
+        <div id="dmsq-index-status" class="pm-activity-log" style="margin-top:12px"></div>
+        <p style="color:#666;font-size:13px;margin-top:8px">
+          الفهرسة تتم تلقائياً عند رفع أي مستند أو إصدار جديد بصيغة PDF أو Word (.docx). استخدم
+          "إعادة فهرسة جميع المستندات" فقط بعد استيراد بيانات يدوياً أو لأغراض الصيانة.
+        </p>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -4272,6 +4353,7 @@
 <script src="js/survey.js"></script>
 <script src="js/surveyMapsDrawings.js"></script>
 <script src="js/documents.js"></script>
-<script src="js/documentCategories.js"></script>
+<script src="js/documentCategories.frontend.js"></script>
+<script src="js/documentSearch.js"></script>
 </body>
 </html>
