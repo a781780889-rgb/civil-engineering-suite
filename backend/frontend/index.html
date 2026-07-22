@@ -17,7 +17,25 @@
       <div class="subtitle">اعداد وبرمجة المهندس / هيثم العقلاني — 967781780889+</div>
     </div>
   </div>
-  <div class="section-badge">القسم 01 / حاسبة الخرسانة</div>
+  <div class="header-right">
+    <div class="dms-bell-wrap" id="dms-bell-wrap">
+      <button class="dms-bell-btn" id="dms-bell-btn" title="الإشعارات" aria-label="الإشعارات">
+        🔔
+        <span class="dms-bell-badge" id="dms-bell-badge" style="display:none">0</span>
+      </button>
+      <div class="dms-bell-dropdown" id="dms-bell-dropdown" style="display:none">
+        <div class="dms-bell-dropdown-head">
+          <strong>الإشعارات</strong>
+          <button class="btn btn-sm" id="dms-bell-mark-all">تعليم الكل كمقروء</button>
+        </div>
+        <div class="dms-bell-list" id="dms-bell-list">جارِ التحميل...</div>
+        <div class="dms-bell-dropdown-foot">
+          <a href="#" id="dms-bell-view-all">عرض كل الإشعارات ›</a>
+        </div>
+      </div>
+    </div>
+    <div class="section-badge">القسم 01 / حاسبة الخرسانة</div>
+  </div>
 </header>
 
 <div class="app-layout">
@@ -280,6 +298,9 @@
     </div>
     <div class="nav-item" data-panel="dms-approvals">
       <span class="nav-icon">✅</span> سير عمل الاعتماد
+    </div>
+    <div class="nav-item" data-panel="dms-notifications">
+      <span class="nav-icon">🔔</span> الإشعارات
     </div>
     <div class="nav-item" data-panel="dms-backup">
       <span class="nav-icon">🗄️</span> النسخ الاحتياطي والاستعادة
@@ -4254,6 +4275,37 @@
       </div>
     </section>
 
+    <!-- ============ القسم الحادي عشر: الإشعارات ============ -->
+    <section class="calc-panel" id="panel-dms-notifications">
+      <div class="calc-card">
+        <h2>القسم الحادي عشر — الإشعارات</h2>
+        <p class="muted">
+          تنبيهات فعلية عند رفع مستند جديد، تعديله، اعتماده أو رفضه، انتهاء صلاحيته، طلب مراجعة له، أو
+          مشاركته مع آخرين، مبنيّة على سجل التدقيق الحقيقي للنظام وليست رسائل تجريبية.
+        </p>
+
+        <div class="toolbar" style="flex-wrap:wrap">
+          <input type="text" id="dms-notif-filter-project" placeholder="فلترة حسب المشروع (اختياري) PRJ-...">
+          <label style="display:flex;align-items:center;gap:6px">
+            <input type="checkbox" id="dms-notif-unread-only" style="width:auto"> غير المقروء فقط
+          </label>
+          <button class="btn btn-primary" id="dms-notif-btn-refresh">تحديث</button>
+          <button class="btn" id="dms-notif-btn-mark-all">تعليم الكل كمقروء</button>
+          <button class="btn" id="dms-notif-btn-check-expiry">فحص المستندات المنتهية الآن</button>
+        </div>
+
+        <div id="dms-notif-summary" class="pm-activity-log" style="margin-top:10px"></div>
+
+        <table class="data-table" style="margin-top:12px">
+          <thead>
+            <tr><th>النوع</th><th>الرسالة</th><th>المستند</th><th>المشروع</th><th>التاريخ</th><th>الحالة</th><th></th></tr>
+          </thead>
+          <tbody id="dms-notif-tbody"><tr><td colspan="7">اضغط "تحديث" لعرض الإشعارات</td></tr></tbody>
+        </table>
+        <div class="toolbar" id="dms-notif-pagination" style="margin-top:10px"></div>
+      </div>
+    </section>
+
     <!-- ============ القسم الحادي عشر: النسخ الاحتياطي والاستعادة ============ -->
     <section class="calc-panel" id="panel-dms-backup">
       <div class="calc-card">
@@ -4373,5 +4425,6 @@
 <script src="js/documentSearch.js"></script>
 <script src="js/documentAI.js"></script>
 <script src="js/documentBackup.js"></script>
+<script src="js/documentNotifications.js"></script>
 </body>
 </html>
