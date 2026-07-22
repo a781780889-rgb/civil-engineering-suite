@@ -4866,6 +4866,38 @@ const API_HANDLERS = {
   },
 
   // ===================================================================
+  // القسم العاشر - تحليل البيانات المتقدم (Advanced Data Analysis)
+  // ===================================================================
+  '/api/survey/analysis/point-network': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY.analyzePointNetwork(body) };
+    },
+  },
+  '/api/survey/analysis/elevation-change': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY.analyzeElevationChangeOverTime(body) };
+    },
+  },
+  '/api/survey/analysis/compare-point-snapshots': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return { success: true, data: SURVEY.comparePointSnapshots(body) };
+    },
+  },
+
+  // ===================================================================
+  // القسم العاشر - التكامل الفعلي مع حصر الكميات (BOQ Auto-Link)
+  // ===================================================================
+  '/api/survey/boq-links': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'survey', 'view');
+      return SURVEY.listLinkedBOQItems(query);
+    },
+  },
+
+  // ===================================================================
   // القسم العاشر - التوقيع المساحي (Survey Stakeout / Setting-Out)
   // ===================================================================
 
