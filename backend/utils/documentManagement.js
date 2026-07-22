@@ -467,7 +467,7 @@ function updateDocumentMetadata(id, patch = {}, { actor = null } = {}) {
   const doc = store.documents[id];
   if (!doc) throw new Error('المستند غير موجود');
 
-  const allowedFields = ['title', 'description', 'keywords', 'department', 'doc_type'];
+  const allowedFields = ['title', 'description', 'keywords', 'department', 'doc_type', 'expiry_date'];
   for (const field of allowedFields) {
     if (patch[field] === undefined) continue;
     if (field === 'doc_type') {
