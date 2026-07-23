@@ -250,6 +250,7 @@ async function drawRenderList() {
           <button class="btn btn-sm btn-outline" onclick="drawOpenViewerPanel('${d.id}')">العارض</button>
           <button class="btn btn-sm btn-outline" onclick="drawOpenLayersPanel('${d.id}')">الطبقات</button>
           <button class="btn btn-sm btn-outline" onclick="drawOpenReviewsPanel('${d.id}')">مراجعة</button>
+          <button class="btn btn-sm btn-outline" onclick="drawOpenCommentsPanel('${d.id}')">تعليقات</button>
           <button class="btn btn-sm btn-outline" onclick="drawDeleteDrawing('${d.id}')">حذف</button>
         </td>
       </tr>`).join('');
