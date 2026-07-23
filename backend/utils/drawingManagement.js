@@ -10,7 +10,7 @@
  *  2/10: إدارة الإصدارات المتقدمة (نسخ متعددة، فروقات، استعادة، سجل تعديلات) (منجَز - drawingVersions.js)
  *  3/10: عارض المخططات (بيانات القياس/الطبقات/الإحداثيات - طبقة API خلفية)
  *  4/10: إدارة الطبقات (Layers) الوصفية
- *  5/10: مراجعة المخططات (إرسال/مراجعة/رفض/إعادة/اعتماد نهائي)
+ *  5/10: مراجعة المخططات (إرسال/مراجعة/رفض/إعادة/اعتماد نهائي) (منجَز - drawingReviews.js)
  *  6/10: التعليقات والملاحظات المثبّتة على المخطط
  *  7/10: مقارنة المخططات (فرق بين إصدارين)
  *  8/10: الاعتمادات المتعددة المستويات (داخلي/استشاري/عميل/مقاول) + توقيع
@@ -42,6 +42,17 @@ const DB_FILE = path.join(DATA_DIR, 'drawings.json');
 
 let PM = null;
 try { PM = require('./projectManagement'); } catch (e) { PM = null; }
+
+// require كسول لتفادي أي اعتمادية دائرية مع drawingReviews.js (الجزء 5/10)
+// الذي يستورد هو نفسه drawingManagement._internal عند التحميل.
+function getReviewCount() {
+  try {
+    // eslint-disable-next-line global-require
+    return require('./drawingReviews').getReviewCountForDashboard();
+  } catch (e) {
+    return 0;
+  }
+}
 
 // ===================== أدوات مساعدة عامة =====================
 function nowISO() { return new Date().toISOString(); }
@@ -390,8 +401,8 @@ function getDashboardStats() {
       rejected: byStatus.rejected || 0,
       total_versions: db.versions.length, // محسوبة فعلياً - تشمل كل إصدارات كل المخططات (الجزء 1/10 + 2/10)
       total_projects: projectIds.size,
-      // ستُحسب هذه الأرقام فعلياً عند إنجاز الجزء 5/10 و 6/10 (المراجعات والتعليقات)
-      total_reviews: 0,
+      total_reviews: getReviewCount(), // محسوبة فعلياً من سجل المراجعات (الجزء 5/10)
+      // ستُحسب هذه الأرقام فعلياً عند إنجاز الجزء 6/10 (التعليقات)
       total_comments: 0,
     },
     by_status: byStatus,
