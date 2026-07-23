@@ -88,6 +88,7 @@ const DRAW_COMPARE = require('./utils/drawingComparison');
 const DRAW_BIM = require('./utils/drawingBIM');
 const DRAW_NOTIF = require('./utils/drawingNotifications');
 const DRAW_REPORTS = require('./utils/drawingReports');
+const DRAW_AI = require('./utils/drawingAI');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -7151,6 +7152,93 @@ const API_HANDLERS = {
       if (!body?.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
       const result = DRAW_REPORTS.exportDrawingReportToPrintableHTML(body.report, { projectName: body.projectName });
       return { success: true, ...result };
+    },
+  },
+
+  // ===================================================================
+  // القسم الثاني عشر (الجزء 10/10) - المساعد الذكي للمخططات (Drawings AI)
+  // ===================================================================
+
+  '/api/drawings/ai/status': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return { success: true, available: DRAW_AI.isAIAvailable() };
+    },
+  },
+  '/api/drawings/ai/analyze': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.drawingId) throw new Error('drawingId مطلوب');
+      return DRAW_AI.analyzeDrawing({ drawingId: body.drawingId });
+    },
+  },
+  '/api/drawings/ai/conflicts': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return DRAW_AI.detectCrossDisciplineConflicts({ projectId: body?.projectId || null, drawingId: body?.drawingId || null });
+    },
+  },
+  '/api/drawings/ai/compare': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.drawingId) throw new Error('drawingId مطلوب');
+      return DRAW_AI.autoCompareVersions({
+        drawingId: body.drawingId, versionA: body.versionA || null, versionB: body.versionB || null,
+      });
+    },
+  },
+  '/api/drawings/ai/missing-elements': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.drawingId) throw new Error('drawingId مطلوب');
+      return DRAW_AI.detectMissingElements({ drawingId: body.drawingId });
+    },
+  },
+  '/api/drawings/ai/code-compliance': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.drawingId) throw new Error('drawingId مطلوب');
+      return DRAW_AI.reviewCodeCompliance({ drawingId: body.drawingId, codeStandard: body.codeStandard || null });
+    },
+  },
+  '/api/drawings/ai/design-improvements': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.drawingId) throw new Error('drawingId مطلوب');
+      return DRAW_AI.suggestDesignImprovements({ drawingId: body.drawingId });
+    },
+  },
+  '/api/drawings/ai/revision-impact': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.drawingId) throw new Error('drawingId مطلوب');
+      return DRAW_AI.analyzeRevisionImpact({
+        drawingId: body.drawingId,
+        versionA: body.versionA || null,
+        versionB: body.versionB || null,
+        changeDescription: body.changeDescription || null,
+      });
+    },
+  },
+  '/api/drawings/ai/summarize-review': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.drawingId) throw new Error('drawingId مطلوب');
+      return DRAW_AI.summarizeReview({ drawingId: body.drawingId, reviewId: body.reviewId || null });
+    },
+  },
+  '/api/drawings/ai/classify': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return DRAW_AI.autoClassifyDrawing({
+        drawingId: body?.drawingId || null, name: body?.name || null, description: body?.description || null,
+      });
+    },
+  },
+  '/api/drawings/ai/management-report': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return DRAW_AI.generateManagementInsightReport({ projectId: body?.projectId || null });
     },
   },
 };
