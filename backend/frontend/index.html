@@ -328,6 +328,9 @@
     <div class="nav-item" data-panel="draw-layers">
       <span class="nav-icon">📑</span> إدارة الطبقات
     </div>
+    <div class="nav-item" data-panel="draw-reviews">
+      <span class="nav-icon">✅</span> مراجعة المخططات
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4598,6 +4601,38 @@
   </div>
 </section>
 
+<!-- ============ القسم الثاني عشر: إدارة المخططات الهندسية (5/10) ============ -->
+<section class="calc-panel" id="panel-draw-reviews">
+  <div class="panel-header"><h2>مراجعة المخططات</h2><span class="panel-code">DRAW.REVIEWS</span></div>
+  <div class="panel-body">
+    <div id="draw-reviews-header">
+      <div class="mini-list-empty">اختر مخططاً من قائمة "جميع المخططات" بالضغط على زر "مراجعة"</div>
+    </div>
+
+    <h4 style="margin-top:16px">إجراءات سير المراجعة</h4>
+    <div class="field">
+      <label>ملاحظة / سبب (مطلوبة لبعض الإجراءات)</label>
+      <textarea id="draw-review-note" rows="3" placeholder="اكتب ملاحظة المراجعة، سبب الرفض، أو ملاحظة الإعادة للمصمم..."></textarea>
+    </div>
+    <div class="field">
+      <label>المراجع / المعتمد (اختياري)</label>
+      <input type="text" id="draw-review-person" placeholder="اسم المراجع أو المعتمد">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-draw-review-submit">إرسال للمراجعة <span class="loading-spinner" style="display:none"></span></button>
+      <button class="btn btn-outline" id="btn-draw-review-engineering">تسجيل مراجعة هندسية <span class="loading-spinner" style="display:none"></span></button>
+      <button class="btn btn-primary" id="btn-draw-review-approve">اعتماد <span class="loading-spinner" style="display:none"></span></button>
+      <button class="btn btn-outline" id="btn-draw-review-reject">رفض <span class="loading-spinner" style="display:none"></span></button>
+      <button class="btn btn-outline" id="btn-draw-review-return">إعادة للمصمم <span class="loading-spinner" style="display:none"></span></button>
+      <button class="btn btn-primary" id="btn-draw-review-final">اعتماد نهائي <span class="loading-spinner" style="display:none"></span></button>
+    </div>
+    <div id="draw-reviews-alert"></div>
+
+    <h4 style="margin-top:16px">سجل المراجعات</h4>
+    <div id="draw-reviews-table"><div class="mini-list-empty">لا توجد بيانات بعد</div></div>
+  </div>
+</section>
+
 <script src="js/app.js"></script>
 <script src="js/pm.js"></script>
 <script src="js/schedule.js"></script>
@@ -4630,5 +4665,6 @@
 <script src="js/drawingVersions.js"></script>
 <script src="js/drawingViewer.js"></script>
 <script src="js/drawingLayers.js"></script>
+<script src="js/drawingReviews.js"></script>
 </body>
 </html>
