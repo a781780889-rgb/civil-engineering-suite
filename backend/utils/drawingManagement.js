@@ -11,7 +11,7 @@
  *  3/10: عارض المخططات (بيانات القياس/الطبقات/الإحداثيات - طبقة API خلفية)
  *  4/10: إدارة الطبقات (Layers) الوصفية
  *  5/10: مراجعة المخططات (إرسال/مراجعة/رفض/إعادة/اعتماد نهائي) (منجَز - drawingReviews.js)
- *  6/10: التعليقات والملاحظات المثبّتة على المخطط
+ *  6/10: التعليقات والملاحظات المثبّتة على المخطط (منجَز - drawingComments.js)
  *  7/10: مقارنة المخططات (فرق بين إصدارين)
  *  8/10: الاعتمادات المتعددة المستويات (داخلي/استشاري/عميل/مقاول) + توقيع
  *  9/10: التكامل مع BIM (Revit/IFC/Navisworks..) + اكتشاف تعارضات وصفي
@@ -49,6 +49,16 @@ function getReviewCount() {
   try {
     // eslint-disable-next-line global-require
     return require('./drawingReviews').getReviewCountForDashboard();
+  } catch (e) {
+    return 0;
+  }
+}
+
+// require كسول مماثل مع drawingComments.js (الجزء 6/10)
+function getCommentCount() {
+  try {
+    // eslint-disable-next-line global-require
+    return require('./drawingComments').getCommentCountForDashboard();
   } catch (e) {
     return 0;
   }
@@ -402,8 +412,7 @@ function getDashboardStats() {
       total_versions: db.versions.length, // محسوبة فعلياً - تشمل كل إصدارات كل المخططات (الجزء 1/10 + 2/10)
       total_projects: projectIds.size,
       total_reviews: getReviewCount(), // محسوبة فعلياً من سجل المراجعات (الجزء 5/10)
-      // ستُحسب هذه الأرقام فعلياً عند إنجاز الجزء 6/10 (التعليقات)
-      total_comments: 0,
+      total_comments: getCommentCount(), // محسوبة فعلياً من سجل التعليقات (الجزء 6/10)
     },
     by_status: byStatus,
     by_discipline: byDiscipline,
