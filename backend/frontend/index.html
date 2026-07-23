@@ -337,6 +337,9 @@
     <div class="nav-item" data-panel="draw-compare">
       <span class="nav-icon">🔀</span> مقارنة المخططات
     </div>
+    <div class="nav-item" data-panel="draw-approvals">
+      <span class="nav-icon">🖋️</span> الاعتمادات المتعددة
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4729,6 +4732,50 @@
   </div>
 </section>
 
+<!-- ============ القسم الثاني عشر - الجزء 8/10: الاعتمادات المتعددة ============ -->
+<section class="calc-panel" id="panel-draw-approvals">
+  <div class="panel-header"><h2>الاعتمادات المتعددة المستويات</h2><span class="panel-code">DRAW.APPROVALS</span></div>
+  <div class="panel-body">
+    <div id="draw-apr-header">
+      <div class="mini-list-empty">اختر مخططاً من قائمة "جميع المخططات" بالضغط على زر "اعتمادات"</div>
+    </div>
+
+    <h4 style="margin-top:16px">مستويات الاعتماد المطلوبة (بالترتيب)</h4>
+    <p style="font-size:12px;color:#777">افتراضياً: اعتماد داخلي ← اعتماد الاستشاري ← اعتماد العميل ← اعتماد المقاول ← اعتماد نهائي. يمكن تخصيص المستويات المطلوبة فعلياً لهذا المخطط أدناه.</p>
+    <div id="draw-apr-progress"></div>
+    <div class="btn-row" style="margin-top:8px">
+      <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" class="draw-apr-req-cb" value="internal">اعتماد داخلي</label>
+      <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" class="draw-apr-req-cb" value="consultant">اعتماد الاستشاري</label>
+      <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" class="draw-apr-req-cb" value="client">اعتماد العميل</label>
+      <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" class="draw-apr-req-cb" value="contractor">اعتماد المقاول</label>
+      <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" class="draw-apr-req-cb" value="final">اعتماد نهائي</label>
+      <button class="btn btn-outline" id="btn-draw-apr-req-save">حفظ المستويات المطلوبة</button>
+    </div>
+    <div id="draw-apr-req-alert"></div>
+
+    <h4 style="margin-top:16px">تسجيل اعتماد / رفض (توقيع إلكتروني)</h4>
+    <div class="field">
+      <label>المستوى المستحق حالياً</label>
+      <select id="draw-apr-level"></select>
+    </div>
+    <div class="filter-row">
+      <input type="text" id="draw-apr-signer-name" placeholder="اسم الموقِّع">
+      <input type="text" id="draw-apr-signer-role" placeholder="الدور/الجهة (اختياري)">
+    </div>
+    <div class="field">
+      <textarea id="draw-apr-note" rows="2" placeholder="ملاحظة (إلزامية عند الرفض)"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-draw-apr-approve">اعتماد هذا المستوى</button>
+      <button class="btn btn-outline" id="btn-draw-apr-reject">رفض</button>
+    </div>
+    <div id="draw-apr-alert"></div>
+
+    <h4 style="margin-top:16px">سجل الاعتمادات (بالتوقيع والختم الزمني)</h4>
+    <div id="draw-apr-table"><div class="mini-list-empty">لا توجد بيانات بعد</div></div>
+  </div>
+</section>
+
 <script src="js/app.js"></script>
 <script src="js/pm.js"></script>
 <script src="js/schedule.js"></script>
@@ -4764,5 +4811,6 @@
 <script src="js/drawingReviews.js"></script>
 <script src="js/drawingComments.js"></script>
 <script src="js/drawingComparison.js"></script>
+<script src="js/drawingApprovals.js"></script>
 </body>
 </html>
