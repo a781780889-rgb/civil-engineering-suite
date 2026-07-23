@@ -82,6 +82,7 @@ const DRAW_VER = require('./utils/drawingVersions');
 const DRAW_VIEW = require('./utils/drawingViewer');
 const DRAW_LAYERS = require('./utils/drawingLayers');
 const DRAW_REVIEWS = require('./utils/drawingReviews');
+const DRAW_APPROVALS = require('./utils/drawingApprovals');
 const DRAW_COMMENTS = require('./utils/drawingComments');
 const DRAW_COMPARE = require('./utils/drawingComparison');
 const {
@@ -6798,6 +6799,64 @@ const API_HANDLERS = {
       requirePermission(req, 'drawings', 'view');
       if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
       return DRAW_COMPARE.listComparisonHistory(query.drawing_id);
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الثاني عشر - إدارة المخططات الهندسية - الجزء 8/10 =====
+  // ==================== إدارة الاعتمادات المتعددة ======================
+  // ===================================================================
+  '/api/drawings/approvals/levels': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return {
+        success: true,
+        levels: DRAW_APPROVALS.APPROVAL_LEVELS,
+        labels_ar: DRAW_APPROVALS.APPROVAL_LEVEL_LABELS_AR,
+        default_required_levels: DRAW_APPROVALS.DEFAULT_REQUIRED_LEVELS,
+      };
+    },
+  },
+  '/api/drawings/approvals/status': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_APPROVALS.getApprovalStatusInfo(query.drawing_id);
+    },
+  },
+  '/api/drawings/approvals/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_APPROVALS.listApprovals(query.drawing_id);
+    },
+  },
+  '/api/drawings/approvals/requirement': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_APPROVALS.defineApprovalRequirement(body.drawing_id, { levels: body.levels, actor: token });
+    },
+  },
+  '/api/drawings/approvals/submit': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'approve');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_APPROVALS.submitApproval(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/approvals/revoke': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'approve');
+      if (!body?.drawing_id || !body?.approval_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف الاعتماد (approval_id) مطلوبان');
+      return DRAW_APPROVALS.revokeApproval(body.drawing_id, body.approval_id, { reason: body.reason, actor: token });
+    },
+  },
+  '/api/drawings/approvals/verify': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id || !query?.approval_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف الاعتماد (approval_id) مطلوبان');
+      return DRAW_APPROVALS.verifyApproval(query.drawing_id, query.approval_id);
     },
   },
 };
