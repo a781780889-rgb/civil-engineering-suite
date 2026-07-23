@@ -81,6 +81,7 @@ const DRAW = require('./utils/drawingManagement');
 const DRAW_VER = require('./utils/drawingVersions');
 const DRAW_VIEW = require('./utils/drawingViewer');
 const DRAW_LAYERS = require('./utils/drawingLayers');
+const DRAW_REVIEWS = require('./utils/drawingReviews');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6605,6 +6606,60 @@ const API_HANDLERS = {
       const token = requirePermission(req, 'drawings', 'update');
       if (!body?.drawing_id || !body?.layer_id || !body?.direction) throw new Error('معرّف المخطط (drawing_id) ومعرّف الطبقة (layer_id) والاتجاه (direction) مطلوبة');
       return DRAW_LAYERS.moveLayer(body.drawing_id, body.layer_id, body.direction, { actor: token });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الثاني عشر - إدارة المخططات الهندسية - الجزء 5/10 =====
+  // ========================= مراجعة المخططات ==========================
+  // ===================================================================
+  '/api/drawings/reviews/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_REVIEWS.listReviews(query.drawing_id);
+    },
+  },
+  '/api/drawings/reviews/submit': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_REVIEWS.submitForReview(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/reviews/engineering-review': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_REVIEWS.recordEngineeringReview(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/reviews/approve': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'approve');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_REVIEWS.approveDrawing(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/reviews/reject': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'approve');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_REVIEWS.rejectDrawing(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/reviews/return-to-designer': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_REVIEWS.returnToDesigner(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/reviews/final-approve': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'approve');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_REVIEWS.finalApproveDrawing(body.drawing_id, { ...body, actor: token });
     },
   },
 };
