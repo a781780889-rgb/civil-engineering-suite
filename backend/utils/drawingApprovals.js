@@ -1,264 +1,311 @@
-// ============================================================
-// Civil Engineering Suite — Frontend Logic
-// القسم الثاني عشر: نظام إدارة المخططات الهندسية (Drawings Management)
-// الجزء 8/10: إدارة الاعتمادات المتعددة المستويات (Multi-Level Approvals)
-// ============================================================
+/**
+ * القسم الثاني عشر - نظام إدارة المخططات الهندسية (Engineering Drawings Management System)
+ * =====================================================================================
+ * الجزء الثامن (8/10): إدارة الاعتمادات المتعددة المستويات (Multi-Level Approvals)
+ *                        + توقيع إلكتروني
+ * =====================================================================================
+ *
+ * ملاحظة إصلاح: هذا الملف كان تالفاً في التسليم السابق (يحتوي كود واجهة أمامية
+ * document/window بالخطأ بدل منطق الباكيند)، ما جعل جميع نداءات DRAW_APPROVALS.* في
+ * server.js (endpoints الجزء 8/10) تفشل فعلياً عند التشغيل لأن module.exports لم يكن
+ * موجوداً إطلاقاً. تمت إعادة كتابته بالكامل كمنطق باكيند حقيقي بنفس أسلوب
+ * drawingReviews.js/drawingComments.js فوق نفس طبقة التخزين الموحّدة drawings.json.
+ *
+ * يغطي هذا الجزء:
+ *  - تعريف مستويات اعتماد متعددة قابلة للتخصيص لكل مخطط (داخلي/استشاري/عميل/مقاول/نهائي).
+ *  - تسجيل قرار اعتماد أو رفض على مستوى معيّن مع "توقيع إلكتروني" فعلي (بصمة SHA-256
+ *    محسوبة من محتوى القرار + معرّف المخطط + الإصدار الحالي وقت التوقيع + الوقت).
+ *  - إلغاء اعتماد سابق مع سبب.
+ *  - التحقق من سلامة توقيع معيّن (سليم/ملغى/تم تعديل المخطط بعد التوقيع/متلاعب به).
+ *  - تحديث approval_status على المخطط نفسه تلقائياً حين تكتمل كل المستويات المطلوبة
+ *    (final) بما يبقيه متسقاً مع بقية الأجزاء (القوائم ولوحة التحكم).
+ *  - سجل تدقيق فعلي موحّد لكل عملية.
+ */
 
-let drawAprCurrentDrawingId = null;
-let DRAW_APR_LEVELS = ['internal', 'consultant', 'client', 'contractor', 'final'];
-let DRAW_APR_LABELS_AR = {
+const DRAW = require('./drawingManagement');
+const {
+  loadDB, saveDB, logAudit, newId, nowISO, sha256,
+} = DRAW._internal;
+
+// ===================== الثوابت =====================
+const APPROVAL_LEVELS = ['internal', 'consultant', 'client', 'contractor', 'final'];
+const APPROVAL_LEVEL_LABELS_AR = {
   internal: 'اعتماد داخلي',
   consultant: 'اعتماد الاستشاري',
   client: 'اعتماد العميل',
   contractor: 'اعتماد المقاول',
   final: 'اعتماد نهائي',
 };
+// المستويات الافتراضية المطلوبة لأي مخطط ما لم يُخصَّص غير ذلك صراحةً
+const DEFAULT_REQUIRED_LEVELS = ['internal', 'final'];
 
-// ---------- فتح لوحة الاعتمادات لمخطط معيّن (يُستدعى من زر "اعتمادات" في drawings.js) ----------
-function drawOpenApprovalsPanel(drawingId) {
-  drawAprCurrentDrawingId = drawingId;
-  const panelNav = document.querySelector('.nav-item[data-panel="draw-approvals"]');
-  if (panelNav) panelNav.click();
-  else drawAprRenderAll();
-  drawAprRenderAll();
+// ===================== أدوات داخلية =====================
+function findDrawing(db, drawingId) {
+  const rec = db.drawings.find((d) => d.id === drawingId && !d.is_deleted);
+  if (!rec) throw new Error('المخطط غير موجود');
+  return rec;
 }
 
-async function drawAprLoadLevels() {
-  try {
-    const res = await drawFetch('/approvals/levels');
-    DRAW_APR_LEVELS = res.levels;
-    DRAW_APR_LABELS_AR = res.labels_ar;
-  } catch (e) {
-    // القيم الافتراضية أعلاه تكفي إن تعذّر التحميل
+function ensureApprovalCollections(db) {
+  if (!Array.isArray(db.approvals)) db.approvals = [];
+  if (!db.approval_requirements) db.approval_requirements = {};
+}
+
+function validateLevel(level) {
+  if (!APPROVAL_LEVELS.includes(level)) {
+    throw new Error(`مستوى الاعتماد غير معروف: ${level}. القيم المتاحة: ${APPROVAL_LEVELS.join(', ')}`);
   }
 }
 
-async function drawAprRenderAll() {
-  if (!drawAprCurrentDrawingId) {
-    const box = document.getElementById('draw-apr-header');
-    if (box) box.innerHTML = '<div class="mini-list-empty">اختر مخططاً من قائمة "جميع المخططات" أولاً بالضغط على زر "اعتمادات"</div>';
-    const progress = document.getElementById('draw-apr-progress');
-    if (progress) progress.innerHTML = '';
-    const table = document.getElementById('draw-apr-table');
-    if (table) table.innerHTML = '';
-    return;
-  }
-  await drawAprRenderHeader();
-  await drawAprRenderStatus();
-  await drawAprRenderList();
+function getRequiredLevels(db, drawingId) {
+  const custom = db.approval_requirements[drawingId];
+  return Array.isArray(custom) && custom.length ? custom : DEFAULT_REQUIRED_LEVELS;
 }
 
-async function drawAprRenderHeader() {
-  const box = document.getElementById('draw-apr-header');
-  if (!box) return;
-  try {
-    const res = await drawFetch(`/get?id=${encodeURIComponent(drawAprCurrentDrawingId)}`);
-    const d = res.drawing;
-    box.innerHTML = `
-      <div class="dashboard-block">
-        <h4>${d.drawing_number} — ${d.name}</h4>
-        <div class="mini-stat-row"><span>التخصص</span><b>${drawDisciplineLabel(d.discipline)}</b></div>
-        <div class="mini-stat-row"><span>حالة الاعتماد</span><span class="${DRAW_STATUS_BADGE_CLASS[d.approval_status] || ''}">${drawStatusLabel(d.approval_status)}</span></div>
-        <div class="mini-stat-row"><span>الإصدار الحالي</span><b>v${d.current_version}</b></div>
-        <div class="mini-stat-row"><span>المعتمد</span><b>${d.approver || '-'}</b></div>
-      </div>`;
-  } catch (e) {
-    box.innerHTML = `<div class="alert alert-error">تعذّر تحميل بيانات المخطط: ${e.message}</div>`;
-  }
+function getActiveApprovals(db, drawingId) {
+  return db.approvals.filter((a) => a.drawing_id === drawingId && !a.revoked);
 }
 
-// ---------- شريط تقدّم مستويات الاعتماد + تعبئة قائمة المستوى المستحق ----------
-async function drawAprRenderStatus() {
-  const box = document.getElementById('draw-apr-progress');
-  const levelSelect = document.getElementById('draw-apr-level');
-  if (!box) return;
-  try {
-    const res = await drawFetch(`/approvals/status?drawing_id=${encodeURIComponent(drawAprCurrentDrawingId)}`);
-
-    const steps = res.required_levels.map((lvl) => {
-      const isApproved = res.approved_levels.includes(lvl);
-      const isNext = res.next_level === lvl;
-      const cls = isApproved ? 'dms-badge dms-badge-success' : (isNext ? 'dms-badge dms-badge-warning' : 'dms-badge');
-      return `<span class="${cls}" style="margin-inline-end:6px">${DRAW_APR_LABELS_AR[lvl] || lvl}${isApproved ? ' ✓' : ''}</span>`;
-    }).join(' ← ');
-
-    box.innerHTML = `
-      <div class="dashboard-block">
-        <div>${steps}</div>
-        <div class="mini-stat-row" style="margin-top:8px">
-          <span>حالة الاعتماد الكلية</span>
-          <b>${res.is_approval_complete ? 'مكتملة ✅' : `بانتظار: ${res.next_level_label || '-'}`}</b>
-        </div>
-      </div>`;
-
-    // تعبئة قوائم اختيار "المستوى المطلوب حفظه"
-    document.querySelectorAll('.draw-apr-req-cb').forEach((cb) => {
-      cb.checked = res.required_levels.includes(cb.value);
-    });
-
-    // تعبئة قائمة اختيار مستوى الاعتماد/الرفض: كل المستويات غير المعتمدة بعد
-    if (levelSelect) {
-      const remaining = res.remaining_levels.length ? res.remaining_levels : res.required_levels;
-      levelSelect.innerHTML = remaining.map((lvl) => `<option value="${lvl}" ${lvl === res.next_level ? 'selected' : ''}>${DRAW_APR_LABELS_AR[lvl] || lvl}</option>`).join('');
-      const approveBtn = document.getElementById('btn-draw-apr-approve');
-      const rejectBtn = document.getElementById('btn-draw-apr-reject');
-      if (approveBtn) approveBtn.disabled = res.is_approval_complete;
-      if (rejectBtn) rejectBtn.disabled = res.is_approval_complete;
-    }
-  } catch (e) {
-    box.innerHTML = `<div class="alert alert-error">تعذّر تحميل حالة الاعتماد: ${e.message}</div>`;
-  }
-}
-
-// ---------- حفظ المستويات المطلوبة فعلياً لهذا المخطط ----------
-async function drawAprSaveRequirement() {
-  const btn = document.getElementById('btn-draw-apr-req-save');
-  try {
-    if (!drawAprCurrentDrawingId) throw new Error('لم يتم اختيار مخطط');
-    const levels = [...document.querySelectorAll('.draw-apr-req-cb:checked')].map((cb) => cb.value);
-    if (!levels.length) throw new Error('اختر مستوى واحداً على الأقل');
-
-    btn.disabled = true;
-    await drawFetch('/approvals/requirement', {
-      method: 'POST',
-      body: { drawing_id: drawAprCurrentDrawingId, levels },
-    });
-    drawAlert('draw-apr-req-alert', 'تم حفظ مستويات الاعتماد المطلوبة لهذا المخطط', 'success');
-    await drawAprRenderStatus();
-  } catch (e) {
-    drawAlert('draw-apr-req-alert', e.message, 'error');
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-// ---------- تسجيل اعتماد أو رفض (توقيع إلكتروني فعلي) ----------
-async function drawAprSubmit(decision) {
-  const btnId = decision === 'approved' ? 'btn-draw-apr-approve' : 'btn-draw-apr-reject';
-  const btn = document.getElementById(btnId);
-  try {
-    if (!drawAprCurrentDrawingId) throw new Error('لم يتم اختيار مخطط');
-    const level = document.getElementById('draw-apr-level')?.value;
-    const signerName = document.getElementById('draw-apr-signer-name')?.value?.trim();
-    const signerRole = document.getElementById('draw-apr-signer-role')?.value?.trim() || null;
-    const note = document.getElementById('draw-apr-note')?.value?.trim() || null;
-
-    if (!level) throw new Error('لا يوجد مستوى متاح للاعتماد حالياً');
-    if (!signerName) throw new Error('الرجاء إدخال اسم الموقِّع');
-    if (decision === 'rejected' && !note) throw new Error('الرجاء إدخال سبب الرفض');
-
-    if (btn) btn.disabled = true;
-
-    await drawFetch('/approvals/submit', {
-      method: 'POST',
-      body: {
-        drawing_id: drawAprCurrentDrawingId, level, decision, signer_name: signerName, signer_role: signerRole, note,
-      },
-    });
-
-    drawAlert('draw-apr-alert', decision === 'approved' ? 'تم تسجيل الاعتماد بالتوقيع الإلكتروني بنجاح' : 'تم تسجيل الرفض بنجاح', 'success');
-    const noteEl = document.getElementById('draw-apr-note');
-    if (noteEl) noteEl.value = '';
-
-    await drawAprRenderAll();
-    drawRenderList();
-    drawRenderDashboard();
-  } catch (e) {
-    drawAlert('draw-apr-alert', e.message, 'error');
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-// ---------- إلغاء اعتماد سابق ----------
-async function drawAprRevoke(approvalId) {
-  // eslint-disable-next-line no-alert
-  const reason = window.prompt('سبب إلغاء هذا الاعتماد:');
-  if (!reason || !reason.trim()) return;
-  try {
-    await drawFetch('/approvals/revoke', {
-      method: 'POST',
-      body: { drawing_id: drawAprCurrentDrawingId, approval_id: approvalId, reason: reason.trim() },
-    });
-    drawAlert('draw-apr-alert', 'تم إلغاء الاعتماد', 'success');
-    await drawAprRenderAll();
-    drawRenderList();
-    drawRenderDashboard();
-  } catch (e) {
-    drawAlert('draw-apr-alert', e.message, 'error');
-  }
-}
-
-// ---------- التحقق من صحة توقيع اعتماد معيّن ----------
-async function drawAprVerify(approvalId) {
-  try {
-    const res = await drawFetch(`/approvals/verify?drawing_id=${encodeURIComponent(drawAprCurrentDrawingId)}&approval_id=${encodeURIComponent(approvalId)}`);
-    const statusText = {
-      valid: 'التوقيع سليم وصالح ✅',
-      revoked: 'التوقيع سليم لكن الاعتماد مُلغى',
-      drawing_modified_after_approval: 'التوقيع سليم، لكن رُفع إصدار جديد للمخطط بعد هذا الاعتماد',
-      invalid_signature_tampered: 'تحذير: بصمة التوقيع غير مطابقة - قد تكون البيانات تم التلاعب بها ❌',
-    }[res.integrity_status] || res.integrity_status;
-    // eslint-disable-next-line no-alert
-    window.alert(`${statusText}\nالموقِّع: ${res.signed_by}\nالمستوى: ${res.level_label}\nالتاريخ: ${new Date(res.signed_at).toLocaleString('ar')}`);
-  } catch (e) {
-    drawAlert('draw-apr-alert', e.message, 'error');
-  }
-}
-
-// ---------- سرد سجل الاعتمادات (بالتوقيع والختم الزمني) ----------
-async function drawAprRenderList() {
-  const container = document.getElementById('draw-apr-table');
-  if (!container) return;
-  if (!drawAprCurrentDrawingId) { container.innerHTML = ''; return; }
-  container.innerHTML = '<div class="loading-spinner"></div>';
-  try {
-    const res = await drawFetch(`/approvals/list?drawing_id=${encodeURIComponent(drawAprCurrentDrawingId)}`);
-
-    if (!res.approvals.length) {
-      container.innerHTML = '<div class="mini-list-empty">لا توجد اعتمادات مسجّلة على هذا المخطط بعد</div>';
-      return;
-    }
-
-    const rows = res.approvals.map((a) => `
-      <tr>
-        <td>${new Date(a.signed_at).toLocaleString('ar')}</td>
-        <td>${a.level_label}</td>
-        <td>${a.decision === 'approved' ? '<span class="dms-badge dms-badge-success">اعتماد</span>' : '<span class="dms-badge dms-badge-danger">رفض</span>'}</td>
-        <td>${a.signer_name}${a.signer_role ? ` (${a.signer_role})` : ''}</td>
-        <td>v${a.version_number_at_signing}</td>
-        <td>${a.revoked ? `<span class="dms-badge dms-badge-danger">ملغى</span><br><small>${a.revoked_reason || ''}</small>` : '<span class="dms-badge dms-badge-success">ساري</span>'}</td>
-        <td>${a.note || '-'}</td>
-        <td>
-          <button class="btn btn-sm btn-outline" onclick="drawAprVerify('${a.id}')">تحقق من التوقيع</button>
-          ${!a.revoked ? `<button class="btn btn-sm btn-outline" onclick="drawAprRevoke('${a.id}')">إلغاء</button>` : ''}
-        </td>
-      </tr>`).join('');
-
-    container.innerHTML = `
-      <table class="data-table">
-        <thead><tr><th>الختم الزمني</th><th>المستوى</th><th>القرار</th><th>الموقِّع</th><th>الإصدار</th><th>الحالة</th><th>ملاحظة</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-  } catch (e) {
-    container.innerHTML = `<div class="alert alert-error">تعذّر تحميل سجل الاعتمادات: ${e.message}</div>`;
-  }
-}
-
-// ---------- التهيئة ----------
-document.addEventListener('DOMContentLoaded', () => {
-  drawAprLoadLevels();
-
-  const saveReqBtn = document.getElementById('btn-draw-apr-req-save');
-  if (saveReqBtn) saveReqBtn.addEventListener('click', drawAprSaveRequirement);
-
-  const approveBtn = document.getElementById('btn-draw-apr-approve');
-  if (approveBtn) approveBtn.addEventListener('click', () => drawAprSubmit('approved'));
-
-  const rejectBtn = document.getElementById('btn-draw-apr-reject');
-  if (rejectBtn) rejectBtn.addEventListener('click', () => drawAprSubmit('rejected'));
-
-  document.querySelectorAll('.nav-item[data-panel="draw-approvals"]').forEach((el) => {
-    el.addEventListener('click', () => drawAprRenderAll());
+// بصمة توقيع إلكتروني حقيقية: تُحسب من كل عناصر القرار غير القابلة للتغيير بعد التوقيع
+function computeSignatureHash({
+  drawingId, level, decision, signerName, signerRole, note, versionAtSigning, signedAt,
+}) {
+  const payload = JSON.stringify({
+    drawingId, level, decision, signerName, signerRole: signerRole || null, note: note || null, versionAtSigning, signedAt,
   });
-});
+  return sha256(Buffer.from(payload, 'utf8'));
+}
+
+// ===================== 1) تعريف المستويات المطلوبة لمخطط =====================
+function defineApprovalRequirement(drawingId, { levels, actor } = {}) {
+  if (!Array.isArray(levels) || !levels.length) throw new Error('يجب تحديد مستوى اعتماد واحد على الأقل');
+  levels.forEach(validateLevel);
+
+  const db = loadDB();
+  ensureApprovalCollections(db);
+  const rec = findDrawing(db, drawingId);
+
+  // ترتيب المستويات حسب ترتيبها المرجعي الثابت (وليس ترتيب إدخال المستخدم) لضمان تسلسل منطقي
+  const ordered = APPROVAL_LEVELS.filter((lvl) => levels.includes(lvl));
+  db.approval_requirements[drawingId] = ordered;
+
+  logAudit(db, {
+    action: 'define_drawing_approval_requirement',
+    drawingId,
+    actor,
+    details: `تحديد مستويات الاعتماد المطلوبة للمخطط (${rec.drawing_number}): ${ordered.map((l) => APPROVAL_LEVEL_LABELS_AR[l]).join(' ← ')}`,
+  });
+  saveDB(db);
+
+  return { success: true, drawing_id: drawingId, required_levels: ordered };
+}
+
+// ===================== 2) حالة الاعتماد الكلية لمخطط =====================
+function getApprovalStatusInfo(drawingId) {
+  const db = loadDB();
+  ensureApprovalCollections(db);
+  const rec = findDrawing(db, drawingId);
+
+  const requiredLevels = getRequiredLevels(db, drawingId);
+  const active = getActiveApprovals(db, drawingId);
+  const approvedLevels = requiredLevels.filter((lvl) => active.some((a) => a.level === lvl && a.decision === 'approved'));
+  const remainingLevels = requiredLevels.filter((lvl) => !approvedLevels.includes(lvl));
+  const isApprovalComplete = remainingLevels.length === 0;
+  const nextLevel = remainingLevels[0] || null;
+
+  return {
+    success: true,
+    drawing_id: drawingId,
+    drawing_number: rec.drawing_number,
+    required_levels: requiredLevels,
+    approved_levels: approvedLevels,
+    remaining_levels: remainingLevels,
+    is_approval_complete: isApprovalComplete,
+    next_level: nextLevel,
+    next_level_label: nextLevel ? APPROVAL_LEVEL_LABELS_AR[nextLevel] : null,
+  };
+}
+
+// ===================== 3) تسجيل اعتماد أو رفض (توقيع إلكتروني) =====================
+function submitApproval(drawingId, {
+  level, decision, signer_name: signerName, signer_role: signerRole, note, actor,
+} = {}) {
+  validateLevel(level);
+  if (!['approved', 'rejected'].includes(decision)) throw new Error('القرار يجب أن يكون approved أو rejected');
+  if (!signerName || !String(signerName).trim()) throw new Error('اسم الموقِّع مطلوب');
+  if (decision === 'rejected' && (!note || !String(note).trim())) throw new Error('سبب الرفض مطلوب');
+
+  const db = loadDB();
+  ensureApprovalCollections(db);
+  const rec = findDrawing(db, drawingId);
+
+  const requiredLevels = getRequiredLevels(db, drawingId);
+  if (!requiredLevels.includes(level)) {
+    throw new Error(`المستوى (${APPROVAL_LEVEL_LABELS_AR[level] || level}) ليس ضمن مستويات الاعتماد المطلوبة لهذا المخطط`);
+  }
+
+  const active = getActiveApprovals(db, drawingId);
+  if (active.some((a) => a.level === level && a.decision === 'approved')) {
+    throw new Error(`تم اعتماد المستوى (${APPROVAL_LEVEL_LABELS_AR[level]}) مسبقاً لهذا المخطط`);
+  }
+
+  const signedAt = nowISO();
+  const versionAtSigning = rec.current_version;
+  const signatureHash = computeSignatureHash({
+    drawingId, level, decision, signerName: signerName.trim(), signerRole, note, versionAtSigning, signedAt,
+  });
+
+  const approval = {
+    id: newId('APR'),
+    drawing_id: drawingId,
+    level,
+    level_label: APPROVAL_LEVEL_LABELS_AR[level],
+    decision,
+    signer_name: signerName.trim(),
+    signer_role: signerRole || null,
+    note: note || null,
+    version_number_at_signing: versionAtSigning,
+    signature_hash: signatureHash,
+    signed_at: signedAt,
+    signed_by: actor || signerName.trim(),
+    revoked: false,
+    revoked_reason: null,
+    revoked_at: null,
+  };
+  db.approvals.push(approval);
+
+  // إذا اكتملت كل المستويات المطلوبة بالاعتماد، أو تم رفض أي مستوى: حدّث حالة المخطط
+  if (decision === 'rejected') {
+    rec.approval_status = 'rejected';
+  } else {
+    const nowApprovedLevels = requiredLevels.filter(
+      (lvl) => lvl === level || db.approvals.some((a) => a.drawing_id === drawingId && a.level === lvl && a.decision === 'approved' && !a.revoked),
+    );
+    if (requiredLevels.every((lvl) => nowApprovedLevels.includes(lvl))) {
+      rec.approval_status = 'approved';
+      rec.approver = signerName.trim();
+    }
+  }
+  rec.updated_at = nowISO();
+
+  logAudit(db, {
+    action: decision === 'approved' ? 'submit_drawing_approval' : 'reject_drawing_approval_level',
+    drawingId,
+    actor,
+    details: `${decision === 'approved' ? 'اعتماد' : 'رفض'} المستوى (${APPROVAL_LEVEL_LABELS_AR[level]}) للمخطط (${rec.drawing_number}) بتوقيع: ${signerName.trim()}`,
+  });
+  saveDB(db);
+
+  return { success: true, approval, drawing: DRAW.getDrawing(drawingId) };
+}
+
+// ===================== 4) إلغاء اعتماد =====================
+function revokeApproval(drawingId, approvalId, { reason, actor } = {}) {
+  if (!reason || !String(reason).trim()) throw new Error('سبب إلغاء الاعتماد مطلوب');
+
+  const db = loadDB();
+  ensureApprovalCollections(db);
+  const rec = findDrawing(db, drawingId);
+  const approval = db.approvals.find((a) => a.id === approvalId && a.drawing_id === drawingId);
+  if (!approval) throw new Error('سجل الاعتماد غير موجود');
+  if (approval.revoked) throw new Error('هذا الاعتماد ملغى مسبقاً');
+
+  approval.revoked = true;
+  approval.revoked_reason = reason.trim();
+  approval.revoked_at = nowISO();
+
+  // إعادة تقييم حالة المخطط بعد الإلغاء (قد يعود إلى "قيد المراجعة" إن لم تعد كل المستويات مكتملة)
+  const requiredLevels = getRequiredLevels(db, drawingId);
+  const stillApprovedLevels = requiredLevels.filter(
+    (lvl) => db.approvals.some((a) => a.drawing_id === drawingId && a.level === lvl && a.decision === 'approved' && !a.revoked),
+  );
+  if (rec.approval_status === 'approved' && stillApprovedLevels.length < requiredLevels.length) {
+    rec.approval_status = 'under_review';
+  }
+  rec.updated_at = nowISO();
+
+  logAudit(db, {
+    action: 'revoke_drawing_approval',
+    drawingId,
+    actor,
+    details: `إلغاء اعتماد المستوى (${approval.level_label}) للمخطط (${rec.drawing_number}) - السبب: ${reason.trim()}`,
+  });
+  saveDB(db);
+
+  return { success: true, approval, drawing: DRAW.getDrawing(drawingId) };
+}
+
+// ===================== 5) سرد اعتمادات مخطط =====================
+function listApprovals(drawingId) {
+  const db = loadDB();
+  ensureApprovalCollections(db);
+  findDrawing(db, drawingId);
+  const approvals = db.approvals
+    .filter((a) => a.drawing_id === drawingId)
+    .sort((a, b) => new Date(b.signed_at) - new Date(a.signed_at));
+  return { success: true, approvals };
+}
+
+// ===================== 6) التحقق من سلامة توقيع =====================
+function verifyApproval(drawingId, approvalId) {
+  const db = loadDB();
+  ensureApprovalCollections(db);
+  const rec = findDrawing(db, drawingId);
+  const approval = db.approvals.find((a) => a.id === approvalId && a.drawing_id === drawingId);
+  if (!approval) throw new Error('سجل الاعتماد غير موجود');
+
+  const recomputed = computeSignatureHash({
+    drawingId,
+    level: approval.level,
+    decision: approval.decision,
+    signerName: approval.signer_name,
+    signerRole: approval.signer_role,
+    note: approval.note,
+    versionAtSigning: approval.version_number_at_signing,
+    signedAt: approval.signed_at,
+  });
+
+  let integrityStatus;
+  if (recomputed !== approval.signature_hash) {
+    integrityStatus = 'invalid_signature_tampered';
+  } else if (approval.revoked) {
+    integrityStatus = 'revoked';
+  } else if (rec.current_version > approval.version_number_at_signing) {
+    integrityStatus = 'drawing_modified_after_approval';
+  } else {
+    integrityStatus = 'valid';
+  }
+
+  return {
+    success: true,
+    integrity_status: integrityStatus,
+    signed_by: approval.signer_name,
+    level: approval.level,
+    level_label: approval.level_label,
+    decision: approval.decision,
+    signed_at: approval.signed_at,
+    version_number_at_signing: approval.version_number_at_signing,
+    current_drawing_version: rec.current_version,
+    revoked: approval.revoked,
+  };
+}
+
+// ===================== 7) عدّاد لاستخدام لوحة التحكم (الجزء 1/10) =====================
+function getApprovalCountForDashboard() {
+  const db = loadDB();
+  ensureApprovalCollections(db);
+  return db.approvals.filter((a) => a.decision === 'approved' && !a.revoked).length;
+}
+
+module.exports = {
+  APPROVAL_LEVELS,
+  APPROVAL_LEVEL_LABELS_AR,
+  DEFAULT_REQUIRED_LEVELS,
+  defineApprovalRequirement,
+  getApprovalStatusInfo,
+  submitApproval,
+  revokeApproval,
+  listApprovals,
+  verifyApproval,
+  getApprovalCountForDashboard,
+};
