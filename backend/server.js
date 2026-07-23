@@ -85,6 +85,7 @@ const DRAW_REVIEWS = require('./utils/drawingReviews');
 const DRAW_APPROVALS = require('./utils/drawingApprovals');
 const DRAW_COMMENTS = require('./utils/drawingComments');
 const DRAW_COMPARE = require('./utils/drawingComparison');
+const DRAW_BIM = require('./utils/drawingBIM');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6857,6 +6858,122 @@ const API_HANDLERS = {
       requirePermission(req, 'drawings', 'view');
       if (!query?.drawing_id || !query?.approval_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف الاعتماد (approval_id) مطلوبان');
       return DRAW_APPROVALS.verifyApproval(query.drawing_id, query.approval_id);
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الثاني عشر - إدارة المخططات الهندسية - الجزء 9/10 =====
+  // ==================== التكامل مع BIM + اكتشاف التعارضات ============
+  // ===================================================================
+  '/api/drawings/bim/meta': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return {
+        success: true,
+        sources: DRAW_BIM.BIM_SOURCES,
+        source_labels_ar: DRAW_BIM.BIM_SOURCE_LABELS_AR,
+        systems: DRAW_BIM.BIM_SYSTEMS,
+        system_labels_ar: DRAW_BIM.BIM_SYSTEM_LABELS_AR,
+        clash_statuses: DRAW_BIM.CLASH_STATUSES,
+        clash_status_labels_ar: DRAW_BIM.CLASH_STATUS_LABELS_AR,
+        clash_severities: DRAW_BIM.CLASH_SEVERITIES,
+        clash_severity_labels_ar: DRAW_BIM.CLASH_SEVERITY_LABELS_AR,
+      };
+    },
+  },
+  '/api/drawings/bim/link': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_BIM.linkDrawingToBIMSource(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/bim/links': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_BIM.listBIMLinks(query.drawing_id);
+    },
+  },
+  '/api/drawings/bim/elements/add': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_BIM.addBIMElement(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/bim/elements/bulk': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_BIM.addBIMElementsBulk(body.drawing_id, { elements: body.elements, actor: token });
+    },
+  },
+  '/api/drawings/bim/elements/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_BIM.listBIMElements(query.drawing_id, { system: query.system });
+    },
+  },
+  '/api/drawings/bim/elements/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'delete');
+      if (!body?.drawing_id || !body?.element_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف العنصر (element_id) مطلوبان');
+      return DRAW_BIM.deleteBIMElement(body.drawing_id, body.element_id, { actor: token });
+    },
+  },
+  '/api/drawings/bim/elements/link-drawing': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.element_id || !body?.target_drawing_id) throw new Error('معرّف العنصر (element_id) ومعرّف المخطط الهدف (target_drawing_id) مطلوبان');
+      return DRAW_BIM.linkElementToDrawing(body.element_id, body.target_drawing_id, { note: body.note, actor: token });
+    },
+  },
+  '/api/drawings/bim/elements/refs': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.element_id) throw new Error('معرّف العنصر (element_id) مطلوب');
+      return DRAW_BIM.listElementDrawingRefs(query.element_id);
+    },
+  },
+  '/api/drawings/bim/drawing-refs': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_BIM.listDrawingElementRefs(query.drawing_id);
+    },
+  },
+  '/api/drawings/bim/clash-detection/run': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!Array.isArray(body?.drawing_ids) || !body.drawing_ids.length) throw new Error('قائمة معرّفات المخططات (drawing_ids) مطلوبة');
+      return DRAW_BIM.runClashDetection({
+        drawing_ids: body.drawing_ids,
+        tolerance_m: body.tolerance_m,
+        include_same_system: body.include_same_system,
+        actor: token,
+      });
+    },
+  },
+  '/api/drawings/bim/clashes/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return DRAW_BIM.listClashes({ drawing_id: query?.drawing_id, status: query?.status, severity: query?.severity });
+    },
+  },
+  '/api/drawings/bim/clashes/status': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.clash_id || !body?.status) throw new Error('معرّف التعارض (clash_id) والحالة الجديدة (status) مطلوبان');
+      return DRAW_BIM.updateClashStatus(body.clash_id, { status: body.status, resolution_note: body.resolution_note, actor: token });
+    },
+  },
+  '/api/drawings/bim/summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_BIM.getBIMSummary(query.drawing_id);
     },
   },
 };
