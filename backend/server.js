@@ -82,6 +82,7 @@ const DRAW_VER = require('./utils/drawingVersions');
 const DRAW_VIEW = require('./utils/drawingViewer');
 const DRAW_LAYERS = require('./utils/drawingLayers');
 const DRAW_REVIEWS = require('./utils/drawingReviews');
+const DRAW_COMMENTS = require('./utils/drawingComments');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6660,6 +6661,74 @@ const API_HANDLERS = {
       const token = requirePermission(req, 'drawings', 'approve');
       if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
       return DRAW_REVIEWS.finalApproveDrawing(body.drawing_id, { ...body, actor: token });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الثاني عشر - إدارة المخططات الهندسية - الجزء 6/10 =====
+  // ======================= التعليقات والملاحظات ========================
+  // ===================================================================
+  '/api/drawings/comments/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_COMMENTS.listComments(query.drawing_id, query || {});
+    },
+  },
+  '/api/drawings/comments/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id || !query?.comment_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف التعليق (comment_id) مطلوبان');
+      return DRAW_COMMENTS.getComment(query.drawing_id, query.comment_id);
+    },
+  },
+  '/api/drawings/comments/create': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_COMMENTS.createComment(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/comments/reply': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.comment_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف التعليق (comment_id) مطلوبان');
+      return DRAW_COMMENTS.replyToComment(body.drawing_id, body.comment_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/comments/close': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.comment_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف التعليق (comment_id) مطلوبان');
+      return DRAW_COMMENTS.closeComment(body.drawing_id, body.comment_id, { actor: token });
+    },
+  },
+  '/api/drawings/comments/reopen': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.comment_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف التعليق (comment_id) مطلوبان');
+      return DRAW_COMMENTS.reopenComment(body.drawing_id, body.comment_id, { actor: token });
+    },
+  },
+  '/api/drawings/comments/set-category': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.comment_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف التعليق (comment_id) مطلوبان');
+      return DRAW_COMMENTS.setCommentCategory(body.drawing_id, body.comment_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/comments/set-implementation-status': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.comment_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف التعليق (comment_id) مطلوبان');
+      return DRAW_COMMENTS.setImplementationStatus(body.drawing_id, body.comment_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/comments/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'delete');
+      if (!body?.drawing_id || !body?.comment_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف التعليق (comment_id) مطلوبان');
+      return DRAW_COMMENTS.deleteComment(body.drawing_id, body.comment_id, { actor: token });
     },
   },
 };
