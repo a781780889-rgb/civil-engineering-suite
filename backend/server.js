@@ -80,6 +80,7 @@ const DMS_LINKS = require('./utils/documentModuleLinks');
 const DRAW = require('./utils/drawingManagement');
 const DRAW_VER = require('./utils/drawingVersions');
 const DRAW_VIEW = require('./utils/drawingViewer');
+const DRAW_LAYERS = require('./utils/drawingLayers');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6529,6 +6530,81 @@ const API_HANDLERS = {
       const token = requirePermission(req, 'drawings', 'update');
       if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
       return DRAW_VIEW.saveViewerState(body.drawing_id, { ...body, actor: token });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الثاني عشر - إدارة المخططات الهندسية - الجزء 4/10 =====
+  // ========================= إدارة الطبقات (Layers) ===================
+  // ===================================================================
+  '/api/drawings/layers/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_LAYERS.listLayers(query.drawing_id, query || {});
+    },
+  },
+  '/api/drawings/layers/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id || !query?.layer_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف الطبقة (layer_id) مطلوبان');
+      return DRAW_LAYERS.getLayer(query.drawing_id, query.layer_id);
+    },
+  },
+  '/api/drawings/layers/search': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_LAYERS.searchLayers(query.drawing_id, query.query);
+    },
+  },
+  '/api/drawings/layers/create': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_LAYERS.createLayer(body.drawing_id, { ...body, actor: token });
+    },
+  },
+  '/api/drawings/layers/update': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.layer_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف الطبقة (layer_id) مطلوبان');
+      return DRAW_LAYERS.updateLayer(body.drawing_id, body.layer_id, body.updates || {}, { actor: token });
+    },
+  },
+  '/api/drawings/layers/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.layer_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف الطبقة (layer_id) مطلوبان');
+      return DRAW_LAYERS.deleteLayer(body.drawing_id, body.layer_id, { actor: token });
+    },
+  },
+  '/api/drawings/layers/toggle-visibility': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.layer_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف الطبقة (layer_id) مطلوبان');
+      return DRAW_LAYERS.toggleLayerVisibility(body.drawing_id, body.layer_id, { visible: body.visible, actor: token });
+    },
+  },
+  '/api/drawings/layers/toggle-lock': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.layer_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف الطبقة (layer_id) مطلوبان');
+      return DRAW_LAYERS.toggleLayerLock(body.drawing_id, body.layer_id, { locked: body.locked, actor: token });
+    },
+  },
+  '/api/drawings/layers/reorder': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_LAYERS.reorderLayers(body.drawing_id, body.ordered_layer_ids, { actor: token });
+    },
+  },
+  '/api/drawings/layers/move': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || !body?.layer_id || !body?.direction) throw new Error('معرّف المخطط (drawing_id) ومعرّف الطبقة (layer_id) والاتجاه (direction) مطلوبة');
+      return DRAW_LAYERS.moveLayer(body.drawing_id, body.layer_id, body.direction, { actor: token });
     },
   },
 };
