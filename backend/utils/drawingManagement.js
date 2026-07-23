@@ -64,6 +64,16 @@ function getCommentCount() {
   }
 }
 
+// require كسول مماثل مع drawingApprovals.js (الجزء 8/10)
+function getApprovalCount() {
+  try {
+    // eslint-disable-next-line global-require
+    return require('./drawingApprovals').getApprovalCountForDashboard();
+  } catch (e) {
+    return 0;
+  }
+}
+
 // ===================== أدوات مساعدة عامة =====================
 function nowISO() { return new Date().toISOString(); }
 function newId(prefix) { return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`; }
@@ -413,6 +423,7 @@ function getDashboardStats() {
       total_projects: projectIds.size,
       total_reviews: getReviewCount(), // محسوبة فعلياً من سجل المراجعات (الجزء 5/10)
       total_comments: getCommentCount(), // محسوبة فعلياً من سجل التعليقات (الجزء 6/10)
+      total_approvals: getApprovalCount(), // محسوبة فعلياً من سجل الاعتمادات المتعددة (الجزء 8/10)
     },
     by_status: byStatus,
     by_discipline: byDiscipline,
