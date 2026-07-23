@@ -331,6 +331,9 @@
     <div class="nav-item" data-panel="draw-reviews">
       <span class="nav-icon">✅</span> مراجعة المخططات
     </div>
+    <div class="nav-item" data-panel="draw-comments">
+      <span class="nav-icon">💬</span> التعليقات والملاحظات
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4633,6 +4636,48 @@
   </div>
 </section>
 
+<!-- ============ القسم الثاني عشر: إدارة المخططات الهندسية (6/10) ============ -->
+<section class="calc-panel" id="panel-draw-comments">
+  <div class="panel-header"><h2>التعليقات والملاحظات</h2><span class="panel-code">DRAW.COMMENTS</span></div>
+  <div class="panel-body">
+    <div id="draw-comments-header">
+      <div class="mini-list-empty">اختر مخططاً من قائمة "جميع المخططات" بالضغط على زر "تعليقات"</div>
+    </div>
+
+    <h4 style="margin-top:16px">إضافة تعليق جديد</h4>
+    <div class="field">
+      <label>نص التعليق</label>
+      <textarea id="draw-comment-text" rows="3" placeholder="اكتب ملاحظتك على المخطط..."></textarea>
+    </div>
+    <div class="filter-row">
+      <input type="number" step="any" id="draw-comment-x" placeholder="X (اختياري)">
+      <input type="number" step="any" id="draw-comment-y" placeholder="Y (اختياري)">
+      <select id="draw-comment-category">
+        <option value="general" selected>عام</option>
+        <option value="correction_required">تصحيح مطلوب</option>
+        <option value="question">سؤال</option>
+        <option value="coordination">تنسيق بين تخصصات</option>
+        <option value="clash">تعارض</option>
+        <option value="approval_condition">شرط اعتماد</option>
+        <option value="other">أخرى</option>
+      </select>
+      <button class="btn btn-primary" id="btn-draw-comment-add">إضافة التعليق <span class="loading-spinner" style="display:none"></span></button>
+    </div>
+    <div id="draw-comments-alert"></div>
+
+    <h4 style="margin-top:16px">تعليقات المخطط</h4>
+    <div class="filter-row">
+      <select id="draw-comment-filter-closed">
+        <option value="">كل التعليقات</option>
+        <option value="false">المفتوحة فقط</option>
+        <option value="true">المغلقة فقط</option>
+      </select>
+      <button class="btn btn-outline" id="btn-draw-comment-refresh">تحديث</button>
+    </div>
+    <div id="draw-comments-list"><div class="mini-list-empty">لا توجد بيانات بعد</div></div>
+  </div>
+</section>
+
 <script src="js/app.js"></script>
 <script src="js/pm.js"></script>
 <script src="js/schedule.js"></script>
@@ -4666,5 +4711,6 @@
 <script src="js/drawingViewer.js"></script>
 <script src="js/drawingLayers.js"></script>
 <script src="js/drawingReviews.js"></script>
+<script src="js/drawingComments.js"></script>
 </body>
 </html>
