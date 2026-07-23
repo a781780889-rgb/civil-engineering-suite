@@ -86,6 +86,8 @@ const DRAW_APPROVALS = require('./utils/drawingApprovals');
 const DRAW_COMMENTS = require('./utils/drawingComments');
 const DRAW_COMPARE = require('./utils/drawingComparison');
 const DRAW_BIM = require('./utils/drawingBIM');
+const DRAW_NOTIF = require('./utils/drawingNotifications');
+const DRAW_REPORTS = require('./utils/drawingReports');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6974,6 +6976,181 @@ const API_HANDLERS = {
       requirePermission(req, 'drawings', 'view');
       if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
       return DRAW_BIM.getBIMSummary(query.drawing_id);
+    },
+  },
+
+  // ===================================================================
+  // القسم الثاني عشر - الجزء 10أ/10: التنبيهات (Notifications)
+  // ===================================================================
+  '/api/drawings/notifications/feed': {
+    GET: async (_body, query, req) => {
+      const token = requirePermission(req, 'drawings', 'view');
+      const session = SEC.getSessionUser(token);
+      return DRAW_NOTIF.getFeed({
+        username: session?.username || session?.id,
+        drawingId: query?.drawing_id || null,
+        unreadOnly: query?.unreadOnly === 'true',
+        type: query?.type || null,
+        page: query?.page ? Number(query.page) : 1,
+        pageSize: query?.pageSize ? Number(query.pageSize) : 30,
+      });
+    },
+  },
+  '/api/drawings/notifications/unread-count': {
+    GET: async (_body, query, req) => {
+      const token = requirePermission(req, 'drawings', 'view');
+      const session = SEC.getSessionUser(token);
+      return DRAW_NOTIF.getUnreadCount({ username: session?.username || session?.id, drawingId: query?.drawing_id || null });
+    },
+  },
+  '/api/drawings/notifications/mark-read': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'view');
+      const session = SEC.getSessionUser(token);
+      if (!body?.id) throw new Error('معرّف التنبيه (id) مطلوب');
+      return DRAW_NOTIF.markAsRead(body.id, { username: session?.username || session?.id });
+    },
+  },
+  '/api/drawings/notifications/mark-all-read': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'view');
+      const session = SEC.getSessionUser(token);
+      return DRAW_NOTIF.markAllAsRead({ username: session?.username || session?.id, drawingId: body?.drawing_id || null });
+    },
+  },
+  '/api/drawings/notifications/summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return DRAW_NOTIF.getNotificationsSummary({ drawingId: query?.drawing_id || null });
+    },
+  },
+  '/api/drawings/notifications/run-checks': {
+    POST: async (_body, _query, req) => {
+      requirePermission(req, 'drawings', 'manage');
+      return DRAW_NOTIF.runAllChecks();
+    },
+  },
+  '/api/drawings/notifications/review-deadline/set': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_NOTIF.setReviewDeadline(body.drawing_id, { due_at: body.due_at, actor: token });
+    },
+  },
+  '/api/drawings/notifications/review-deadline/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_NOTIF.getReviewDeadline(query.drawing_id);
+    },
+  },
+  '/api/drawings/notifications/review-deadline/clear': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_NOTIF.clearReviewDeadline(body.drawing_id);
+    },
+  },
+
+  // ===================================================================
+  // القسم الثاني عشر - الجزء 10أ/10: التقارير (Reports)
+  // ===================================================================
+  '/api/drawings/reports/drawings': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return { success: true, report: DRAW_REPORTS.buildDrawingsReport({
+        projectId: query?.projectId || null, discipline: query?.discipline || null, approvalStatus: query?.approvalStatus || null,
+      }) };
+    },
+  },
+  '/api/drawings/reports/reviews': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return { success: true, report: DRAW_REPORTS.buildReviewsReport({
+        projectId: query?.projectId || null, decision: query?.decision || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+      }) };
+    },
+  },
+  '/api/drawings/reports/versions': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return { success: true, report: DRAW_REPORTS.buildVersionsReport({
+        projectId: query?.projectId || null, drawingId: query?.drawingId || null,
+      }) };
+    },
+  },
+  '/api/drawings/reports/comments': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return { success: true, report: DRAW_REPORTS.buildCommentsReport({
+        projectId: query?.projectId || null,
+        category: query?.category || null,
+        isClosed: query?.isClosed === undefined ? null : query.isClosed === 'true',
+        dateFrom: query?.dateFrom || null,
+        dateTo: query?.dateTo || null,
+      }) };
+    },
+  },
+  '/api/drawings/reports/approvals': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return { success: true, report: DRAW_REPORTS.buildApprovalsReport({
+        projectId: query?.projectId || null, level: query?.level || null, decision: query?.decision || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+      }) };
+    },
+  },
+  '/api/drawings/reports/projects': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return { success: true, report: DRAW_REPORTS.buildProjectsReport() };
+    },
+  },
+  '/api/drawings/reports/executive-summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return { success: true, report: DRAW_REPORTS.buildExecutiveSummaryReport({
+        projectId: query?.projectId || null, dateFrom: query?.dateFrom || null, dateTo: query?.dateTo || null,
+      }) };
+    },
+  },
+  '/api/drawings/reports/export/pdf': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = DRAW_REPORTS.exportDrawingReportToPDF(body.report, { projectName: body.projectName, engineerName: body.engineerName });
+      return { success: true, ...result };
+    },
+  },
+  '/api/drawings/reports/export/excel': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = DRAW_REPORTS.exportDrawingReportToExcel(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/drawings/reports/export/csv': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = DRAW_REPORTS.exportDrawingReportToCSV(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/drawings/reports/export/word': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = DRAW_REPORTS.exportDrawingReportToWord(body.report);
+      return { success: true, ...result };
+    },
+  },
+  '/api/drawings/reports/export/print': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!body?.report) throw new Error('يجب توفير بيانات التقرير (report) للتصدير');
+      const result = DRAW_REPORTS.exportDrawingReportToPrintableHTML(body.report, { projectName: body.projectName });
+      return { success: true, ...result };
     },
   },
 };
