@@ -83,6 +83,7 @@ const DRAW_VIEW = require('./utils/drawingViewer');
 const DRAW_LAYERS = require('./utils/drawingLayers');
 const DRAW_REVIEWS = require('./utils/drawingReviews');
 const DRAW_COMMENTS = require('./utils/drawingComments');
+const DRAW_COMPARE = require('./utils/drawingComparison');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -6729,6 +6730,74 @@ const API_HANDLERS = {
       const token = requirePermission(req, 'drawings', 'delete');
       if (!body?.drawing_id || !body?.comment_id) throw new Error('معرّف المخطط (drawing_id) ومعرّف التعليق (comment_id) مطلوبان');
       return DRAW_COMMENTS.deleteComment(body.drawing_id, body.comment_id, { actor: token });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الثاني عشر - إدارة المخططات الهندسية - الجزء 7/10 =====
+  // ========================= مقارنة المخططات ==========================
+  // ===================================================================
+  '/api/drawings/compare/elements/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id || query?.version === undefined) {
+        throw new Error('معرّف المخطط (drawing_id) ورقم الإصدار (version) مطلوبان');
+      }
+      return DRAW_COMPARE.listVersionElements(query.drawing_id, query.version, { type: query.type });
+    },
+  },
+  '/api/drawings/compare/elements/record': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      if (!body?.drawing_id || body?.version === undefined) {
+        throw new Error('معرّف المخطط (drawing_id) ورقم الإصدار (version) مطلوبان');
+      }
+      return DRAW_COMPARE.recordVersionElements(body.drawing_id, body.version, body.elements || [], {
+        replace: body.replace, actor: token,
+      });
+    },
+  },
+  '/api/drawings/compare/versions': {
+    GET: async (_body, query, req) => {
+      const token = requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id || !query?.version_a || !query?.version_b) {
+        throw new Error('معرّف المخطط (drawing_id) ورقما الإصدارين (version_a, version_b) مطلوبة');
+      }
+      return DRAW_COMPARE.compareVersions(query.drawing_id, query.version_a, query.version_b, { actor: token });
+    },
+  },
+  '/api/drawings/compare/layers': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id || !query?.version_a || !query?.version_b) {
+        throw new Error('معرّف المخطط (drawing_id) ورقما الإصدارين (version_a, version_b) مطلوبة');
+      }
+      return DRAW_COMPARE.compareLayers(query.drawing_id, query.version_a, query.version_b);
+    },
+  },
+  '/api/drawings/compare/dimensions': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id || !query?.version_a || !query?.version_b) {
+        throw new Error('معرّف المخطط (drawing_id) ورقما الإصدارين (version_a, version_b) مطلوبة');
+      }
+      return DRAW_COMPARE.compareDimensions(query.drawing_id, query.version_a, query.version_b);
+    },
+  },
+  '/api/drawings/compare/texts': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id || !query?.version_a || !query?.version_b) {
+        throw new Error('معرّف المخطط (drawing_id) ورقما الإصدارين (version_a, version_b) مطلوبة');
+      }
+      return DRAW_COMPARE.compareTexts(query.drawing_id, query.version_a, query.version_b);
+    },
+  },
+  '/api/drawings/compare/history': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawing_id) throw new Error('معرّف المخطط (drawing_id) مطلوب');
+      return DRAW_COMPARE.listComparisonHistory(query.drawing_id);
     },
   },
 };
