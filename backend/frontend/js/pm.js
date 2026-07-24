@@ -827,6 +827,10 @@ async function pmRenderDocuments(content) {
         <tbody id="pm-doc-tbody"></tbody>
       </table>
     </div>
+    <div class="pm-card" style="margin-top:16px">
+      <div class="pm-card-title">المخططات الهندسية المرتبطة (القسم الثاني عشر)</div>
+      <div id="pm-linked-drawings"></div>
+    </div>
   `;
   document.getElementById('pm-doc-tbody').innerHTML = docs.length ? docs.map(d => `
     <tr>
@@ -850,6 +854,17 @@ async function pmRenderDocuments(content) {
       pmRenderDocuments(content);
     } catch (e) { alert(e.message); }
   });
+
+  // القسم الثاني عشر - التكامل الشامل: عرض المخططات الهندسية المرتبطة
+  // فعلياً بهذا المشروع عبر جدول الربط drawingModuleLinks (module: 'project')
+  if (typeof drawLinksRender === 'function') {
+    drawLinksRender({
+      containerId: 'pm-linked-drawings',
+      module: 'project',
+      entityId: pmCurrentProjectId,
+      projectId: pmCurrentProjectId,
+    });
+  }
 }
 
 // ----- الاجتماعات -----
