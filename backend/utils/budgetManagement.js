@@ -967,6 +967,351 @@ function syncBOQCostItem(budgetId, resourceNodeId, { quantity, unit_price } = {}
   return { success: true, data: { cost_item: item, node_direct_cost: node.direct_cost, bbs: serializeBBS(budget.bbs), grand_total: computeBBSGrandTotal(budget) } };
 }
 
+// ==================================================================================
+// ================ الجزء 3/10: إدارة التكاليف الفعلية (Actual Costs) ===============
+// ==================================================================================
+// تكلفة فعلية (Actual Cost) تختلف عن "بند التكلفة" المخطَّط (الجزء 2/10): بند التكلفة
+// المخطَّط هو التقدير (Planned)، أما هذه الطبقة فتسجّل ما أُنفِق فعلياً على أرض الواقع
+// (مواد اشتُريت فعلاً، أجور صُرفت فعلاً...)، وهي الأساس الحقيقي لحساب "التكلفة الفعلية"
+// و"الالتزامات المالية" في لوحة التحكم (بدل الاعتماد على إجمالي BBS المخطَّط كتقريب
+// أولي كما وُثِّق في نهاية الجزء 1/10)، ولاحقاً على مؤشرات EVM (AC) في الجزء 6/10.
+//
+// كل تكلفة فعلية مرتبطة إلزامياً بميزانية، وبعقدة BBS (أي عقدة، وليس فقط resource -
+// فالتكلفة الفعلية قد تُسجَّل على مستوى نشاط كامل)، ومصنَّفة إلى إحدى أربع فئات:
+//   materials | labor | equipment | other
+// لكل فئة حقول تفصيلية خاصة بها (تُخزَّن ضمن breakdown) بالإضافة إلى الحقول المشتركة.
+//
+// تخزين: نفس ملف budgets.json (مصفوفة actual_costs على مستوى كل ميزانية) - بدون ملف
+// جديد، اتساقاً مع بقية الأجزاء التي تبني فوق نفس السجل.
+
+const ACTUAL_COST_CATEGORIES = ['materials', 'labor', 'equipment', 'other'];
+const ACTUAL_COST_CATEGORY_LABELS = {
+  materials: 'مواد',
+  labor: 'عمالة',
+  equipment: 'معدات',
+  other: 'أخرى',
+};
+
+function validateActualCostCategory(category) {
+  if (!ACTUAL_COST_CATEGORIES.includes(category)) {
+    throw new Error(`فئة تكلفة فعلية غير معروفة: ${category}. القيم المسموحة: ${ACTUAL_COST_CATEGORIES.join(', ')}`);
+  }
+}
+
+// حساب المبلغ الإجمالي الفعلي لكل فئة بحسب حقولها الخاصة (وليس رقماً يُدخَل يدوياً
+// دائماً - إن لم يُمرَّر amount صراحة، يُحسَب من التفاصيل عند توفرها)
+function computeActualCostAmount(category, body) {
+  if (body.amount !== undefined && body.amount !== null && !isNaN(Number(body.amount))) {
+    return r2(body.amount);
+  }
+  const b = body.breakdown || {};
+  if (category === 'materials') {
+    const purchase = Number(b.purchase_cost) || 0;
+    const transport = Number(b.transport_cost) || 0;
+    const storage = Number(b.storage_cost) || 0;
+    return r2(purchase + transport + storage);
+  }
+  if (category === 'labor') {
+    const base = Number(b.salary_or_daily_wage) || 0;
+    const hours = Number(b.work_hours) || 0;
+    const hourlyRate = Number(b.hourly_rate) || 0;
+    const overtimeHours = Number(b.overtime_hours) || 0;
+    const overtimeRate = Number(b.overtime_rate) || (hourlyRate * 1.5);
+    return r2(base + (hours * hourlyRate) + (overtimeHours * overtimeRate));
+  }
+  if (category === 'equipment') {
+    const operating = Number(b.operating_cost) || 0;
+    const fuel = Number(b.fuel_cost) || 0;
+    const maintenance = Number(b.maintenance_cost) || 0;
+    const rental = Number(b.rental_cost) || 0;
+    return r2(operating + fuel + maintenance + rental);
+  }
+  const subcontractor = Number(b.subcontractor_cost) || 0;
+  const admin = Number(b.admin_cost) || 0;
+  const fees = Number(b.fees) || 0;
+  const insurance = Number(b.insurance_cost) || 0;
+  const consulting = Number(b.consulting_cost) || 0;
+  return r2(subcontractor + admin + fees + insurance + consulting);
+}
+
+function validateActualCostInput(body, { partial = false } = {}) {
+  if (!partial) {
+    validateActualCostCategory(body.category);
+    if (!body.node_id) throw new Error('عقدة الهيكل المرتبطة (node_id) مطلوبة');
+    if (!body.description || !String(body.description).trim()) {
+      throw new Error('وصف التكلفة الفعلية (description) مطلوب');
+    }
+    if (!body.date) throw new Error('تاريخ التكلفة الفعلية (date) مطلوب');
+  } else if (body.category !== undefined) {
+    validateActualCostCategory(body.category);
+  }
+  if (body.amount !== undefined && body.amount !== null && Number(body.amount) < 0) {
+    throw new Error('المبلغ لا يمكن أن يكون سالباً');
+  }
+}
+
+function findActualCostAncestors(budget, node) {
+  function walk(nodes, ancestors) {
+    for (const n of nodes) {
+      const path = [...ancestors, n];
+      if (n.id === node.id) return path;
+      const found = walk(n.children || [], path);
+      if (found) return found;
+    }
+    return null;
+  }
+  const path = walk(budget.bbs, []) || [];
+  return {
+    phase: path.find(n => n.node_type === 'phase') || null,
+    main_item: path.find(n => n.node_type === 'main_item') || null,
+    activity: path.find(n => n.node_type === 'activity') || null,
+  };
+}
+
+/**
+ * تسجيل تكلفة فعلية جديدة على عقدة في هيكل تقسيم الميزانية.
+ * body: { category, node_id, description, date, amount?, breakdown?, supplier?,
+ *         worker_id?, equipment_id?, reference? }
+ * - amount اختياري: إن لم يُمرَّر، يُحسَب فعلياً من breakdown بحسب الفئة.
+ * - worker_id / equipment_id: مرجعان اختياريان لربط التكلفة الفعلية بسجل عامل حقيقي
+ *   (إدارة العمال - القسم السادس) أو معدة حقيقية (إدارة المعدات - القسم السابع) عند توفرهما.
+ */
+function addActualCost(budgetId, body = {}, { actor = null } = {}) {
+  validateActualCostInput(body, { partial: false });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const node = findNode(budget.bbs, body.node_id);
+  if (!node) throw new Error('عقدة الهيكل (node_id) غير موجودة في هذه الميزانية');
+
+  const amount = computeActualCostAmount(body.category, body);
+  const { phase, main_item, activity } = findActualCostAncestors(budget, node);
+
+  const actualCost = {
+    id: newId('AC'),
+    budget_id: budget.id,
+    category: body.category,
+    node_id: node.id,
+    node_name: node.name,
+    node_type: node.node_type,
+    phase_id: phase ? phase.id : null,
+    phase_name: phase ? phase.name : null,
+    main_item_id: main_item ? main_item.id : null,
+    activity_id: activity ? activity.id : null,
+    description: String(body.description).trim(),
+    date: body.date,
+    amount,
+    breakdown: body.breakdown || {},
+    supplier: body.supplier || null,
+    worker_id: body.worker_id || null,
+    equipment_id: body.equipment_id || null,
+    reference: body.reference || null,
+    created_by: actor,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  if (!budget.actual_costs) budget.actual_costs = [];
+  budget.actual_costs.push(actualCost);
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'add_actual_cost',
+    targetId: budget.id,
+    summary: `تسجيل تكلفة فعلية (${ACTUAL_COST_CATEGORY_LABELS[body.category]}): ${actualCost.description} — ${amount}`,
+    details: { budget_id: budget.id, actual_cost_id: actualCost.id, category: body.category, amount },
+  });
+
+  return { success: true, data: { actual_cost: actualCost, summary: computeActualCostSummary(budget) } };
+}
+
+function updateActualCost(budgetId, actualCostId, updates = {}, { actor = null } = {}) {
+  validateActualCostInput(updates, { partial: true });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const item = (budget.actual_costs || []).find(ac => ac.id === actualCostId);
+  if (!item) throw new Error('التكلفة الفعلية غير موجودة');
+
+  if (updates.category !== undefined) item.category = updates.category;
+  if (updates.description !== undefined) {
+    if (!String(updates.description).trim()) throw new Error('الوصف لا يمكن أن يكون فارغاً');
+    item.description = String(updates.description).trim();
+  }
+  if (updates.date !== undefined) item.date = updates.date;
+  if (updates.breakdown !== undefined) item.breakdown = { ...item.breakdown, ...updates.breakdown };
+  if (updates.supplier !== undefined) item.supplier = updates.supplier;
+  if (updates.worker_id !== undefined) item.worker_id = updates.worker_id;
+  if (updates.equipment_id !== undefined) item.equipment_id = updates.equipment_id;
+  if (updates.reference !== undefined) item.reference = updates.reference;
+
+  item.amount = computeActualCostAmount(item.category, { amount: updates.amount, breakdown: item.breakdown });
+  item.updated_at = nowISO();
+
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'update_actual_cost',
+    targetId: budget.id,
+    summary: `تحديث تكلفة فعلية: ${item.description}`,
+    details: { budget_id: budget.id, actual_cost_id: item.id, updates },
+  });
+
+  return { success: true, data: { actual_cost: item, summary: computeActualCostSummary(budget) } };
+}
+
+function deleteActualCost(budgetId, actualCostId, { actor = null } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const idx = (budget.actual_costs || []).findIndex(ac => ac.id === actualCostId);
+  if (idx === -1) throw new Error('التكلفة الفعلية غير موجودة');
+  const removed = budget.actual_costs.splice(idx, 1)[0];
+
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'delete_actual_cost',
+    targetId: budget.id,
+    summary: `حذف تكلفة فعلية: ${removed.description}`,
+    details: { budget_id: budget.id, actual_cost_id: actualCostId, category: removed.category, amount: removed.amount },
+  });
+
+  return { success: true, data: { deleted: actualCostId, summary: computeActualCostSummary(budget) } };
+}
+
+function listActualCosts(budgetId, { category = null, node_id = null, from_date = null, to_date = null, page = 1, pageSize = 50 } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  let items = (budget.actual_costs || []).slice();
+
+  if (category) { validateActualCostCategory(category); items = items.filter(i => i.category === category); }
+  if (node_id) items = items.filter(i => i.node_id === node_id);
+  if (from_date) items = items.filter(i => i.date >= from_date);
+  if (to_date) items = items.filter(i => i.date <= to_date);
+
+  items.sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  const total = items.length;
+  const p = Math.max(1, Number(page) || 1);
+  const ps = Math.max(1, Number(pageSize) || 50);
+  const start = (p - 1) * ps;
+  const pageItems = items.slice(start, start + ps);
+
+  return {
+    success: true,
+    data: { items: pageItems, total, page: p, pageSize: ps, summary: computeActualCostSummary(budget) },
+  };
+}
+
+// ملخص فعلي لإجمالي التكاليف الفعلية لميزانية: إجمالي عام + تفصيل حسب الفئة + حسب
+// المرحلة، وهو ما يغذّي لاحقاً getDashboardStats (إجمالي المصروفات الفعلية للنظام كله)
+function computeActualCostSummary(budget) {
+  const items = budget.actual_costs || [];
+  const total = r2(items.reduce((s, i) => s + i.amount, 0));
+
+  const byCategory = ACTUAL_COST_CATEGORIES.reduce((acc, c) => {
+    acc[c] = r2(items.filter(i => i.category === c).reduce((s, i) => s + i.amount, 0));
+    return acc;
+  }, {});
+
+  const byPhase = {};
+  for (const i of items) {
+    const key = i.phase_id || 'بدون_مرحلة';
+    const label = i.phase_name || 'غير مرتبط بمرحلة';
+    if (!byPhase[key]) byPhase[key] = { phase_id: i.phase_id, phase_name: label, total: 0 };
+    byPhase[key].total = r2(byPhase[key].total + i.amount);
+  }
+
+  const plannedTotal = computeBBSGrandTotal(budget);
+  const variance = r2(plannedTotal - total); // موجب = أقل من المخطط، سالب = تجاوز
+  const variancePct = plannedTotal > 0 ? r2((variance / plannedTotal) * 100) : 0;
+
+  return {
+    total_actual_cost: total,
+    by_category: byCategory,
+    by_phase: Object.values(byPhase),
+    planned_total: plannedTotal,
+    variance,
+    variance_pct: variancePct,
+    over_budget: total > plannedTotal,
+    entries_count: items.length,
+  };
+}
+
+/**
+ * تكلفة فعلية إجمالية عبر كل الميزانيات — تُستخدم لتحديث لوحة التحكم العامة فعلياً
+ * (تحل محل التقريب الأولي المعتمد على BBS المخطَّط الموثَّق في ملاحظة نطاق العمل
+ * بنهاية الجزء 1/10، دون تغيير شكل استجابة /api/budget/dashboard الخارجي).
+ */
+function getActualCostsOverview() {
+  const db = loadDB();
+  const perBudget = db.budgets.map(b => {
+    const summary = computeActualCostSummary(b);
+    return {
+      budget_id: b.id,
+      project_id: b.project_id,
+      project_name: b.project_name,
+      ...summary,
+    };
+  });
+
+  const totalActual = r2(perBudget.reduce((s, p) => s + p.total_actual_cost, 0));
+  const byCategoryTotals = ACTUAL_COST_CATEGORIES.reduce((acc, c) => {
+    acc[c] = r2(perBudget.reduce((s, p) => s + (p.by_category[c] || 0), 0));
+    return acc;
+  }, {});
+
+  return {
+    success: true,
+    data: {
+      total_actual_cost_all_projects: totalActual,
+      by_category_all_projects: byCategoryTotals,
+      per_budget: perBudget,
+    },
+  };
+}
+
+// ------------------------------------------------------------------------------
+// تحديث لوحة التحكم الرئيسية (الجزء 1/10) لتدمج التكاليف الفعلية الحقيقية بدل
+// التقريب المبدئي المعتمد على BBS المخطَّط - دون تغيير شكل الاستجابة الخارجي.
+// ------------------------------------------------------------------------------
+const _baseGetDashboardStats = getDashboardStats;
+function getDashboardStatsWithActuals() {
+  const base = _baseGetDashboardStats();
+  const db = loadDB();
+
+  let totalActualAll = 0;
+  const perBudgetActual = {};
+  for (const b of db.budgets) {
+    const summary = computeActualCostSummary(b);
+    perBudgetActual[b.id] = summary;
+    totalActualAll = r2(totalActualAll + summary.total_actual_cost);
+  }
+
+  base.data.summary.total_actual_expenses = totalActualAll;
+  // التزام مالي مبدئي = ما صُرف فعلياً؛ سيُدمَج مع الفواتير المعتمدة غير المسدَّدة
+  // والعقود الموقَّعة غير المصروفة بدقة كاملة في الجزء 8/10 دون كسر هذا الشكل
+  base.data.summary.total_financial_commitments = totalActualAll;
+  base.data.summary.total_actual_profit = r2(base.data.summary.total_projects_contract_value - totalActualAll);
+
+  base.data.over_budget_projects = base.data.over_budget_projects.map(p => ({
+    ...p,
+    actual_cost: perBudgetActual[p.id]?.total_actual_cost ?? 0,
+  }));
+  base.data.within_budget_projects = base.data.within_budget_projects.map(p => ({
+    ...p,
+    actual_cost: perBudgetActual[p.id]?.total_actual_cost ?? 0,
+  }));
+
+  return base;
+}
+
 module.exports = {
   // إدارة الميزانية الأساسية
   createBudget,
@@ -989,20 +1334,29 @@ module.exports = {
   // الربط مع حصر الكميات BOQ (الجزء 2/10)
   importBOQLineItems,
   syncBOQCostItem,
-  // لوحة التحكم وسجل التدقيق
-  getDashboardStats,
+  // التكاليف الفعلية (الجزء 3/10)
+  addActualCost,
+  updateActualCost,
+  deleteActualCost,
+  listActualCosts,
+  getActualCostsOverview,
+  ACTUAL_COST_CATEGORIES,
+  ACTUAL_COST_CATEGORY_LABELS,
+  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج التكاليف الفعلية - الجزء 3/10)
+  getDashboardStats: getDashboardStatsWithActuals,
   listAudit,
   // ثوابت مساعدة للواجهة
   BUDGET_STATUSES,
   BUDGET_STATUS_LABELS,
   BBS_NODE_TYPES,
-  // مساعِدات داخلية معروضة لاستخدام الأجزاء اللاحقة (2/10 وما بعده)
+  // مساعِدات داخلية معروضة لاستخدام الأجزاء اللاحقة (4/10 وما بعده)
   _internal: {
     loadDB,
     saveDB,
     findNode,
     computeNodeTotal,
     computeBBSGrandTotal,
+    computeActualCostSummary,
     recordAudit,
     r2,
     nowISO,
