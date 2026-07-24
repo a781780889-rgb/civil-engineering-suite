@@ -6,8 +6,8 @@
  *                      تحكم مالية أساسية + سجل تدقيق + الربط بالمشاريع.
  *
  * خطة التقسيم الكاملة (راجع BUDGET_PLAN.md):
- *  1/10: الأساس + التخزين + إنشاء الميزانية + BBS + لوحة تحكم أساسية (هذا الملف)
- *  2/10: إدارة بنود التكلفة + الربط مع حصر الكميات (BOQ)
+ *  1/10: الأساس + التخزين + إنشاء الميزانية + BBS + لوحة تحكم أساسية (منجَز)
+ *  2/10: إدارة بنود التكلفة + الربط مع حصر الكميات (BOQ) (هذا الملف)
  *  3/10: إدارة التكاليف الفعلية (مواد/عمالة/معدات/أخرى)
  *  4/10: إدارة الإيرادات + الدفعات + المستخلصات
  *  5/10: أوامر التغيير (Change Orders)
@@ -580,6 +580,393 @@ function getDashboardStats() {
   };
 }
 
+// ==================================================================================
+// ============ الجزء 2/10: إدارة بنود التكلفة + الربط مع حصر الكميات (BOQ) =========
+// ==================================================================================
+// بند التكلفة (Cost Item) هو تفصيل حقيقي يُخزَّن داخل عقدة BBS من نوع "resource"
+// (الورقة الأخيرة في الشجرة). كل بند: كود، اسم، وصف، كمية، وحدة، سعر وحدة، مورد،
+// النشاط المرتبط، المرحلة، تاريخ الإنشاء، المسؤول — والتكلفة الإجمالية = الكمية × سعر
+// الوحدة (محسوبة فعلياً وليست مُدخَلة يدوياً)، وهي التي تغذّي direct_cost لعقدة المورد
+// فتنعكس تلقائياً على تجميع الشجرة (computeNodeTotal) وبالتالي على لوحة التحكم.
+//
+// الربط مع BOQ: يستقبل هذا الجزء بنود حصر كميات موحّدة (نفس شكل BOQLineItem الصادر
+// عن boqReports.buildBOQTable/priceLineItems في القسم الثالث: category, description,
+// quantity, unit, unit_price, total_cost...) ويُنشئ منها تلقائياً عقد BBS (نشاط + مورد)
+// وبنود تكلفة مطابقة تماماً للكميات والأسعار المصدر، مع الاحتفاظ بمرجع "source" الذي
+// يتيح لاحقاً تحديث بند التكلفة فعلياً عند تغيّر الكمية أو السعر في BOQ (updateCostItem
+// أو importBOQLineItems لنفس المصدر) دون إنشاء تكرار.
+
+function computeCostItemTotal(item) {
+  return r2((Number(item.quantity) || 0) * (Number(item.unit_price) || 0));
+}
+
+function validateCostItemInput(body, { partial = false } = {}) {
+  if (!partial) {
+    if (!body.name || !String(body.name).trim()) throw new Error('اسم بند التكلفة (name) مطلوب');
+    if (body.quantity === undefined || body.quantity === null || isNaN(Number(body.quantity))) {
+      throw new Error('الكمية (quantity) مطلوبة ويجب أن تكون رقماً');
+    }
+    if (!body.unit || !String(body.unit).trim()) throw new Error('وحدة القياس (unit) مطلوبة');
+    if (body.unit_price === undefined || body.unit_price === null || isNaN(Number(body.unit_price))) {
+      throw new Error('سعر الوحدة (unit_price) مطلوب ويجب أن يكون رقماً');
+    }
+  }
+  if (body.quantity !== undefined && Number(body.quantity) < 0) throw new Error('الكمية لا يمكن أن تكون سالبة');
+  if (body.unit_price !== undefined && Number(body.unit_price) < 0) throw new Error('سعر الوحدة لا يمكن أن يكون سالباً');
+}
+
+function findBudgetOrThrow(db, budgetId) {
+  const budget = db.budgets.find(b => b.id === budgetId || b.budget_number === budgetId);
+  if (!budget) throw new Error('الميزانية غير موجودة');
+  return budget;
+}
+
+function findResourceNodeOrThrow(budget, resourceNodeId) {
+  const node = findNode(budget.bbs, resourceNodeId);
+  if (!node) throw new Error('عقدة المورد (resource_node_id) غير موجودة');
+  if (node.node_type !== 'resource') {
+    throw new Error(`بنود التكلفة تُضاف فقط لعقد من نوع "resource" — العقدة الممرَّرة من نوع "${node.node_type}"`);
+  }
+  return node;
+}
+
+function findActivityAncestor(budget, resourceNode) {
+  // نحتاج معرفة "النشاط" و"المرحلة" المرتبطين ببند التكلفة (لأغراض العرض والتقارير)
+  function walk(nodes, ancestors) {
+    for (const n of nodes) {
+      const path = [...ancestors, n];
+      if (n.id === resourceNode.id) return path;
+      const found = walk(n.children || [], path);
+      if (found) return found;
+    }
+    return null;
+  }
+  const path = walk(budget.bbs, []);
+  if (!path) return { phase: null, activity: null };
+  const phase = path.find(n => n.node_type === 'phase') || null;
+  const activity = path.find(n => n.node_type === 'activity') || null;
+  return { phase, activity };
+}
+
+// إعادة حساب direct_cost لعقدة المورد = مجموع بنود التكلفة الفعلية بداخلها
+function recomputeResourceNodeCost(node) {
+  const items = node.cost_items || [];
+  node.direct_cost = r2(items.reduce((sum, it) => sum + computeCostItemTotal(it), 0));
+}
+
+/**
+ * إضافة بند تكلفة تفصيلي إلى عقدة مورد (resource) ضمن هيكل تقسيم ميزانية (BBS).
+ * body: { code, name, description, quantity, unit, unit_price, supplier }
+ */
+function addCostItem(budgetId, resourceNodeId, body = {}, { actor = null } = {}) {
+  validateCostItemInput(body, { partial: false });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const node = findResourceNodeOrThrow(budget, resourceNodeId);
+
+  const { phase, activity } = findActivityAncestor(budget, node);
+
+  const costItem = {
+    id: newId('CI'),
+    code: body.code || null,
+    name: String(body.name).trim(),
+    description: body.description || null,
+    quantity: r2(body.quantity),
+    unit: String(body.unit).trim(),
+    unit_price: r2(body.unit_price),
+    supplier: body.supplier || null,
+    activity_id: activity ? activity.id : null,
+    activity_name: activity ? activity.name : null,
+    phase_id: phase ? phase.id : null,
+    phase_name: phase ? phase.name : null,
+    resource_node_id: node.id,
+    source: body.source || null, // مرجع الربط مع BOQ إن وُجد (انظر importBOQLineItems)
+    created_by: actor,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+    price_history: [],
+  };
+  costItem.total_cost = computeCostItemTotal(costItem);
+
+  if (!node.cost_items) node.cost_items = [];
+  node.cost_items.push(costItem);
+  recomputeResourceNodeCost(node);
+
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'add_cost_item',
+    targetId: budget.id,
+    summary: `إضافة بند تكلفة: ${costItem.name} (${costItem.quantity} ${costItem.unit} × ${costItem.unit_price})`,
+    details: { budget_id: budget.id, resource_node_id: node.id, cost_item_id: costItem.id },
+  });
+
+  return {
+    success: true,
+    data: { cost_item: costItem, node_direct_cost: node.direct_cost, bbs: serializeBBS(budget.bbs), grand_total: computeBBSGrandTotal(budget) },
+  };
+}
+
+/**
+ * تعديل بند تكلفة قائم. أي تغيير في السعر يُسجَّل فعلياً في price_history (لدعم
+ * "مقارنة الأسعار" المطلوبة)، وأي تغيير في الكمية أو السعر يُعاد حسابه فوراً وينعكس
+ * تلقائياً على direct_cost لعقدة المورد ثم على تجميع الشجرة بالكامل.
+ */
+function updateCostItem(budgetId, resourceNodeId, costItemId, updates = {}, { actor = null } = {}) {
+  validateCostItemInput(updates, { partial: true });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const node = findResourceNodeOrThrow(budget, resourceNodeId);
+
+  const item = (node.cost_items || []).find(ci => ci.id === costItemId);
+  if (!item) throw new Error('بند التكلفة غير موجود');
+
+  if (updates.unit_price !== undefined && Number(updates.unit_price) !== item.unit_price) {
+    item.price_history.push({ old_price: item.unit_price, new_price: r2(updates.unit_price), changed_at: nowISO(), changed_by: actor });
+    item.unit_price = r2(updates.unit_price);
+  }
+  if (updates.quantity !== undefined) item.quantity = r2(updates.quantity);
+  if (updates.name !== undefined) {
+    if (!String(updates.name).trim()) throw new Error('اسم بند التكلفة لا يمكن أن يكون فارغاً');
+    item.name = String(updates.name).trim();
+  }
+  if (updates.code !== undefined) item.code = updates.code;
+  if (updates.description !== undefined) item.description = updates.description;
+  if (updates.unit !== undefined) {
+    if (!String(updates.unit).trim()) throw new Error('وحدة القياس لا يمكن أن تكون فارغة');
+    item.unit = String(updates.unit).trim();
+  }
+  if (updates.supplier !== undefined) item.supplier = updates.supplier;
+
+  item.total_cost = computeCostItemTotal(item);
+  item.updated_at = nowISO();
+
+  recomputeResourceNodeCost(node);
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'update_cost_item',
+    targetId: budget.id,
+    summary: `تحديث بند تكلفة: ${item.name}`,
+    details: { budget_id: budget.id, resource_node_id: node.id, cost_item_id: item.id, updates },
+  });
+
+  return {
+    success: true,
+    data: { cost_item: item, node_direct_cost: node.direct_cost, bbs: serializeBBS(budget.bbs), grand_total: computeBBSGrandTotal(budget) },
+  };
+}
+
+function deleteCostItem(budgetId, resourceNodeId, costItemId, { actor = null } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const node = findResourceNodeOrThrow(budget, resourceNodeId);
+
+  const idx = (node.cost_items || []).findIndex(ci => ci.id === costItemId);
+  if (idx === -1) throw new Error('بند التكلفة غير موجود');
+  const removed = node.cost_items.splice(idx, 1)[0];
+
+  recomputeResourceNodeCost(node);
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'delete_cost_item',
+    targetId: budget.id,
+    summary: `حذف بند تكلفة: ${removed.name}`,
+    details: { budget_id: budget.id, resource_node_id: node.id, cost_item_id: costItemId },
+  });
+
+  return { success: true, data: { deleted: costItemId, node_direct_cost: node.direct_cost, bbs: serializeBBS(budget.bbs), grand_total: computeBBSGrandTotal(budget) } };
+}
+
+function listCostItems(budgetId, resourceNodeId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const node = findResourceNodeOrThrow(budget, resourceNodeId);
+  return { success: true, data: { resource_node_id: node.id, cost_items: node.cost_items || [], node_direct_cost: node.direct_cost } };
+}
+
+/**
+ * مقارنة الأسعار: تعيد كل بنود التكلفة عبر الميزانية بأكملها (أو ميزانية واحدة) التي
+ * تحمل نفس الاسم/الكود لمقارنة أسعارها الحالية والتاريخية عبر موارد/مراحل مختلفة —
+ * حساب فعلي (أعلى سعر، أقل سعر، الفرق، النسبة) وليس عرضاً شكلياً.
+ */
+function compareCostItemPrices(budgetId, { name = null, code = null } = {}) {
+  if (!name && !code) throw new Error('يجب تمرير name أو code للمقارنة');
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+
+  const matches = [];
+  function collect(nodes) {
+    for (const n of nodes) {
+      if (n.node_type === 'resource') {
+        for (const ci of (n.cost_items || [])) {
+          const matchName = name && ci.name.toLowerCase().includes(String(name).toLowerCase());
+          const matchCode = code && ci.code && String(ci.code).toLowerCase() === String(code).toLowerCase();
+          if (matchName || matchCode) matches.push(ci);
+        }
+      }
+      collect(n.children || []);
+    }
+  }
+  collect(budget.bbs);
+
+  if (matches.length === 0) return { success: true, data: { matches: [], min_price: null, max_price: null, spread: null, spread_pct: null } };
+
+  const prices = matches.map(m => m.unit_price);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const spread = r2(maxPrice - minPrice);
+  const spreadPct = minPrice > 0 ? r2((spread / minPrice) * 100) : 0;
+
+  return {
+    success: true,
+    data: { matches, min_price: minPrice, max_price: maxPrice, spread, spread_pct: spreadPct },
+  };
+}
+
+// ------------------------------------------------------------------------------
+// -------------------------- الربط مع حصر الكميات (BOQ) ------------------------
+// ------------------------------------------------------------------------------
+// تستقبل هذه الدالة بنود BOQ الموحّدة الصادرة فعلياً عن boqReports (priceLineItems /
+// buildBOQTable) بالشكل: { category, description, quantity, unit, unit_price,
+// total_cost, price_key, waste_percent, quantity_with_waste }. لكل بند BOQ:
+//  - تُنشأ (أو تُستخدم إن كانت موجودة) عقدة "main_item" باسم التصنيف (category) تحت
+//    المرحلة المستهدفة.
+//  - تُنشأ عقدة "sub_item" ثم "activity" ثم "resource" تحمل بند تكلفة مطابق تماماً
+//    للكمية والسعر الوارد من BOQ (الكمية تشمل الهدر: quantity_with_waste إن وُجدت).
+//  - يُحفَظ مرجع source = { boq_category, boq_description, imported_at } بحيث يمكن لاحقاً
+//    (عبر syncBOQItem) تحديث بند التكلفة فعلياً عند تغيّر الكمية/السعر في BOQ دون تكرار.
+function importBOQLineItems(budgetId, phaseId, boqItems = [], { actor = null, activityPrefix = 'نشاط' } = {}) {
+  if (!Array.isArray(boqItems) || boqItems.length === 0) {
+    throw new Error('قائمة بنود حصر الكميات (boqItems) مطلوبة ويجب ألا تكون فارغة');
+  }
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+
+  const phase = findNode(budget.bbs, phaseId);
+  if (!phase) throw new Error('المرحلة (phaseId) غير موجودة في هيكل تقسيم الميزانية');
+  if (phase.node_type !== 'phase') throw new Error('phaseId يجب أن يشير إلى عقدة من نوع "phase"');
+
+  const importedAt = nowISO();
+  const created = [];
+
+  for (const raw of boqItems) {
+    if (raw.quantity === undefined || !raw.unit) {
+      throw new Error(`بند BOQ غير صالح (يفتقد quantity أو unit): ${JSON.stringify(raw)}`);
+    }
+    const qty = Number(raw.quantity_with_waste ?? raw.quantity);
+    const unitPrice = Number(raw.unit_price ?? raw.unit_price_override ?? 0);
+    const categoryName = raw.category || 'عام';
+    const description = raw.description || 'بند مستورد من حصر الكميات';
+
+    // البحث عن (أو إنشاء) عقدة main_item بنفس اسم التصنيف تحت هذه المرحلة
+    let mainItem = (phase.children || []).find(n => n.node_type === 'main_item' && n.name === categoryName);
+    if (!mainItem) {
+      mainItem = makeBBSNode({ name: categoryName, node_type: 'main_item', cost: 0 });
+      phase.children.push(mainItem);
+    }
+
+    const subItem = makeBBSNode({ name: description, node_type: 'sub_item', cost: 0 });
+    mainItem.children.push(subItem);
+
+    const activity = makeBBSNode({ name: `${activityPrefix}: ${description}`, node_type: 'activity', cost: 0 });
+    subItem.children.push(activity);
+
+    const resourceNode = makeBBSNode({ name: raw.price_key || description, node_type: 'resource', cost: 0 });
+    activity.children.push(resourceNode);
+
+    const costItem = {
+      id: newId('CI'),
+      code: raw.price_key || null,
+      name: description,
+      description: `مستورد من حصر الكميات (${categoryName})`,
+      quantity: r2(qty),
+      unit: raw.unit,
+      unit_price: r2(unitPrice),
+      supplier: null,
+      activity_id: activity.id,
+      activity_name: activity.name,
+      phase_id: phase.id,
+      phase_name: phase.name,
+      resource_node_id: resourceNode.id,
+      source: { boq_category: categoryName, boq_description: description, imported_at: importedAt },
+      created_by: actor,
+      created_at: importedAt,
+      updated_at: importedAt,
+      price_history: [],
+    };
+    costItem.total_cost = computeCostItemTotal(costItem);
+
+    resourceNode.cost_items = [costItem];
+    recomputeResourceNodeCost(resourceNode);
+
+    created.push({ main_item_id: mainItem.id, sub_item_id: subItem.id, activity_id: activity.id, resource_node_id: resourceNode.id, cost_item: costItem });
+  }
+
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'import_boq_line_items',
+    targetId: budget.id,
+    summary: `استيراد ${created.length} بند من حصر الكميات إلى المرحلة: ${phase.name}`,
+    details: { budget_id: budget.id, phase_id: phase.id, count: created.length },
+  });
+
+  return {
+    success: true,
+    data: { imported: created, bbs: serializeBBS(budget.bbs), grand_total: computeBBSGrandTotal(budget) },
+  };
+}
+
+/**
+ * مزامنة بند تكلفة واحد مستورَد من BOQ بعد تعديل الكمية/السعر في قسم حصر الكميات:
+ * تُحدَّث الكمية والسعر فعلياً لبند التكلفة المطابق (بحسب resource_node_id) وتُسجَّل
+ * التغييرات في price_history إن تغيّر السعر، وتنعكس فوراً على تجميع الشجرة الكامل.
+ */
+function syncBOQCostItem(budgetId, resourceNodeId, { quantity, unit_price } = {}, { actor = null } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const node = findResourceNodeOrThrow(budget, resourceNodeId);
+
+  const item = (node.cost_items || [])[0];
+  if (!item) throw new Error('لا يوجد بند تكلفة مرتبط بهذه العقدة');
+  if (!item.source) throw new Error('بند التكلفة هذا لم يُستورَد من حصر الكميات (لا يحمل مرجع source)');
+
+  if (quantity !== undefined) item.quantity = r2(quantity);
+  if (unit_price !== undefined && Number(unit_price) !== item.unit_price) {
+    item.price_history.push({ old_price: item.unit_price, new_price: r2(unit_price), changed_at: nowISO(), changed_by: actor, reason: 'boq_sync' });
+    item.unit_price = r2(unit_price);
+  }
+  item.total_cost = computeCostItemTotal(item);
+  item.updated_at = nowISO();
+
+  recomputeResourceNodeCost(node);
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'sync_boq_cost_item',
+    targetId: budget.id,
+    summary: `مزامنة بند تكلفة من حصر الكميات: ${item.name}`,
+    details: { budget_id: budget.id, resource_node_id: node.id, cost_item_id: item.id },
+  });
+
+  return { success: true, data: { cost_item: item, node_direct_cost: node.direct_cost, bbs: serializeBBS(budget.bbs), grand_total: computeBBSGrandTotal(budget) } };
+}
+
 module.exports = {
   // إدارة الميزانية الأساسية
   createBudget,
@@ -593,6 +980,15 @@ module.exports = {
   updateBBSNode,
   deleteBBSNode,
   getBBSTree,
+  // بنود التكلفة (الجزء 2/10)
+  addCostItem,
+  updateCostItem,
+  deleteCostItem,
+  listCostItems,
+  compareCostItemPrices,
+  // الربط مع حصر الكميات BOQ (الجزء 2/10)
+  importBOQLineItems,
+  syncBOQCostItem,
   // لوحة التحكم وسجل التدقيق
   getDashboardStats,
   listAudit,
