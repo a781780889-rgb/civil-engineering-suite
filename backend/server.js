@@ -90,6 +90,7 @@ const DRAW_NOTIF = require('./utils/drawingNotifications');
 const DRAW_REPORTS = require('./utils/drawingReports');
 const DRAW_AI = require('./utils/drawingAI');
 const DRAW_LINKS = require('./utils/drawingModuleLinks');
+const BUDGET = require('./utils/budgetManagement');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -7325,6 +7326,92 @@ const API_HANDLERS = {
         actor: token,
         note: body.note || null,
       });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الثالث عشر - إدارة الميزانية - الجزء 1/10 ==============
+  // ===================================================================
+  '/api/budget/dashboard': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      return BUDGET.getDashboardStats();
+    },
+  },
+  '/api/budget/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      return BUDGET.listBudgets(query || {});
+    },
+  },
+  '/api/budget/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.id) throw new Error('معرّف الميزانية (id) مطلوب');
+      return { success: true, data: BUDGET.getBudget(query.id) };
+    },
+  },
+  '/api/budget/create': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'create');
+      return BUDGET.createBudget({ ...body, actor: token });
+    },
+  },
+  '/api/budget/update': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.id) throw new Error('معرّف الميزانية (id) مطلوب');
+      return BUDGET.updateBudget(body.id, body.updates || {}, { actor: token });
+    },
+  },
+  '/api/budget/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'delete');
+      if (!body?.id) throw new Error('معرّف الميزانية (id) مطلوب');
+      return BUDGET.deleteBudget(body.id, { actor: token });
+    },
+  },
+  '/api/budget/versions/compare': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.id || !query?.version_a || !query?.version_b) {
+        throw new Error('المعرّفات id وversion_a وversion_b مطلوبة جميعاً');
+      }
+      return BUDGET.compareVersions(query.id, query.version_a, query.version_b);
+    },
+  },
+  '/api/budget/bbs/tree': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.getBBSTree(query.budget_id);
+    },
+  },
+  '/api/budget/bbs/add-node': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.addBBSNode(body.budget_id, body.node || {}, { actor: token });
+    },
+  },
+  '/api/budget/bbs/update-node': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.node_id) throw new Error('معرّفا الميزانية (budget_id) والعقدة (node_id) مطلوبان');
+      return BUDGET.updateBBSNode(body.budget_id, body.node_id, body.updates || {}, { actor: token });
+    },
+  },
+  '/api/budget/bbs/delete-node': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.node_id) throw new Error('معرّفا الميزانية (budget_id) والعقدة (node_id) مطلوبان');
+      return BUDGET.deleteBBSNode(body.budget_id, body.node_id, { actor: token });
+    },
+  },
+  '/api/budget/audit-log': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      return { success: true, data: BUDGET.listAudit({ budgetId: query?.budget_id || null, limit: Number(query?.limit) || 100 }) };
     },
   },
 };
