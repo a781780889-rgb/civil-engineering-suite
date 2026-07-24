@@ -7527,6 +7527,76 @@ const API_HANDLERS = {
       return BUDGET.getActualCostsOverview();
     },
   },
+
+  // ===================================================================
+  // ===== القسم الثالث عشر - إدارة الميزانية - الجزء 4/10 ==============
+  // ===== الإيرادات + الدفعات + المستخلصات =============================
+  // ===================================================================
+  '/api/budget/revenues/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.listRevenues(query.budget_id, {
+        type: query.type || null,
+        status: query.status || null,
+        from_date: query.from_date || null,
+        to_date: query.to_date || null,
+        page: Number(query.page) || 1,
+        pageSize: Number(query.pageSize) || 50,
+      });
+    },
+  },
+  '/api/budget/revenues/add': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.addRevenue(body.budget_id, body.item || {}, { actor: token });
+    },
+  },
+  '/api/budget/revenues/update': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.revenue_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والإيراد (revenue_id) مطلوبان');
+      }
+      return BUDGET.updateRevenue(body.budget_id, body.revenue_id, body.updates || {}, { actor: token });
+    },
+  },
+  '/api/budget/revenues/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'delete');
+      if (!body?.budget_id || !body?.revenue_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والإيراد (revenue_id) مطلوبان');
+      }
+      return BUDGET.deleteRevenue(body.budget_id, body.revenue_id, { actor: token });
+    },
+  },
+  '/api/budget/revenues/summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.getRevenueSummary(query.budget_id);
+    },
+  },
+  '/api/budget/revenues/cash-flow': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.getCashFlow(query.budget_id);
+    },
+  },
+  '/api/budget/revenues/refresh-overdue': {
+    POST: async (_body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      return BUDGET.refreshOverdueRevenues({ actor: token });
+    },
+  },
+  '/api/budget/revenues/overview': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      return BUDGET.getRevenuesOverview();
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
