@@ -7480,6 +7480,53 @@ const API_HANDLERS = {
       return BUDGET.syncBOQCostItem(body.budget_id, body.resource_node_id, { quantity: body.quantity, unit_price: body.unit_price }, { actor: token });
     },
   },
+
+  // ------------------------- التكاليف الفعلية (الجزء 3/10) -------------------------
+  '/api/budget/actual-costs/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.listActualCosts(query.budget_id, {
+        category: query.category || null,
+        node_id: query.node_id || null,
+        from_date: query.from_date || null,
+        to_date: query.to_date || null,
+        page: Number(query.page) || 1,
+        pageSize: Number(query.pageSize) || 50,
+      });
+    },
+  },
+  '/api/budget/actual-costs/add': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.addActualCost(body.budget_id, body.item || {}, { actor: token });
+    },
+  },
+  '/api/budget/actual-costs/update': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.actual_cost_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والتكلفة الفعلية (actual_cost_id) مطلوبان');
+      }
+      return BUDGET.updateActualCost(body.budget_id, body.actual_cost_id, body.updates || {}, { actor: token });
+    },
+  },
+  '/api/budget/actual-costs/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'delete');
+      if (!body?.budget_id || !body?.actual_cost_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والتكلفة الفعلية (actual_cost_id) مطلوبان');
+      }
+      return BUDGET.deleteActualCost(body.budget_id, body.actual_cost_id, { actor: token });
+    },
+  },
+  '/api/budget/actual-costs/overview': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      return BUDGET.getActualCostsOverview();
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
