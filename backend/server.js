@@ -7414,6 +7414,72 @@ const API_HANDLERS = {
       return { success: true, data: BUDGET.listAudit({ budgetId: query?.budget_id || null, limit: Number(query?.limit) || 100 }) };
     },
   },
+
+  // ===================================================================
+  // ===== القسم الثالث عشر - إدارة الميزانية - الجزء 2/10 ==============
+  // ===================================================================
+  '/api/budget/cost-items/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id || !query?.resource_node_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والمورد (resource_node_id) مطلوبان');
+      }
+      return BUDGET.listCostItems(query.budget_id, query.resource_node_id);
+    },
+  },
+  '/api/budget/cost-items/add': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.resource_node_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والمورد (resource_node_id) مطلوبان');
+      }
+      return BUDGET.addCostItem(body.budget_id, body.resource_node_id, body.item || {}, { actor: token });
+    },
+  },
+  '/api/budget/cost-items/update': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.resource_node_id || !body?.cost_item_id) {
+        throw new Error('معرّفات الميزانية والمورد وبند التكلفة مطلوبة جميعاً');
+      }
+      return BUDGET.updateCostItem(body.budget_id, body.resource_node_id, body.cost_item_id, body.updates || {}, { actor: token });
+    },
+  },
+  '/api/budget/cost-items/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.resource_node_id || !body?.cost_item_id) {
+        throw new Error('معرّفات الميزانية والمورد وبند التكلفة مطلوبة جميعاً');
+      }
+      return BUDGET.deleteCostItem(body.budget_id, body.resource_node_id, body.cost_item_id, { actor: token });
+    },
+  },
+  '/api/budget/cost-items/compare-prices': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      if (!query?.name && !query?.code) throw new Error('يجب تمرير name أو code للمقارنة');
+      return BUDGET.compareCostItemPrices(query.budget_id, { name: query.name || null, code: query.code || null });
+    },
+  },
+  '/api/budget/boq/import': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.phase_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والمرحلة (phase_id) مطلوبان');
+      }
+      return BUDGET.importBOQLineItems(body.budget_id, body.phase_id, body.boq_items || [], { actor: token, activityPrefix: body.activity_prefix || 'نشاط' });
+    },
+  },
+  '/api/budget/boq/sync-item': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.resource_node_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والمورد (resource_node_id) مطلوبان');
+      }
+      return BUDGET.syncBOQCostItem(body.budget_id, body.resource_node_id, { quantity: body.quantity, unit_price: body.unit_price }, { actor: token });
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
