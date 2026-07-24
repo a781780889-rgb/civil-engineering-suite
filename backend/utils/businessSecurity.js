@@ -351,6 +351,23 @@ const DEFAULT_ROLES = {
     label: 'العامل (صلاحيات محدودة - السلامة)',
     permissions: { safety: ['view'] },
   },
+
+  // ----- أدوار القسم الثالث عشر: إدارة الميزانية (Budget Management) -----
+  financial_manager: {
+    label: 'المدير المالي',
+    permissions: {
+      budget: ['view', 'create', 'update', 'delete', 'approve', 'manage'],
+      dashboard: ['view'], reports: ['view', 'export'], ai: ['use'],
+    },
+  },
+  budget_owner: {
+    label: 'مسؤول الميزانية',
+    permissions: { budget: ['view', 'create', 'update'], dashboard: ['view'], reports: ['view'] },
+  },
+  project_budget_viewer: {
+    label: 'مدير المشروع (اطّلاع على الميزانية)',
+    permissions: { budget: ['view'], dashboard: ['view'], reports: ['view'] },
+  },
 };
 
 function ensureRolesSeeded() {
