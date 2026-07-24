@@ -89,6 +89,7 @@ const DRAW_BIM = require('./utils/drawingBIM');
 const DRAW_NOTIF = require('./utils/drawingNotifications');
 const DRAW_REPORTS = require('./utils/drawingReports');
 const DRAW_AI = require('./utils/drawingAI');
+const DRAW_LINKS = require('./utils/drawingModuleLinks');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -7239,6 +7240,91 @@ const API_HANDLERS = {
     POST: async (body, _query, req) => {
       requirePermission(req, 'drawings', 'view');
       return DRAW_AI.generateManagementInsightReport({ projectId: body?.projectId || null });
+    },
+  },
+
+  // ===================================================================
+  // ===== القسم الثاني عشر - الجزء 10ج/10 (الأخير): التكامل الشامل ====
+  // ===== مع بقية أقسام النظام (المشاريع، المساحة، BOQ، الجودة، ========
+  // ===== السلامة، المستندات، الأعمال، المعدات، الجدول الزمني، ========
+  // ===== التقارير) =====================================================
+  // ===================================================================
+  '/api/drawings/links/modules': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return DRAW_LINKS.getSupportedModules();
+    },
+  },
+  '/api/drawings/links/link': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      return DRAW_LINKS.linkDrawing({
+        drawingId: body.drawing_id,
+        module: body.module,
+        entityId: body.entity_id,
+        entityLabel: body.entity_label || null,
+        projectId: body.project_id || null,
+        actor: token,
+        note: body.note || null,
+      });
+    },
+  },
+  '/api/drawings/links/link-many': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      return DRAW_LINKS.linkDrawings({
+        drawingIds: body.drawing_ids || [],
+        module: body.module,
+        entityId: body.entity_id,
+        entityLabel: body.entity_label || null,
+        projectId: body.project_id || null,
+        actor: token,
+      });
+    },
+  },
+  '/api/drawings/links/unlink': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      return DRAW_LINKS.unlinkDrawing(body.link_id, { actor: token });
+    },
+  },
+  '/api/drawings/links/for-entity': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.module || !query?.entityId) throw new Error('module وentityId مطلوبان');
+      return DRAW_LINKS.getLinkedDrawings(query.module, query.entityId);
+    },
+  },
+  '/api/drawings/links/by-project': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.projectId) throw new Error('projectId مطلوب');
+      return DRAW_LINKS.getLinkedDrawingsByProject(query.projectId);
+    },
+  },
+  '/api/drawings/links/for-drawing': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      if (!query?.drawingId) throw new Error('drawingId مطلوب');
+      return DRAW_LINKS.getModulesLinkedToDrawing(query.drawingId);
+    },
+  },
+  '/api/drawings/links/summary': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'drawings', 'view');
+      return DRAW_LINKS.getIntegrationSummary();
+    },
+  },
+  '/api/drawings/links/link-document': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'drawings', 'update');
+      return DRAW_LINKS.linkDrawingToDocument({
+        drawingId: body.drawing_id,
+        documentId: body.document_id,
+        projectId: body.project_id || null,
+        actor: token,
+        note: body.note || null,
+      });
     },
   },
 };
