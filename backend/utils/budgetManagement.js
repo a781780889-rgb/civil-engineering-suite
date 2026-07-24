@@ -1,15 +1,16 @@
 /**
  * القسم الثالث عشر - نظام إدارة الميزانية (Budget Management System)
  * ===================================================================
- * الجزء الأول (1/10): البنية الأساسية + طبقة التخزين الموحّدة + إنشاء/تعديل
- *                      ميزانية المشروع + هيكل تقسيم الميزانية (BBS) + لوحة
- *                      تحكم مالية أساسية + سجل تدقيق + الربط بالمشاريع.
+ * تم تنفيذه حتى الجزء (4/10): البنية الأساسية + طبقة التخزين الموحّدة +
+ *                      إنشاء/تعديل ميزانية المشروع + هيكل تقسيم الميزانية (BBS) +
+ *                      بنود التكلفة + الربط مع BOQ + التكاليف الفعلية + الإيرادات
+ *                      والتحصيل + لوحة تحكم مالية + سجل تدقيق + الربط بالمشاريع.
  *
  * خطة التقسيم الكاملة (راجع BUDGET_PLAN.md):
  *  1/10: الأساس + التخزين + إنشاء الميزانية + BBS + لوحة تحكم أساسية (منجَز)
- *  2/10: إدارة بنود التكلفة + الربط مع حصر الكميات (BOQ) (هذا الملف)
- *  3/10: إدارة التكاليف الفعلية (مواد/عمالة/معدات/أخرى)
- *  4/10: إدارة الإيرادات + الدفعات + المستخلصات
+ *  2/10: إدارة بنود التكلفة + الربط مع حصر الكميات (BOQ) (منجَز)
+ *  3/10: إدارة التكاليف الفعلية (مواد/عمالة/معدات/أخرى) (منجَز)
+ *  4/10: إدارة الإيرادات + الدفعات + المستخلصات (منجَز - هذا الملف)
  *  5/10: أوامر التغيير (Change Orders)
  *  6/10: مراقبة الانحرافات المالية + تحليل القيمة المكتسبة (EVM)
  *  7/10: التدفقات النقدية (Cash Flow) + الموافقات المالية
@@ -1312,6 +1313,450 @@ function getDashboardStatsWithActuals() {
   return base;
 }
 
+// ==================================================================================
+// ============== الجزء 4/10: إدارة الإيرادات + الدفعات + المستخلصات ================
+// ==================================================================================
+// الإيراد الأساسي لأي ميزانية هو contract_value (موجود من الجزء 1/10). هذا الجزء
+// يضيف طبقة تحصيل فعلية فوقه: كل دفعة/مستخلص فعلي يُسجَّل بحالة (متوقعة/مستلمة/
+// متأخرة) وتاريخ استحقاق، ويُحسَب منها فعلياً: إجمالي المُحصَّل، المتبقي المستحق،
+// الدفعات المتأخرة (بمقارنة تاريخ الاستحقاق بتاريخ اليوم لكل دفعة لم تُحصَّل بعد)،
+// الأرباح/الخسائر الفعلية (الإيراد المُحصَّل فعلياً - التكلفة الفعلية المسجَّلة في
+// الجزء 3/10)، والتدفق النقدي الشهري (تجميع الدفعات المُحصَّلة والمتوقعة حسب الشهر).
+//
+// تخزين: نفس ملف budgets.json (مصفوفة revenues على مستوى كل ميزانية) اتساقاً مع
+// نمط actual_costs في الجزء 3/10 - بدون ملف جديد.
+
+const REVENUE_TYPES = ['down_payment', 'progress_payment', 'final_payment', 'retention_release', 'other'];
+const REVENUE_TYPE_LABELS = {
+  down_payment: 'دفعة مقدمة',
+  progress_payment: 'مستخلص (دفعة مرحلية)',
+  final_payment: 'دفعة نهائية',
+  retention_release: 'الإفراج عن ضمان',
+  other: 'أخرى',
+};
+
+const REVENUE_STATUSES = ['expected', 'invoiced', 'received', 'overdue', 'cancelled'];
+const REVENUE_STATUS_LABELS = {
+  expected: 'متوقعة',
+  invoiced: 'مُستَحقة (صدر مستخلص)',
+  received: 'مستلمة',
+  overdue: 'متأخرة',
+  cancelled: 'ملغاة',
+};
+
+function validateRevenueType(type) {
+  if (!REVENUE_TYPES.includes(type)) {
+    throw new Error(`نوع إيراد غير معروف: ${type}. القيم المسموحة: ${REVENUE_TYPES.join(', ')}`);
+  }
+}
+
+function validateRevenueStatus(status) {
+  if (!REVENUE_STATUSES.includes(status)) {
+    throw new Error(`حالة إيراد غير معروفة: ${status}. القيم المسموحة: ${REVENUE_STATUSES.join(', ')}`);
+  }
+}
+
+function validateRevenueInput(body, { partial = false } = {}) {
+  if (!partial) {
+    validateRevenueType(body.type);
+    if (body.amount === undefined || body.amount === null || isNaN(Number(body.amount))) {
+      throw new Error('مبلغ الإيراد (amount) مطلوب ويجب أن يكون رقماً');
+    }
+    if (Number(body.amount) <= 0) throw new Error('مبلغ الإيراد يجب أن يكون أكبر من صفر');
+    if (!body.due_date) throw new Error('تاريخ الاستحقاق (due_date) مطلوب');
+    if (!body.description || !String(body.description).trim()) {
+      throw new Error('وصف الإيراد (description) مطلوب');
+    }
+  } else {
+    if (body.type !== undefined) validateRevenueType(body.type);
+    if (body.amount !== undefined && Number(body.amount) <= 0) {
+      throw new Error('مبلغ الإيراد يجب أن يكون أكبر من صفر');
+    }
+  }
+  if (body.status !== undefined) validateRevenueStatus(body.status);
+}
+
+// حالة الدفعة الفعلية: إن كانت "مستلمة" أو "ملغاة" تُترَك كما هي، وإلا يُعاد تصنيفها
+// تلقائياً إلى "متأخرة" إن تجاوز تاريخ الاستحقاق تاريخ اليوم (وليس حقلاً يُدخَل يدوياً)
+function resolveEffectiveStatus(revenue) {
+  if (['received', 'cancelled'].includes(revenue.status)) return revenue.status;
+  const today = nowISO().slice(0, 10);
+  if (revenue.due_date && revenue.due_date < today) return 'overdue';
+  return revenue.status;
+}
+
+/**
+ * تسجيل إيراد/دفعة/مستخلص جديد لميزانية.
+ * body: { type, amount, due_date, description, invoice_number?, client_reference?,
+ *         node_id?, retention_pct? }
+ * - node_id اختياري: يربط الدفعة بمرحلة محددة في BBS (لأغراض تقرير "تكلفة كل مرحلة"
+ *   وربطها بالإنجاز الفعلي لاحقاً)، وإلا فهي دفعة على مستوى المشروع كاملاً.
+ */
+function addRevenue(budgetId, body = {}, { actor = null } = {}) {
+  validateRevenueInput(body, { partial: false });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+
+  let phase = null;
+  if (body.node_id) {
+    const node = findNode(budget.bbs, body.node_id);
+    if (!node) throw new Error('عقدة الهيكل (node_id) غير موجودة في هذه الميزانية');
+    const { phase: p } = findActualCostAncestors(budget, node);
+    phase = node.node_type === 'phase' ? node : p;
+  }
+
+  const revenue = {
+    id: newId('REV'),
+    budget_id: budget.id,
+    type: body.type,
+    amount: r2(body.amount),
+    due_date: body.due_date,
+    received_date: null,
+    description: String(body.description).trim(),
+    invoice_number: body.invoice_number || null,
+    client_reference: body.client_reference || null,
+    node_id: body.node_id || null,
+    phase_id: phase ? phase.id : null,
+    phase_name: phase ? phase.name : null,
+    retention_pct: body.retention_pct !== undefined ? r2(body.retention_pct) : 0,
+    status: body.status || 'expected',
+    created_by: actor,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  if (!budget.revenues) budget.revenues = [];
+  budget.revenues.push(revenue);
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'add_revenue',
+    targetId: budget.id,
+    summary: `تسجيل إيراد (${REVENUE_TYPE_LABELS[body.type]}): ${revenue.description} — ${revenue.amount}`,
+    details: { budget_id: budget.id, revenue_id: revenue.id, type: body.type, amount: revenue.amount },
+  });
+
+  return { success: true, data: { revenue: sanitizeRevenue(revenue), summary: computeRevenueSummary(budget) } };
+}
+
+/**
+ * تعديل إيراد قائم. تسجيل received_date تلقائياً عند تغيير الحالة إلى "received"
+ * إن لم يُمرَّر صراحةً — وهو ما يُستخدَم فعلياً في حساب التدفق النقدي الفعلي (وليس
+ * المتوقع فقط) والأرباح الفعلية.
+ */
+function updateRevenue(budgetId, revenueId, updates = {}, { actor = null } = {}) {
+  validateRevenueInput(updates, { partial: true });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const item = (budget.revenues || []).find(r => r.id === revenueId);
+  if (!item) throw new Error('الإيراد غير موجود');
+
+  if (updates.type !== undefined) item.type = updates.type;
+  if (updates.amount !== undefined) item.amount = r2(updates.amount);
+  if (updates.due_date !== undefined) item.due_date = updates.due_date;
+  if (updates.description !== undefined) {
+    if (!String(updates.description).trim()) throw new Error('الوصف لا يمكن أن يكون فارغاً');
+    item.description = String(updates.description).trim();
+  }
+  if (updates.invoice_number !== undefined) item.invoice_number = updates.invoice_number;
+  if (updates.client_reference !== undefined) item.client_reference = updates.client_reference;
+  if (updates.retention_pct !== undefined) item.retention_pct = r2(updates.retention_pct);
+
+  if (updates.status !== undefined) {
+    const wasReceived = item.status === 'received';
+    item.status = updates.status;
+    if (updates.status === 'received' && !wasReceived) {
+      item.received_date = updates.received_date || nowISO().slice(0, 10);
+    }
+    if (updates.status !== 'received') {
+      item.received_date = updates.status === 'cancelled' ? item.received_date : null;
+    }
+  } else if (updates.received_date !== undefined) {
+    item.received_date = updates.received_date;
+  }
+
+  item.updated_at = nowISO();
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'update_revenue',
+    targetId: budget.id,
+    summary: `تحديث إيراد: ${item.description}`,
+    details: { budget_id: budget.id, revenue_id: item.id, updates },
+  });
+
+  return { success: true, data: { revenue: sanitizeRevenue(item), summary: computeRevenueSummary(budget) } };
+}
+
+function deleteRevenue(budgetId, revenueId, { actor = null } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const idx = (budget.revenues || []).findIndex(r => r.id === revenueId);
+  if (idx === -1) throw new Error('الإيراد غير موجود');
+  const removed = budget.revenues.splice(idx, 1)[0];
+
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'delete_revenue',
+    targetId: budget.id,
+    summary: `حذف إيراد: ${removed.description}`,
+    details: { budget_id: budget.id, revenue_id: revenueId, amount: removed.amount },
+  });
+
+  return { success: true, data: { deleted: revenueId, summary: computeRevenueSummary(budget) } };
+}
+
+function sanitizeRevenue(revenue) {
+  return { ...revenue, effective_status: resolveEffectiveStatus(revenue) };
+}
+
+function listRevenues(budgetId, { type = null, status = null, from_date = null, to_date = null, page = 1, pageSize = 50 } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  let items = (budget.revenues || []).map(sanitizeRevenue);
+
+  if (type) { validateRevenueType(type); items = items.filter(i => i.type === type); }
+  if (status) { validateRevenueStatus(status); items = items.filter(i => i.effective_status === status); }
+  if (from_date) items = items.filter(i => i.due_date >= from_date);
+  if (to_date) items = items.filter(i => i.due_date <= to_date);
+
+  items.sort((a, b) => (a.due_date < b.due_date ? 1 : -1));
+
+  const total = items.length;
+  const p = Math.max(1, Number(page) || 1);
+  const ps = Math.max(1, Number(pageSize) || 50);
+  const start = (p - 1) * ps;
+  const pageItems = items.slice(start, start + ps);
+
+  return { success: true, data: { items: pageItems, total, page: p, pageSize: ps, summary: computeRevenueSummary(budget) } };
+}
+
+/**
+ * ملخص فعلي للإيرادات والتحصيل لميزانية: إجمالي مُحصَّل، مبالغ مستحقة (متوقعة +
+ * مُستحقة لم تُحصَّل بعد)، دفعات متأخرة، وحساب الأرباح/الخسائر الفعلية = الإيراد
+ * المُحصَّل فعلياً - إجمالي التكلفة الفعلية (من الجزء 3/10)، مع نسبة التحصيل من
+ * قيمة العقد الكاملة (contract_value، الجزء 1/10). يغذّي هذا لاحقاً
+ * getDashboardStats (الأرباح الفعلية) دون كسر شكل الاستجابة الخارجي.
+ */
+function computeRevenueSummary(budget) {
+  const items = (budget.revenues || []).map(sanitizeRevenue);
+
+  const totalReceived = r2(items.filter(i => i.status === 'received').reduce((s, i) => s + i.amount, 0));
+  const totalExpected = r2(items.filter(i => i.effective_status === 'expected').reduce((s, i) => s + i.amount, 0));
+  const totalInvoiced = r2(items.filter(i => i.effective_status === 'invoiced').reduce((s, i) => s + i.amount, 0));
+  const totalOverdue = r2(items.filter(i => i.effective_status === 'overdue').reduce((s, i) => s + i.amount, 0));
+  const totalCancelled = r2(items.filter(i => i.status === 'cancelled').reduce((s, i) => s + i.amount, 0));
+
+  const outstandingAmount = r2(totalExpected + totalInvoiced + totalOverdue);
+  const contractValue = budget.contract_value || 0;
+  const collectionPct = contractValue > 0 ? r2((totalReceived / contractValue) * 100) : 0;
+  const remainingUncollected = r2(contractValue - totalReceived - totalCancelled);
+
+  const byType = REVENUE_TYPES.reduce((acc, t) => {
+    acc[t] = r2(items.filter(i => i.type === t).reduce((s, i) => s + i.amount, 0));
+    return acc;
+  }, {});
+
+  const overdueItems = items.filter(i => i.effective_status === 'overdue');
+
+  // الأرباح/الخسائر الفعلية: الإيراد المُحصَّل فعلياً مقابل التكلفة الفعلية المسجَّلة
+  const actualCostSummary = computeActualCostSummary(budget);
+  const actualProfit = r2(totalReceived - actualCostSummary.total_actual_cost);
+  const actualProfitMarginPct = totalReceived > 0 ? r2((actualProfit / totalReceived) * 100) : 0;
+
+  return {
+    total_received: totalReceived,
+    total_expected: totalExpected,
+    total_invoiced: totalInvoiced,
+    total_overdue: totalOverdue,
+    total_cancelled: totalCancelled,
+    outstanding_amount: outstandingAmount,
+    contract_value: contractValue,
+    collection_pct: collectionPct,
+    remaining_uncollected: remainingUncollected,
+    by_type: byType,
+    overdue_count: overdueItems.length,
+    overdue_items: overdueItems,
+    actual_profit: actualProfit,
+    actual_profit_margin_pct: actualProfitMarginPct,
+    actual_cost_total: actualCostSummary.total_actual_cost,
+    entries_count: items.length,
+  };
+}
+
+/**
+ * التدفق النقدي الشهري الفعلي لميزانية: تجميع الدفعات المُحصَّلة فعلياً (received)
+ * حسب شهر التحصيل (received_date)، والدفعات المتوقعة/المُستحقة/المتأخرة حسب شهر
+ * الاستحقاق (due_date) — حساب فعلي وليس تقديراً ثابتاً، يشمل رصيداً متراكماً شهرياً.
+ */
+function computeCashFlow(budget) {
+  const items = (budget.revenues || []).map(sanitizeRevenue).filter(i => i.status !== 'cancelled');
+
+  const months = {};
+  function ensureMonth(key) {
+    if (!months[key]) months[key] = { month: key, received: 0, expected: 0, overdue: 0 };
+    return months[key];
+  }
+
+  for (const i of items) {
+    if (i.status === 'received' && i.received_date) {
+      const m = ensureMonth(i.received_date.slice(0, 7));
+      m.received = r2(m.received + i.amount);
+    } else if (i.effective_status === 'overdue') {
+      const m = ensureMonth(i.due_date.slice(0, 7));
+      m.overdue = r2(m.overdue + i.amount);
+    } else if (['expected', 'invoiced'].includes(i.effective_status)) {
+      const m = ensureMonth(i.due_date.slice(0, 7));
+      m.expected = r2(m.expected + i.amount);
+    }
+  }
+
+  const sortedMonths = Object.values(months).sort((a, b) => (a.month < b.month ? -1 : 1));
+
+  let cumulative = 0;
+  const withCumulative = sortedMonths.map(m => {
+    cumulative = r2(cumulative + m.received);
+    return { ...m, cumulative_received: cumulative };
+  });
+
+  return {
+    success: true,
+    data: {
+      budget_id: budget.id,
+      months: withCumulative,
+      total_received: r2(withCumulative.reduce((s, m) => s + m.received, 0)),
+      total_expected: r2(withCumulative.reduce((s, m) => s + m.expected, 0)),
+      total_overdue: r2(withCumulative.reduce((s, m) => s + m.overdue, 0)),
+    },
+  };
+}
+
+function getRevenueSummary(budgetId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  return { success: true, data: computeRevenueSummary(budget) };
+}
+
+function getCashFlow(budgetId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  return computeCashFlow(budget);
+}
+
+/**
+ * إعادة تصنيف تلقائية للدفعات المتأخرة عبر كل الميزانيات: يفحص كل إيراد لم يُحصَّل
+ * بعد ولم يُلغَ، فإن تجاوز تاريخ استحقاقه تاريخ اليوم ولا تزال حالته المخزَّنة غير
+ * "overdue" يُحدِّثها فعلياً على القرص (وليس فقط عرضاً محسوباً وقت القراءة عبر
+ * resolveEffectiveStatus) ويسجّل ذلك في سجل التدقيق — مخصَّصة للتشغيل الدوري
+ * (مهمة مجدولة) أو عند فتح لوحة التحكم.
+ */
+function refreshOverdueRevenues({ actor = null } = {}) {
+  const db = loadDB();
+  const today = nowISO().slice(0, 10);
+  let updatedCount = 0;
+
+  for (const budget of db.budgets) {
+    for (const rev of (budget.revenues || [])) {
+      if (['received', 'cancelled', 'overdue'].includes(rev.status)) continue;
+      if (rev.due_date && rev.due_date < today) {
+        rev.status = 'overdue';
+        rev.updated_at = nowISO();
+        updatedCount += 1;
+        recordAudit({
+          actor,
+          action: 'auto_mark_overdue',
+          targetId: budget.id,
+          summary: `تصنيف تلقائي كدفعة متأخرة: ${rev.description}`,
+          details: { budget_id: budget.id, revenue_id: rev.id, due_date: rev.due_date },
+        });
+      }
+    }
+  }
+
+  if (updatedCount > 0) saveDB(db);
+  return { success: true, data: { updated_count: updatedCount } };
+}
+
+/**
+ * ملخص إيرادات إجمالي عبر كل الميزانيات — لتغذية لوحة التحكم العامة فعلياً
+ * (الأرباح الفعلية، إجمالي المُحصَّل، المتأخرات) بنفس نمط getActualCostsOverview
+ * في الجزء 3/10.
+ */
+function getRevenuesOverview() {
+  const db = loadDB();
+  const perBudget = db.budgets.map(b => {
+    const summary = computeRevenueSummary(b);
+    return {
+      budget_id: b.id,
+      project_id: b.project_id,
+      project_name: b.project_name,
+      ...summary,
+    };
+  });
+
+  const totalReceivedAll = r2(perBudget.reduce((s, p) => s + p.total_received, 0));
+  const totalOutstandingAll = r2(perBudget.reduce((s, p) => s + p.outstanding_amount, 0));
+  const totalOverdueAll = r2(perBudget.reduce((s, p) => s + p.total_overdue, 0));
+  const totalActualProfitAll = r2(perBudget.reduce((s, p) => s + p.actual_profit, 0));
+
+  return {
+    success: true,
+    data: {
+      total_received_all_projects: totalReceivedAll,
+      total_outstanding_all_projects: totalOutstandingAll,
+      total_overdue_all_projects: totalOverdueAll,
+      total_actual_profit_all_projects: totalActualProfitAll,
+      per_budget: perBudget,
+    },
+  };
+}
+
+// ------------------------------------------------------------------------------
+// تحديث لوحة التحكم الرئيسية (الجزء 1/10، محدَّثة في الجزء 3/10) لتدمج الأرباح
+// الفعلية الحقيقية (إيراد محصَّل - تكلفة فعلية) بدل تقدير contract_value - actual_cost
+// المستخدَم مؤقتاً في الجزء 3/10 - دون تغيير شكل الاستجابة الخارجي.
+// ------------------------------------------------------------------------------
+const _actualsOnlyGetDashboardStats = getDashboardStatsWithActuals;
+function getDashboardStatsWithRevenues() {
+  const base = _actualsOnlyGetDashboardStats();
+  const db = loadDB();
+
+  let totalReceivedAll = 0;
+  let totalActualProfitAll = 0;
+  const perBudgetRevenue = {};
+  for (const b of db.budgets) {
+    const summary = computeRevenueSummary(b);
+    perBudgetRevenue[b.id] = summary;
+    totalReceivedAll = r2(totalReceivedAll + summary.total_received);
+    totalActualProfitAll = r2(totalActualProfitAll + summary.actual_profit);
+  }
+
+  base.data.summary.total_revenue_collected = totalReceivedAll;
+  base.data.summary.total_actual_profit = totalActualProfitAll;
+
+  base.data.over_budget_projects = base.data.over_budget_projects.map(p => ({
+    ...p,
+    revenue_collected: perBudgetRevenue[p.id]?.total_received ?? 0,
+    actual_profit: perBudgetRevenue[p.id]?.actual_profit ?? 0,
+  }));
+  base.data.within_budget_projects = base.data.within_budget_projects.map(p => ({
+    ...p,
+    revenue_collected: perBudgetRevenue[p.id]?.total_received ?? 0,
+    actual_profit: perBudgetRevenue[p.id]?.actual_profit ?? 0,
+  }));
+
+  return base;
+}
+
 module.exports = {
   // إدارة الميزانية الأساسية
   createBudget,
@@ -1342,14 +1787,27 @@ module.exports = {
   getActualCostsOverview,
   ACTUAL_COST_CATEGORIES,
   ACTUAL_COST_CATEGORY_LABELS,
-  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج التكاليف الفعلية - الجزء 3/10)
-  getDashboardStats: getDashboardStatsWithActuals,
+  // الإيرادات والتحصيل (الجزء 4/10)
+  addRevenue,
+  updateRevenue,
+  deleteRevenue,
+  listRevenues,
+  getRevenueSummary,
+  getCashFlow,
+  refreshOverdueRevenues,
+  getRevenuesOverview,
+  REVENUE_TYPES,
+  REVENUE_TYPE_LABELS,
+  REVENUE_STATUSES,
+  REVENUE_STATUS_LABELS,
+  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج الإيرادات والأرباح الفعلية - الجزء 4/10)
+  getDashboardStats: getDashboardStatsWithRevenues,
   listAudit,
   // ثوابت مساعدة للواجهة
   BUDGET_STATUSES,
   BUDGET_STATUS_LABELS,
   BBS_NODE_TYPES,
-  // مساعِدات داخلية معروضة لاستخدام الأجزاء اللاحقة (4/10 وما بعده)
+  // مساعِدات داخلية معروضة لاستخدام الأجزاء اللاحقة (5/10 وما بعده)
   _internal: {
     loadDB,
     saveDB,
@@ -1357,6 +1815,8 @@ module.exports = {
     computeNodeTotal,
     computeBBSGrandTotal,
     computeActualCostSummary,
+    computeRevenueSummary,
+    computeCashFlow,
     recordAudit,
     r2,
     nowISO,
