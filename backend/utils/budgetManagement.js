@@ -19,8 +19,11 @@
  *  6/10: مراقبة الانحرافات المالية + تحليل القيمة المكتسبة (EVM) (منجَز)
  *  7/10: التدفقات النقدية الشاملة (إيرادات+مصروفات، متوقع مقابل فعلي، رصيد تراكمي)
  *        + نظام موافقات صرف كامل على 4 مراحل (مراجعة مالية → مدير مشروع → إدارة →
- *        صرف فعلي يُسجَّل تلقائياً كتكلفة فعلية) (منجَز - هذا الملف)
- *  8/10: الفواتير والمستخلصات (Invoicing)
+ *        صرف فعلي يُسجَّل تلقائياً كتكلفة فعلية) (منجَز)
+ *  8/10: الفواتير والمستخلصات (Invoicing) - فواتير عميل (مرتبطة فعلياً بسجل إيراد
+ *        محدد من الجزء 4/10) وفواتير موردين/مقاولين فرعيين (مرتبطة فعلياً بتكلفة
+ *        فعلية من الجزء 3/10)، ببنود فعلية، ضريبة/استقطاع ضمان، تتبع دفعات جزئية
+ *        فعلي، وحالات دورة حياة كاملة (منجَز - هذا الملف)
  *  9/10: التقارير المالية + الرسوم البيانية + التصدير (PDF/Excel/CSV/Word)
  *  10/10: الذكاء الاصطناعي المالي + التكامل الشامل مع بقية الأقسام
  *
@@ -2995,6 +2998,570 @@ function getDashboardStatsWithCashFlow() {
   return base;
 }
 
+// ==================================================================================
+// ==================== الجزء 8/10: الفواتير والمستخلصات (Invoicing) ================
+// ==================================================================================
+// فوترة فعلية على نوعين، كلاهما مرتبط ببيانات حقيقية موجودة فعلاً في النظام
+// (وليس سجلاً منفصلاً معلَّقاً):
+//  - "client": فاتورة/مستخلص صادر للعميل — يجب أن يكون مرتبطاً بسجل إيراد قائم فعلاً
+//    (من الجزء 4/10، revenue_id) فتُصبح حالته "invoiced" تلقائياً عند إصدار الفاتورة،
+//    و"received" تلقائياً عند تسجيل السداد الكامل للفاتورة (مطابقة الدفعة الفعلية).
+//  - "vendor": فاتورة مورد/مقاول فرعي واردة — تُرتبط اختيارياً بتكلفة فعلية موجودة
+//    (actual_cost_id من الجزء 3/10) أو تُنشئ تكلفة فعلية جديدة تلقائياً عند تسجيل
+//    السداد الكامل، حتى تنعكس فعلياً على الانحرافات وEVM دون ازدواج يدوي.
+// كل فاتورة تحتوي بنوداً فعلية (quantity × unit_price)، ضريبة اختيارية، ونسبة
+// استقطاع ضمان اختيارية (retention)، مع دفعات جزئية فعلية متعددة لكل فاتورة.
+
+const INVOICE_TYPES = ['client', 'vendor'];
+const INVOICE_TYPE_LABELS = { client: 'فاتورة/مستخلص عميل', vendor: 'فاتورة مورد/مقاول فرعي' };
+
+const INVOICE_STATUSES = ['draft', 'issued', 'partially_paid', 'paid', 'overdue', 'cancelled'];
+const INVOICE_STATUS_LABELS = {
+  draft: 'مسودة',
+  issued: 'صادرة',
+  partially_paid: 'مدفوعة جزئياً',
+  paid: 'مدفوعة بالكامل',
+  overdue: 'متأخرة السداد',
+  cancelled: 'ملغاة',
+};
+
+function validateInvoiceType(type) {
+  if (!INVOICE_TYPES.includes(type)) {
+    throw new Error(`نوع فاتورة غير معروف: ${type}. القيم المسموحة: ${INVOICE_TYPES.join(', ')}`);
+  }
+}
+
+function validateInvoiceLineItems(lineItems) {
+  if (!Array.isArray(lineItems) || lineItems.length === 0) {
+    throw new Error('يجب أن تحتوي الفاتورة على بند واحد على الأقل (line_items)');
+  }
+  for (const li of lineItems) {
+    if (!li.description || !String(li.description).trim()) {
+      throw new Error('وصف بند الفاتورة (description) مطلوب لكل بند');
+    }
+    if (li.quantity === undefined || isNaN(Number(li.quantity)) || Number(li.quantity) <= 0) {
+      throw new Error(`كمية بند الفاتورة "${li.description}" يجب أن تكون رقماً أكبر من صفر`);
+    }
+    if (li.unit_price === undefined || isNaN(Number(li.unit_price)) || Number(li.unit_price) < 0) {
+      throw new Error(`سعر وحدة بند الفاتورة "${li.description}" يجب أن يكون رقماً صحيحاً`);
+    }
+  }
+}
+
+function computeInvoiceLineItemsTotal(lineItems) {
+  return r2(lineItems.reduce((s, li) => s + (Number(li.quantity) * Number(li.unit_price)), 0));
+}
+
+function computeInvoiceTotals(invoice) {
+  const subtotal = computeInvoiceLineItemsTotal(invoice.line_items);
+  const retentionAmount = r2(subtotal * ((invoice.retention_pct || 0) / 100));
+  const taxableBase = r2(subtotal - retentionAmount);
+  const taxAmount = r2(taxableBase * ((invoice.tax_pct || 0) / 100));
+  const grandTotal = r2(taxableBase + taxAmount);
+  const paidAmount = r2((invoice.payments || []).reduce((s, p) => s + p.amount, 0));
+  const outstandingAmount = r2(grandTotal - paidAmount);
+
+  return { subtotal, retention_amount: retentionAmount, taxable_base: taxableBase, tax_amount: taxAmount, grand_total: grandTotal, paid_amount: paidAmount, outstanding_amount: outstandingAmount };
+}
+
+// حالة الفاتورة الفعلية: تُشتَق من مطابقة المدفوعات الفعلية بالإجمالي (وليست
+// حقلاً حراً يُدخَل يدوياً)، مع تصنيف "متأخرة" تلقائياً إن تجاوز تاريخ الاستحقاق
+// اليوم ولم تُسدَّد بالكامل بعد.
+function resolveInvoiceEffectiveStatus(invoice) {
+  if (invoice.status === 'cancelled') return 'cancelled';
+  if (invoice.status === 'draft') return 'draft';
+  const totals = computeInvoiceTotals(invoice);
+  if (totals.outstanding_amount <= 0 && totals.grand_total > 0) return 'paid';
+  const today = nowISO().slice(0, 10);
+  if (invoice.due_date && invoice.due_date < today && totals.paid_amount < totals.grand_total) return 'overdue';
+  if (totals.paid_amount > 0) return 'partially_paid';
+  return 'issued';
+}
+
+function sanitizeInvoice(invoice) {
+  const totals = computeInvoiceTotals(invoice);
+  return { ...invoice, ...totals, effective_status: resolveInvoiceEffectiveStatus(invoice) };
+}
+
+function generateInvoiceNumber(db, budget, type) {
+  const prefix = type === 'client' ? 'INV-C' : 'INV-V';
+  const count = (budget.invoices || []).filter(i => i.type === type).length + 1;
+  return `${prefix}-${budget.budget_number}-${String(count).padStart(4, '0')}`;
+}
+
+function validateInvoiceInput(body, { partial = false } = {}) {
+  if (!partial) {
+    validateInvoiceType(body.type);
+    if (!body.issue_date) throw new Error('تاريخ الإصدار (issue_date) مطلوب');
+    if (!body.due_date) throw new Error('تاريخ الاستحقاق (due_date) مطلوب');
+    validateInvoiceLineItems(body.line_items);
+    if (body.type === 'client' && !body.revenue_id) {
+      throw new Error('فاتورة العميل يجب ربطها بسجل إيراد قائم (revenue_id) من قسم الإيرادات');
+    }
+    if (body.tax_pct !== undefined && (isNaN(Number(body.tax_pct)) || Number(body.tax_pct) < 0)) {
+      throw new Error('نسبة الضريبة (tax_pct) يجب أن تكون رقماً غير سالب');
+    }
+    if (body.retention_pct !== undefined && (isNaN(Number(body.retention_pct)) || Number(body.retention_pct) < 0 || Number(body.retention_pct) > 100)) {
+      throw new Error('نسبة استقطاع الضمان (retention_pct) يجب أن تكون بين 0 و100');
+    }
+  } else {
+    if (body.type !== undefined) validateInvoiceType(body.type);
+    if (body.line_items !== undefined) validateInvoiceLineItems(body.line_items);
+  }
+}
+
+/**
+ * إصدار فاتورة جديدة (عميل أو مورد). فاتورة العميل تُربَط إلزامياً بسجل إيراد
+ * قائم فعلاً وتُحدِّث حالته تلقائياً إلى "invoiced" (وليس رقماً منفصلاً عن
+ * الإيرادات). فاتورة المورد تُربَط اختيارياً بعقدة BBS (node_id) لغرض تصنيف
+ * التكلفة عند السداد لاحقاً.
+ * body: { type, issue_date, due_date, line_items:[{description,quantity,unit_price}],
+ *         tax_pct?, retention_pct?, revenue_id? (client), node_id? (vendor),
+ *         vendor_name? (vendor), client_reference?, notes? }
+ */
+function createInvoice(budgetId, body = {}, { actor = null } = {}) {
+  validateInvoiceInput(body, { partial: false });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+
+  let linkedRevenue = null;
+  if (body.type === 'client') {
+    linkedRevenue = (budget.revenues || []).find(r => r.id === body.revenue_id);
+    if (!linkedRevenue) throw new Error('سجل الإيراد المرتبط (revenue_id) غير موجود في هذه الميزانية');
+    if (linkedRevenue.status === 'cancelled') {
+      throw new Error('لا يمكن إصدار فاتورة لإيراد ملغى');
+    }
+  }
+
+  let linkedNode = null;
+  if (body.type === 'vendor' && body.node_id) {
+    linkedNode = findNode(budget.bbs, body.node_id);
+    if (!linkedNode) throw new Error('عقدة الهيكل المرتبطة (node_id) غير موجودة في هذه الميزانية');
+  }
+
+  const invoice = {
+    id: newId('INV'),
+    budget_id: budget.id,
+    type: body.type,
+    invoice_number: generateInvoiceNumber(db, budget, body.type),
+    status: 'issued',
+    issue_date: body.issue_date,
+    due_date: body.due_date,
+    currency: budget.currency,
+    line_items: body.line_items.map(li => ({
+      id: newId('ILI'),
+      description: String(li.description).trim(),
+      quantity: Number(li.quantity),
+      unit_price: r2(li.unit_price),
+      line_total: r2(Number(li.quantity) * Number(li.unit_price)),
+    })),
+    tax_pct: body.tax_pct !== undefined ? r2(body.tax_pct) : 0,
+    retention_pct: body.retention_pct !== undefined ? r2(body.retention_pct) : 0,
+    revenue_id: linkedRevenue ? linkedRevenue.id : null,
+    node_id: linkedNode ? linkedNode.id : (body.node_id || null),
+    node_name: linkedNode ? linkedNode.name : null,
+    vendor_name: body.type === 'vendor' ? (body.vendor_name || null) : null,
+    client_reference: body.client_reference || null,
+    notes: body.notes || null,
+    payments: [],
+    linked_actual_cost_ids: [],
+    created_by: actor,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  if (!budget.invoices) budget.invoices = [];
+  budget.invoices.push(invoice);
+
+  if (linkedRevenue && linkedRevenue.status === 'expected') {
+    linkedRevenue.status = 'invoiced';
+    linkedRevenue.invoice_number = invoice.invoice_number;
+    linkedRevenue.updated_at = nowISO();
+  }
+
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'create_invoice',
+    targetId: budget.id,
+    summary: `إصدار ${INVOICE_TYPE_LABELS[invoice.type]}: ${invoice.invoice_number} — ${computeInvoiceLineItemsTotal(invoice.line_items)} ${budget.currency}`,
+    details: { budget_id: budget.id, invoice_id: invoice.id, type: invoice.type, revenue_id: invoice.revenue_id },
+  });
+
+  return { success: true, data: sanitizeInvoice(invoice) };
+}
+
+function findInvoiceOrThrow(budget, invoiceId) {
+  const inv = (budget.invoices || []).find(i => i.id === invoiceId || i.invoice_number === invoiceId);
+  if (!inv) throw new Error('الفاتورة غير موجودة في هذه الميزانية');
+  return inv;
+}
+
+function getInvoice(budgetId, invoiceId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  return { success: true, data: sanitizeInvoice(findInvoiceOrThrow(budget, invoiceId)) };
+}
+
+function listInvoices(budgetId, { type = null, status = null, from_date = null, to_date = null, page = 1, pageSize = 50 } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  let items = (budget.invoices || []).map(sanitizeInvoice);
+
+  if (type) { validateInvoiceType(type); items = items.filter(i => i.type === type); }
+  if (status) {
+    if (!INVOICE_STATUSES.includes(status)) throw new Error(`حالة فاتورة غير معروفة: ${status}`);
+    items = items.filter(i => i.effective_status === status);
+  }
+  if (from_date) items = items.filter(i => i.issue_date >= from_date);
+  if (to_date) items = items.filter(i => i.issue_date <= to_date);
+
+  items.sort((a, b) => (a.issue_date < b.issue_date ? 1 : -1));
+
+  const total = items.length;
+  const p = Math.max(1, Number(page) || 1);
+  const ps = Math.max(1, Number(pageSize) || 50);
+  const start = (p - 1) * ps;
+
+  return {
+    success: true,
+    data: { items: items.slice(start, start + ps), total, page: p, pageSize: ps, summary: computeInvoiceSummary(budget) },
+  };
+}
+
+/**
+ * تعديل فاتورة قائمة. تعديل البنود/الضريبة/الاستقطاع مسموح فقط في حالة "مسودة"
+ * أو "صادرة" قبل أي سداد، حفاظاً على سلامة السجل المالي بعد بدء التحصيل.
+ */
+function updateInvoice(budgetId, invoiceId, updates = {}, { actor = null } = {}) {
+  validateInvoiceInput(updates, { partial: true });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const invoice = findInvoiceOrThrow(budget, invoiceId);
+
+  const hasPayments = (invoice.payments || []).length > 0;
+  const financialFields = ['line_items', 'tax_pct', 'retention_pct'];
+  if (hasPayments && financialFields.some(f => updates[f] !== undefined)) {
+    throw new Error('لا يمكن تعديل البنود/الضريبة/الاستقطاع لفاتورة سُجِّلت عليها دفعة سداد بالفعل — يجب إصدار فاتورة تسوية منفصلة إن لزم');
+  }
+
+  if (updates.line_items !== undefined) {
+    invoice.line_items = updates.line_items.map(li => ({
+      id: li.id || newId('ILI'),
+      description: String(li.description).trim(),
+      quantity: Number(li.quantity),
+      unit_price: r2(li.unit_price),
+      line_total: r2(Number(li.quantity) * Number(li.unit_price)),
+    }));
+  }
+  if (updates.tax_pct !== undefined) invoice.tax_pct = r2(updates.tax_pct);
+  if (updates.retention_pct !== undefined) invoice.retention_pct = r2(updates.retention_pct);
+  if (updates.due_date !== undefined) invoice.due_date = updates.due_date;
+  if (updates.notes !== undefined) invoice.notes = updates.notes;
+  if (updates.client_reference !== undefined) invoice.client_reference = updates.client_reference;
+  if (updates.vendor_name !== undefined && invoice.type === 'vendor') invoice.vendor_name = updates.vendor_name;
+
+  invoice.updated_at = nowISO();
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'update_invoice',
+    targetId: budget.id,
+    summary: `تحديث فاتورة: ${invoice.invoice_number}`,
+    details: { budget_id: budget.id, invoice_id: invoice.id, updates: Object.keys(updates) },
+  });
+
+  return { success: true, data: sanitizeInvoice(invoice) };
+}
+
+function deleteInvoice(budgetId, invoiceId, { actor = null } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const idx = (budget.invoices || []).findIndex(i => i.id === invoiceId || i.invoice_number === invoiceId);
+  if (idx === -1) throw new Error('الفاتورة غير موجودة');
+  const invoice = budget.invoices[idx];
+
+  if ((invoice.payments || []).length > 0) {
+    throw new Error('لا يمكن حذف فاتورة سُجِّلت عليها دفعات فعلية — يجب إلغاؤها (cancel) بدلاً من ذلك حفاظاً على سلامة السجل المالي');
+  }
+
+  budget.invoices.splice(idx, 1);
+
+  if (invoice.type === 'client' && invoice.revenue_id) {
+    const revenue = (budget.revenues || []).find(r => r.id === invoice.revenue_id);
+    if (revenue && revenue.status === 'invoiced') {
+      revenue.status = 'expected';
+      revenue.invoice_number = null;
+      revenue.updated_at = nowISO();
+    }
+  }
+
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'delete_invoice',
+    targetId: budget.id,
+    summary: `حذف فاتورة: ${invoice.invoice_number}`,
+    details: { budget_id: budget.id, invoice_id: invoiceId },
+  });
+
+  return { success: true, data: { deleted: invoiceId } };
+}
+
+function cancelInvoice(budgetId, invoiceId, { actor = null, note = '' } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const invoice = findInvoiceOrThrow(budget, invoiceId);
+
+  if ((invoice.payments || []).length > 0) {
+    throw new Error('لا يمكن إلغاء فاتورة تم تسجيل دفعات فعلية عليها');
+  }
+  if (invoice.status === 'cancelled') throw new Error('الفاتورة ملغاة بالفعل');
+
+  invoice.status = 'cancelled';
+  invoice.updated_at = nowISO();
+  budget.updated_at = nowISO();
+
+  if (invoice.type === 'client' && invoice.revenue_id) {
+    const revenue = (budget.revenues || []).find(r => r.id === invoice.revenue_id);
+    if (revenue && revenue.status === 'invoiced') {
+      revenue.status = 'expected';
+      revenue.invoice_number = null;
+      revenue.updated_at = nowISO();
+    }
+  }
+
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'cancel_invoice',
+    targetId: budget.id,
+    summary: `إلغاء فاتورة: ${invoice.invoice_number}${note ? ' — ' + note : ''}`,
+    details: { budget_id: budget.id, invoice_id: invoice.id, note },
+  });
+
+  return { success: true, data: sanitizeInvoice(invoice) };
+}
+
+/**
+ * تسجيل دفعة فعلية (كاملة أو جزئية) على فاتورة قائمة.
+ * - فاتورة عميل: عند اكتمال السداد (paid_amount = grand_total)، يُسجَّل ذلك تلقائياً
+ *   كإيراد "مستلم" فعلياً على سجل الإيراد المرتبط (received + received_date)، بحيث
+ *   ينعكس فوراً على التدفق النقدي والأرباح الفعلية (الجزء 4/10) دون إدخال مزدوج.
+ * - فاتورة مورد: عند تسجيل الدفعة، تُنشأ تلقائياً تكلفة فعلية مقابلة (actual_cost)
+ *   على نفس العقدة المرتبطة (أو عقدة افتراضية "فواتير موردين" إن لم تُحدَّد)، بحيث
+ *   تنعكس فوراً على الانحرافات المالية وEVM (الجزء 6/10).
+ * body: { amount, payment_date?, payment_method?, reference? }
+ */
+function recordInvoicePayment(budgetId, invoiceId, body = {}, { actor = null } = {}) {
+  if (body.amount === undefined || isNaN(Number(body.amount)) || Number(body.amount) <= 0) {
+    throw new Error('مبلغ الدفعة (amount) مطلوب ويجب أن يكون أكبر من صفر');
+  }
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const invoice = findInvoiceOrThrow(budget, invoiceId);
+
+  if (invoice.status === 'cancelled') throw new Error('لا يمكن تسجيل دفعة على فاتورة ملغاة');
+
+  const totalsBefore = computeInvoiceTotals(invoice);
+  const amount = r2(body.amount);
+  if (amount > totalsBefore.outstanding_amount + 0.01) {
+    throw new Error(`مبلغ الدفعة (${amount}) يتجاوز المبلغ المتبقي على الفاتورة (${totalsBefore.outstanding_amount})`);
+  }
+
+  const payment = {
+    id: newId('IPAY'),
+    amount,
+    payment_date: body.payment_date || nowISO().slice(0, 10),
+    payment_method: body.payment_method || null,
+    reference: body.reference || null,
+    recorded_by: actor,
+    recorded_at: nowISO(),
+  };
+  invoice.payments.push(payment);
+  invoice.updated_at = nowISO();
+
+  const totalsAfter = computeInvoiceTotals(invoice);
+  const fullyPaid = totalsAfter.outstanding_amount <= 0.01;
+
+  if (invoice.type === 'client' && fullyPaid && invoice.revenue_id) {
+    const revenue = (budget.revenues || []).find(r => r.id === invoice.revenue_id);
+    if (revenue && revenue.status !== 'received') {
+      revenue.status = 'received';
+      revenue.received_date = payment.payment_date;
+      revenue.updated_at = nowISO();
+    }
+  }
+
+  if (fullyPaid) invoice.status = 'paid';
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  let linkedActualCostId = null;
+  if (invoice.type === 'vendor') {
+    const dbFresh = loadDB();
+    const budgetFresh = findBudgetOrThrow(dbFresh, budget.id);
+    const invoiceFresh = findInvoiceOrThrow(budgetFresh, invoice.id);
+
+    let targetNodeId = invoiceFresh.node_id;
+    if (!targetNodeId) {
+      let vendorPhase = budgetFresh.bbs.find(n => n.node_type === 'phase' && n.__is_vendor_invoices_phase);
+      if (!vendorPhase) {
+        vendorPhase = makeBBSNode({ name: 'فواتير موردين ومقاولين فرعيين', node_type: 'phase' });
+        vendorPhase.__is_vendor_invoices_phase = true;
+        budgetFresh.bbs.push(vendorPhase);
+      }
+      const mainItem = makeBBSNode({ name: invoiceFresh.vendor_name || 'مورد غير محدد', node_type: 'main_item', parent_id: vendorPhase.id });
+      const subItem = makeBBSNode({ name: invoiceFresh.invoice_number, node_type: 'sub_item', parent_id: mainItem.id });
+      const activity = makeBBSNode({ name: 'سداد فاتورة مورد', node_type: 'activity', parent_id: subItem.id });
+      const resource = makeBBSNode({ name: `مورد: ${invoiceFresh.vendor_name || 'غير محدد'}`, node_type: 'resource', cost: 0, parent_id: activity.id });
+      activity.children.push(resource);
+      subItem.children.push(activity);
+      mainItem.children.push(subItem);
+      vendorPhase.children.push(mainItem);
+      targetNodeId = resource.id;
+    }
+    budgetFresh.updated_at = nowISO();
+    saveDB(dbFresh);
+
+    const actualCostResult = addActualCost(budgetFresh.id, {
+      category: 'other',
+      node_id: targetNodeId,
+      description: `سداد فاتورة مورد ${invoiceFresh.invoice_number}${invoiceFresh.vendor_name ? ' - ' + invoiceFresh.vendor_name : ''}`,
+      date: payment.payment_date,
+      amount,
+      supplier: invoiceFresh.vendor_name || null,
+      reference: invoiceFresh.invoice_number,
+    }, { actor });
+
+    linkedActualCostId = actualCostResult.data.actual_cost ? actualCostResult.data.actual_cost.id : null;
+
+    const dbFinal = loadDB();
+    const budgetFinal = findBudgetOrThrow(dbFinal, budget.id);
+    const invoiceFinal = findInvoiceOrThrow(budgetFinal, invoice.id);
+    invoiceFinal.linked_actual_cost_ids.push(linkedActualCostId);
+    invoiceFinal.updated_at = nowISO();
+    budgetFinal.updated_at = nowISO();
+    saveDB(dbFinal);
+  }
+
+  recordAudit({
+    actor,
+    action: 'record_invoice_payment',
+    targetId: budget.id,
+    summary: `تسجيل دفعة على فاتورة ${invoice.invoice_number}: ${amount} ${budget.currency}${fullyPaid ? ' (سداد كامل)' : ' (سداد جزئي)'}`,
+    details: { budget_id: budget.id, invoice_id: invoice.id, payment_id: payment.id, amount, linked_actual_cost_id: linkedActualCostId },
+  });
+
+  return { success: true, data: sanitizeInvoice(invoice) };
+}
+
+/**
+ * إعادة تصنيف تلقائية للفواتير المتأخرة السداد عبر كل الميزانيات، على غرار
+ * refreshOverdueRevenues — تفحص كل فاتورة "صادرة"/"مدفوعة جزئياً" تجاوز تاريخ
+ * استحقاقها اليوم، وتُحدِّث حالتها المخزَّنة فعلياً على القرص إلى "overdue".
+ */
+function refreshOverdueInvoices() {
+  const db = loadDB();
+  const today = nowISO().slice(0, 10);
+  let updatedCount = 0;
+
+  for (const budget of db.budgets) {
+    for (const invoice of (budget.invoices || [])) {
+      if (['issued', 'partially_paid'].includes(invoice.status) && invoice.due_date && invoice.due_date < today) {
+        const totals = computeInvoiceTotals(invoice);
+        if (totals.outstanding_amount > 0) {
+          invoice.status = 'overdue';
+          invoice.updated_at = nowISO();
+          updatedCount++;
+          recordAudit({
+            actor: 'system',
+            action: 'auto_mark_invoice_overdue',
+            targetId: budget.id,
+            summary: `تصنيف تلقائي: فاتورة ${invoice.invoice_number} متأخرة السداد`,
+            details: { budget_id: budget.id, invoice_id: invoice.id, due_date: invoice.due_date, outstanding: totals.outstanding_amount },
+          });
+        }
+      }
+    }
+  }
+
+  if (updatedCount > 0) saveDB(db);
+  return { success: true, data: { updated_count: updatedCount } };
+}
+
+function computeInvoiceSummary(budget) {
+  const items = (budget.invoices || []).map(sanitizeInvoice);
+  const clientInvoices = items.filter(i => i.type === 'client');
+  const vendorInvoices = items.filter(i => i.type === 'vendor');
+  const overdue = items.filter(i => i.effective_status === 'overdue');
+
+  function summarize(list) {
+    return {
+      count: list.length,
+      total_grand_total: r2(list.reduce((s, i) => s + i.grand_total, 0)),
+      total_paid: r2(list.reduce((s, i) => s + i.paid_amount, 0)),
+      total_outstanding: r2(list.filter(i => i.effective_status !== 'cancelled').reduce((s, i) => s + i.outstanding_amount, 0)),
+      total_tax: r2(list.reduce((s, i) => s + i.tax_amount, 0)),
+      total_retention: r2(list.reduce((s, i) => s + i.retention_amount, 0)),
+    };
+  }
+
+  return {
+    client_invoices: summarize(clientInvoices),
+    vendor_invoices: summarize(vendorInvoices),
+    overdue_count: overdue.length,
+    overdue_total_outstanding: r2(overdue.reduce((s, i) => s + i.outstanding_amount, 0)),
+    total_invoices: items.length,
+  };
+}
+
+function getInvoiceSummary(budgetId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  return { success: true, data: computeInvoiceSummary(budget) };
+}
+
+function getInvoicesOverview() {
+  const db = loadDB();
+  const perBudget = db.budgets.map(b => ({
+    budget_id: b.id, project_id: b.project_id, project_name: b.project_name,
+    currency: b.currency, summary: computeInvoiceSummary(b),
+  }));
+
+  const totals = perBudget.reduce((acc, p) => {
+    acc.total_client_outstanding = r2(acc.total_client_outstanding + p.summary.client_invoices.total_outstanding);
+    acc.total_vendor_outstanding = r2(acc.total_vendor_outstanding + p.summary.vendor_invoices.total_outstanding);
+    acc.total_overdue_outstanding = r2(acc.total_overdue_outstanding + p.summary.overdue_total_outstanding);
+    acc.total_invoices = acc.total_invoices + p.summary.total_invoices;
+    return acc;
+  }, { total_client_outstanding: 0, total_vendor_outstanding: 0, total_overdue_outstanding: 0, total_invoices: 0 });
+
+  return { success: true, data: { totals, per_budget: perBudget } };
+}
+
+function getDashboardStatsWithInvoicing() {
+  const base = getDashboardStatsWithCashFlow();
+  const invoicesOverview = getInvoicesOverview();
+
+  base.data.summary.total_client_invoices_outstanding = invoicesOverview.data.totals.total_client_outstanding;
+  base.data.summary.total_vendor_invoices_outstanding = invoicesOverview.data.totals.total_vendor_outstanding;
+  base.data.summary.total_overdue_invoices_outstanding = invoicesOverview.data.totals.total_overdue_outstanding;
+  base.data.summary.total_invoices_count = invoicesOverview.data.totals.total_invoices;
+
+  return base;
+}
+
 module.exports = {
   // إدارة الميزانية الأساسية
   createBudget,
@@ -3074,8 +3641,23 @@ module.exports = {
   PAYMENT_REQUEST_STATUSES,
   PAYMENT_REQUEST_STATUS_LABELS,
   PAYMENT_REQUEST_CATEGORIES,
-  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج التدفق النقدي والموافقات - الجزء 7/10)
-  getDashboardStats: getDashboardStatsWithCashFlow,
+  // الفواتير والمستخلصات (الجزء 8/10)
+  createInvoice,
+  getInvoice,
+  listInvoices,
+  updateInvoice,
+  deleteInvoice,
+  cancelInvoice,
+  recordInvoicePayment,
+  refreshOverdueInvoices,
+  getInvoiceSummary,
+  getInvoicesOverview,
+  INVOICE_TYPES,
+  INVOICE_TYPE_LABELS,
+  INVOICE_STATUSES,
+  INVOICE_STATUS_LABELS,
+  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج الفواتير - الجزء 8/10)
+  getDashboardStats: getDashboardStatsWithInvoicing,
   listAudit,
   // ثوابت مساعدة للواجهة
   BUDGET_STATUSES,
