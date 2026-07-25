@@ -95,6 +95,7 @@ const BUDGET_REPORTS = require('./utils/budgetReports');
 const BUDGET_AI = require('./utils/budgetAI');
 const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
+const REPORT_BUILDER = require('./utils/reportBuilder'); // القسم 14 - الجزء 2/10
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8195,6 +8196,86 @@ const API_HANDLERS = {
         projectId: query?.projectId || null,
       }),
     }),
+  },
+
+  // ===================== القسم 14: نظام التقارير - الجزء 2/10 (منشئ التقارير + الفلاتر المتقدمة) =====================
+  '/api/reports/builder/data-sources': {
+    GET: async () => ({ success: true, data: REPORT_BUILDER.getDataSourcesRegistry() }),
+  },
+  '/api/reports/builder/data-sources/fields': {
+    GET: async (_body, query) => {
+      if (!query?.source) throw new Error('يجب تحديد مصدر البيانات (source)');
+      return { success: true, data: REPORT_BUILDER.getDataSourceFields(query.source) };
+    },
+  },
+  '/api/reports/builder/run': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      const report = REPORT_BUILDER.buildCustomReport(body || {});
+      // تسجيل التقرير المُنشأ في سجل مركز التقارير حتى يظهر في لوحة التحكم والسجل
+      const registered = REPORTS_CENTER.registerReportRecord({
+        title: report.title,
+        category: 'custom_builder',
+        projectId: body?.filters?.projectId || null,
+        userId: body?.userId || null,
+        status: 'completed',
+      });
+      return { success: true, data: { ...report, record_id: registered.id } };
+    },
+  },
+  '/api/reports/builder/saved': {
+    GET: async (_body, query) => ({
+      success: true,
+      data: REPORT_BUILDER.listSavedReportSpecs({
+        userId: query?.userId || null,
+        projectId: query?.projectId || null,
+      }),
+    }),
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'create');
+      if (!body?.name || !body?.spec) throw new Error('اسم التقرير (name) ومواصفته (spec) مطلوبان');
+      return {
+        success: true,
+        data: REPORT_BUILDER.saveReportSpec({
+          name: body.name, spec: body.spec, userId: body.userId || null, projectId: body.projectId || null,
+        }),
+      };
+    },
+  },
+  '/api/reports/builder/saved/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف مواصفة التقرير (id) مطلوب');
+      return { success: true, data: REPORT_BUILDER.getSavedReportSpec(query.id) };
+    },
+  },
+  '/api/reports/builder/saved/update': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'edit');
+      if (!body?.id) throw new Error('معرّف مواصفة التقرير (id) مطلوب');
+      return { success: true, data: REPORT_BUILDER.updateReportSpec(body.id, { name: body.name, spec: body.spec }) };
+    },
+  },
+  '/api/reports/builder/saved/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'delete');
+      if (!body?.id) throw new Error('معرّف مواصفة التقرير (id) مطلوب');
+      return { success: true, data: REPORT_BUILDER.deleteReportSpec(body.id) };
+    },
+  },
+  '/api/reports/builder/saved/run': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body?.id) throw new Error('معرّف مواصفة التقرير (id) مطلوب');
+      const report = REPORT_BUILDER.runSavedReport(body.id, body.overrideFilters || {});
+      const registered = REPORTS_CENTER.registerReportRecord({
+        title: report.title,
+        category: 'custom_builder',
+        projectId: body?.overrideFilters?.projectId || null,
+        userId: body?.userId || null,
+        status: 'completed',
+      });
+      return { success: true, data: { ...report, record_id: registered.id } };
+    },
   },
 };
 
