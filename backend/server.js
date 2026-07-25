@@ -7817,6 +7817,93 @@ const API_HANDLERS = {
       return BUDGET.getPendingApprovalsOverview();
     },
   },
+
+  // ===================================================================
+  // ===== القسم الثالث عشر - إدارة الميزانية - الجزء 8/10 ==============
+  // ===== الفواتير والمستخلصات (Invoicing) =============================
+  // ===================================================================
+  '/api/budget/invoices/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.listInvoices(query.budget_id, {
+        type: query.type || null, status: query.status || null,
+        from_date: query.from_date || null, to_date: query.to_date || null,
+        page: Number(query.page) || 1, pageSize: Number(query.pageSize) || 50,
+      });
+    },
+  },
+  '/api/budget/invoices/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id || !query?.invoice_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والفاتورة (invoice_id) مطلوبان');
+      }
+      return BUDGET.getInvoice(query.budget_id, query.invoice_id);
+    },
+  },
+  '/api/budget/invoices/create': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.createInvoice(body.budget_id, body.invoice || {}, { actor: token });
+    },
+  },
+  '/api/budget/invoices/update': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.invoice_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والفاتورة (invoice_id) مطلوبان');
+      }
+      return BUDGET.updateInvoice(body.budget_id, body.invoice_id, body.updates || {}, { actor: token });
+    },
+  },
+  '/api/budget/invoices/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'delete');
+      if (!body?.budget_id || !body?.invoice_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والفاتورة (invoice_id) مطلوبان');
+      }
+      return BUDGET.deleteInvoice(body.budget_id, body.invoice_id, { actor: token });
+    },
+  },
+  '/api/budget/invoices/cancel': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.invoice_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والفاتورة (invoice_id) مطلوبان');
+      }
+      return BUDGET.cancelInvoice(body.budget_id, body.invoice_id, { actor: token, note: body.note || '' });
+    },
+  },
+  '/api/budget/invoices/record-payment': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'approve');
+      if (!body?.budget_id || !body?.invoice_id) {
+        throw new Error('معرّفا الميزانية (budget_id) والفاتورة (invoice_id) مطلوبان');
+      }
+      return BUDGET.recordInvoicePayment(body.budget_id, body.invoice_id, body.payment || {}, { actor: token });
+    },
+  },
+  '/api/budget/invoices/refresh-overdue': {
+    POST: async (_body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      return BUDGET.refreshOverdueInvoices({ actor: token });
+    },
+  },
+  '/api/budget/invoices/summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.getInvoiceSummary(query.budget_id);
+    },
+  },
+  '/api/budget/invoices/overview': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      return BUDGET.getInvoicesOverview();
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
