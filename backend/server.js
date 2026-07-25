@@ -7597,6 +7597,87 @@ const API_HANDLERS = {
       return BUDGET.getRevenuesOverview();
     },
   },
+
+  // ===== أوامر التغيير (الجزء 5/10) =====
+  '/api/budget/change-orders/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.listChangeOrders(query.budget_id, {
+        status: query.status || null,
+        page: Number(query.page) || 1,
+        pageSize: Number(query.pageSize) || 50,
+      });
+    },
+  },
+  '/api/budget/change-orders/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id || !query?.change_order_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وأمر التغيير (change_order_id) مطلوبان');
+      }
+      return BUDGET.getChangeOrder(query.budget_id, query.change_order_id);
+    },
+  },
+  '/api/budget/change-orders/create': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'create');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.createChangeOrder(body.budget_id, body.change_order || {}, { actor: token });
+    },
+  },
+  '/api/budget/change-orders/update': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.change_order_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وأمر التغيير (change_order_id) مطلوبان');
+      }
+      return BUDGET.updateChangeOrder(body.budget_id, body.change_order_id, body.updates || {}, { actor: token });
+    },
+  },
+  '/api/budget/change-orders/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.change_order_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وأمر التغيير (change_order_id) مطلوبان');
+      }
+      return BUDGET.deleteChangeOrder(body.budget_id, body.change_order_id, { actor: token });
+    },
+  },
+  '/api/budget/change-orders/pm-approve': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.change_order_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وأمر التغيير (change_order_id) مطلوبان');
+      }
+      return BUDGET.pmApproveChangeOrder(body.budget_id, body.change_order_id, { actor: token, note: body.note || '' });
+    },
+  },
+  '/api/budget/change-orders/approve': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'approve');
+      if (!body?.budget_id || !body?.change_order_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وأمر التغيير (change_order_id) مطلوبان');
+      }
+      return BUDGET.approveChangeOrder(body.budget_id, body.change_order_id, { actor: token, note: body.note || '' });
+    },
+  },
+  '/api/budget/change-orders/reject': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.change_order_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وأمر التغيير (change_order_id) مطلوبان');
+      }
+      return BUDGET.rejectChangeOrder(body.budget_id, body.change_order_id, { actor: token, note: body.note || '' });
+    },
+  },
+  '/api/budget/change-orders/overview': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.getChangeOrdersOverview(query.budget_id);
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
