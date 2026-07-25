@@ -119,7 +119,11 @@ const DATA_SOURCES = {
         page: 1,
         pageSize: filters.limit || 1000,
       });
-      return result.items;
+      // تصحيح: الحقل الفعلي المخزَّن في وحدة إدارة المشاريع هو main_contractor
+      // (وليس contractor). نُطابعه هنا إلى contractor للتوافق مع تعريف الحقل
+      // أعلاه ومع فلتر contractor العام في applyAdvancedFilters، دون تعديل شكل
+      // البيانات المصدرية الأصلية في projectManagement.js.
+      return result.items.map((p) => ({ ...p, contractor: p.main_contractor || '' }));
     },
   },
 
