@@ -7714,6 +7714,109 @@ const API_HANDLERS = {
       return BUDGET.getEVMOverview();
     },
   },
+
+  // ===================== القسم 13 - الجزء 7/10: التدفقات النقدية الشاملة =====================
+  '/api/budget/cash-flow/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.getComprehensiveCashFlow(query.budget_id);
+    },
+  },
+  '/api/budget/cash-flow/overview': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      return BUDGET.getCashFlowOverview();
+    },
+  },
+
+  // ========================= القسم 13 - الجزء 7/10: الموافقات المالية =========================
+  '/api/budget/payment-requests/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.listPaymentRequests(query.budget_id, {
+        status: query.status || null, category: query.category || null,
+        page: Number(query.page) || 1, pageSize: Number(query.pageSize) || 50,
+      });
+    },
+  },
+  '/api/budget/payment-requests/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id || !query?.payment_request_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وطلب الصرف (payment_request_id) مطلوبان');
+      }
+      return BUDGET.getPaymentRequest(query.budget_id, query.payment_request_id);
+    },
+  },
+  '/api/budget/payment-requests/create': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'create');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET.createPaymentRequest(body.budget_id, body.item || {}, { actor: token }).data };
+    },
+  },
+  '/api/budget/payment-requests/financial-review': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.payment_request_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وطلب الصرف (payment_request_id) مطلوبان');
+      }
+      return BUDGET.financialReviewPaymentRequest(body.budget_id, body.payment_request_id, { actor: token, note: body.note || '' });
+    },
+  },
+  '/api/budget/payment-requests/pm-approve': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.payment_request_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وطلب الصرف (payment_request_id) مطلوبان');
+      }
+      return BUDGET.pmApprovePaymentRequest(body.budget_id, body.payment_request_id, { actor: token, note: body.note || '' });
+    },
+  },
+  '/api/budget/payment-requests/management-approve': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'approve');
+      if (!body?.budget_id || !body?.payment_request_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وطلب الصرف (payment_request_id) مطلوبان');
+      }
+      return BUDGET.managementApprovePaymentRequest(body.budget_id, body.payment_request_id, { actor: token, note: body.note || '' });
+    },
+  },
+  '/api/budget/payment-requests/disburse': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'approve');
+      if (!body?.budget_id || !body?.payment_request_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وطلب الصرف (payment_request_id) مطلوبان');
+      }
+      return BUDGET.disbursePaymentRequest(body.budget_id, body.payment_request_id, {
+        actor: token, note: body.note || '', payment_date: body.payment_date || null, payment_method: body.payment_method || null,
+      });
+    },
+  },
+  '/api/budget/payment-requests/reject': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.payment_request_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وطلب الصرف (payment_request_id) مطلوبان');
+      }
+      return BUDGET.rejectPaymentRequest(body.budget_id, body.payment_request_id, { actor: token, note: body.note || '' });
+    },
+  },
+  '/api/budget/payment-requests/overview': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.getPaymentRequestsOverview(query.budget_id);
+    },
+  },
+  '/api/budget/payment-requests/pending-approvals': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      return BUDGET.getPendingApprovalsOverview();
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
