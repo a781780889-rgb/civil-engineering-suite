@@ -14,8 +14,8 @@
  *  4/10: إدارة الإيرادات + الدفعات + المستخلصات (منجَز)
  *  5/10: أوامر التغيير (Change Orders) - موافقة على مستويين (مدير مشروع ثم إدارة/
  *        مالي)، تُطبَّق تلقائياً على BBS وcontract_value عند الاعتماد النهائي
- *        (منجَز - هذا الملف)
- *  6/10: مراقبة الانحرافات المالية + تحليل القيمة المكتسبة (EVM)
+ *        (منجَز)
+ *  6/10: مراقبة الانحرافات المالية + تحليل القيمة المكتسبة (EVM) (منجَز - هذا الملف)
  *  7/10: التدفقات النقدية (Cash Flow) + الموافقات المالية
  *  8/10: الفواتير والمستخلصات (Invoicing)
  *  9/10: التقارير المالية + الرسوم البيانية + التصدير (PDF/Excel/CSV/Word)
@@ -48,6 +48,9 @@ const AUDIT_FILE = path.join(DATA_DIR, 'budget_audit.json');
 
 let PM = null;
 try { PM = require('./projectManagement'); } catch (e) { PM = null; }
+
+let SCH = null;
+try { SCH = require('./scheduling'); } catch (e) { SCH = null; }
 
 // ==================================================================================
 // ==================================== أدوات عامة =================================
@@ -2122,6 +2125,393 @@ function getDashboardStatsWithChangeOrders() {
   return base;
 }
 
+// ==================================================================================
+// === الجزء 6/10: مراقبة الانحرافات المالية + تحليل القيمة المكتسبة (EVM) ==========
+// ==================================================================================
+// هذا الجزء لا يضيف بيانات جديدة تُدخَل يدوياً، بل يحسب مؤشرات فعلية من البيانات
+// الموجودة أصلاً في النظام:
+//   - BAC (Budget At Completion)  = computeBBSGrandTotal(budget)  (الجزء 1/10، محدَّثاً
+//     تلقائياً بأوامر التغيير المعتمدة من الجزء 5/10 لأنها تُحدِّث BBS مباشرة).
+//   - AC  (Actual Cost)           = computeActualCostSummary(budget).total_actual_cost
+//     (الجزء 3/10).
+//   - % الإنجاز الفعلي (Physical % Complete) = من الجدول الزمني الحقيقي للمشروع
+//     (scheduling.js، عبر computeSCurve/compareScheduleVsActual)، وليس تقديراً؛ إن لم
+//     يوجد جدول زمني مرتبط بالمشروع (SCH غير متاح أو لا يوجد جدول)، يُستخدَم fallback
+//     شفّاف: نسبة استهلاك الميزانية (AC/BAC) كتقدير مؤقت مع علم `progress_source`
+//     يوضّح للواجهة أن الرقم تقديري وليس من جدول زمني فعلي.
+//   - PV  (Planned Value)  = BAC × (النسبة المخططة تراكمياً حتى تاريخ اليوم من S-Curve)
+//   - EV  (Earned Value)   = BAC × (% الإنجاز الفعلي)
+//   - CV = EV - AC   |   SV = EV - PV
+//   - CPI = EV / AC  |   SPI = EV / PV
+//   - EAC = AC + (BAC - EV) / CPI  (طريقة الأداء المستمر - الأكثر شيوعاً)
+//   - ETC = EAC - AC
+//   - VAC (Variance At Completion) = BAC - EAC
+//
+// تصنيف شدة الانحراف: يُطبَّق على "نسبة الانحراف المالي" (variance_pct من
+// computeActualCostSummary، أي (BAC - AC)/BAC) بعتبات قابلة للتعديل من كود واحد.
+
+const DEVIATION_THRESHOLDS = {
+  minor_pct: 5,    // حتى 5% تجاوز أو أقل = انحراف بسيط
+  moderate_pct: 15, // حتى 15% = انحراف متوسط، أكثر من ذلك = انحراف خطير
+};
+
+function classifyDeviation(variancePct) {
+  // variancePct موجب = وفر (أقل من المخطط)، سالب = تجاوز. الخطورة تُقاس بالقيمة المطلقة
+  // فقط عند التجاوز (سالب)؛ الوفر لا يُصنَّف كـ"خطير" أبداً مهما كبر.
+  const overrun = variancePct < 0 ? Math.abs(variancePct) : 0;
+  let level = 'none';
+  let label = 'لا يوجد تجاوز';
+  if (overrun > DEVIATION_THRESHOLDS.moderate_pct) {
+    level = 'severe'; label = 'انحراف خطير';
+  } else if (overrun > DEVIATION_THRESHOLDS.minor_pct) {
+    level = 'moderate'; label = 'انحراف متوسط';
+  } else if (overrun > 0) {
+    level = 'minor'; label = 'انحراف بسيط';
+  }
+  return { level, label, overrun_pct: r2(overrun) };
+}
+
+/**
+ * جلب أفضل جدول زمني متاح لمشروع الميزانية: الجدول ذو الحالة "active" الأحدث إنشاءً.
+ * يعيد null إن لم تتوفر وحدة الجدولة أو لم يوجد جدول للمشروع - وليس خطأ، لأن EVM
+ * يجب أن يعمل (بتقدير احتياطي) حتى بدون جدول زمني مرتبط بعد.
+ */
+function findProjectSchedule(projectId) {
+  if (!SCH || typeof SCH.listSchedules !== 'function') return null;
+  try {
+    const schedules = SCH.listSchedules(projectId) || [];
+    if (!schedules.length) return null;
+    const active = schedules.filter(s => s.status === 'active');
+    const pool = active.length ? active : schedules;
+    return pool.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * حساب النسبة المخططة تراكمياً حتى تاريخ اليوم، والنسبة الفعلية للإنجاز، من منحنى
+ * S-Curve الحقيقي للجدول الزمني (scheduling.js). النسبة المخططة تُقرَأ من أقرب نقطة
+ * زمنية للتاريخ الحالي في مصفوفة planned (وليست تقديراً خطياً مبسَّطاً).
+ */
+function getScheduleProgress(projectId) {
+  const schedule = findProjectSchedule(projectId);
+  if (!schedule || typeof SCH.compareScheduleVsActual !== 'function') {
+    return { available: false, planned_pct: null, actual_pct: null, schedule_id: null };
+  }
+  try {
+    const cmp = SCH.compareScheduleVsActual(schedule.id);
+    const activities = cmp.activities || [];
+    if (!activities.length) {
+      return { available: false, planned_pct: null, actual_pct: null, schedule_id: schedule.id };
+    }
+
+    const today = nowISO().slice(0, 10);
+
+    // النسبة المخططة تراكمياً حتى اليوم: لكل نشاط، وزنه = 1/عدد الأنشطة (تبسيط موحّد
+    // مع نفس منهجية computeSCurve الأصلية)، ومساهمته في "المخطط حتى اليوم" = 100% من
+    // وزنه إن انتهى تاريخه المخطط (planned_end) قبل أو خلال اليوم، أو نسبة الأيام
+    // المنقضية من مدته المخططة إن كان اليوم يقع أثناء تنفيذه، أو صفر إن لم يبدأ بعد.
+    // يُستخدَم التاريخ التقويمي الفعلي لكل نشاط مباشرة (planned_start/planned_end)
+    // بدل معرّفات الأيام الداخلية لخوارزمية CPM، لتفادي أي فرق بين وحدات "يوم عمل"
+    // ووحدات "يوم تقويمي" عند تحويلها لاحقاً إلى نسبة تراكمية بتاريخ محدد.
+    const weight = 100 / activities.length;
+    let plannedCum = 0;
+    for (const a of activities) {
+      if (!a.planned_start || !a.planned_end) continue;
+      if (a.planned_end <= today) {
+        plannedCum += weight;
+      } else if (a.planned_start <= today) {
+        const totalDays = Math.max(1, daysBetweenDates(a.planned_start, a.planned_end));
+        const elapsedDays = Math.max(0, daysBetweenDates(a.planned_start, today));
+        plannedCum += weight * Math.min(1, elapsedDays / totalDays);
+      }
+      // لم يبدأ بعد (planned_start > today): مساهمته = صفر، لا شيء يُضاف
+    }
+
+    const actualPct = Number(cmp.overall_progress_percent) || 0;
+
+    return {
+      available: true,
+      planned_pct: r2(Math.min(100, plannedCum)),
+      actual_pct: r2(actualPct),
+      schedule_id: schedule.id,
+      schedule_name: schedule.name,
+    };
+  } catch (e) {
+    return { available: false, planned_pct: null, actual_pct: null, schedule_id: schedule.id, error: e.message };
+  }
+}
+
+// فرق الأيام بين تاريخين بصيغة YYYY-MM-DD (نسخة محلية بسيطة؛ لا تعتمد على أدوات
+// scheduling.js الداخلية غير المصدَّرة، لتبقى هذه الدالة مستقلة وقابلة لإعادة الاستخدام)
+function daysBetweenDates(dateStrA, dateStrB) {
+  const a = new Date(dateStrA);
+  const b = new Date(dateStrB);
+  return Math.round((b - a) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * حساب مجموعة مؤشرات EVM الكاملة لميزانية محددة، بالاعتماد على:
+ *  - BAC من BBS الفعلي (الجزء 1/10 + أوامر التغيير المعتمدة من الجزء 5/10)
+ *  - AC من التكاليف الفعلية المسجَّلة (الجزء 3/10)
+ *  - % الإنجاز من الجدول الزمني الحقيقي (scheduling.js) إن وُجد، وإلا تقدير احتياطي
+ *    شفّاف = نسبة استهلاك الميزانية (موسوم بـ progress_source = 'budget_consumption_fallback')
+ */
+function computeEVM(budget) {
+  const bac = computeBBSGrandTotal(budget);
+  const actualSummary = computeActualCostSummary(budget);
+  const ac = actualSummary.total_actual_cost;
+
+  const scheduleProgress = getScheduleProgress(budget.project_id);
+
+  let plannedPct, actualPct, progressSource;
+  if (scheduleProgress.available) {
+    plannedPct = scheduleProgress.planned_pct;
+    actualPct = scheduleProgress.actual_pct;
+    progressSource = 'schedule'; // من الجدول الزمني الحقيقي للمشروع
+  } else {
+    // تقدير احتياطي شفّاف: يُفترَض أن ما صُرف فعلياً يعكس تقريباً ما أُنجِز، إلى حين
+    // ربط الميزانية بجدول زمني فعلي. لا يُستخدَم كأساس دائم، ويظهر بوضوح في المخرجات.
+    actualPct = bac > 0 ? r2(Math.min(100, (ac / bac) * 100)) : 0;
+    plannedPct = actualPct; // بدون جدول زمني، لا مصدر مستقل لتقدير "المخطط" تراكمياً
+    progressSource = 'budget_consumption_fallback';
+  }
+
+  const pv = r2(bac * (plannedPct / 100));
+  const ev = r2(bac * (actualPct / 100));
+
+  const cv = r2(ev - ac);           // Cost Variance: موجب = وفر، سالب = تجاوز تكلفة
+  const sv = r2(ev - pv);           // Schedule Variance: موجب = متقدم، سالب = متأخر
+
+  const cpi = ac > 0 ? r2(ev / ac) : (ev > 0 ? null : 1); // null = لا يمكن حسابه (لا EV ولا AC)
+  const spi = pv > 0 ? r2(ev / pv) : (ev > 0 ? null : 1);
+
+  // EAC بطريقة الأداء المستمر (الأكثر استخداماً): AC + (BAC - EV) / CPI
+  // إن تعذّر حساب CPI (لا تكلفة مسجَّلة بعد)، EAC = BAC كأفضل تقدير متاح
+  let eac;
+  if (cpi && cpi > 0) {
+    eac = r2(ac + (bac - ev) / cpi);
+  } else {
+    eac = bac;
+  }
+  const etc = r2(eac - ac);
+  const vac = r2(bac - eac); // موجب = يُتوقَّع الانتهاء دون الميزانية، سالب = تجاوز متوقَّع
+
+  // تصنيف شدة الانحراف يعتمد على VAC/BAC (نسبة التجاوز المتوقعة عند الإنجاز الكامل)
+  // وليس فقط على مقارنة BAC بالمصروف الفعلي حتى الآن (variance_pct)؛ الأخيرة قد تُظهر
+  // "وفراً" ظاهرياً في مشروع لا يزال في بدايته رغم أن أداء تكلفته الفعلي (CPI) كارثي
+  // ومن المتوقع أن يتجاوز الميزانية بشكل كبير عند اكتماله - وهو بالضبط ما يلتقطه VAC.
+  const vacPct = bac > 0 ? r2((vac / bac) * 100) : 0;
+  const deviation = classifyDeviation(vacPct);
+
+  return {
+    budget_id: budget.id,
+    project_id: budget.project_id,
+    project_name: budget.project_name,
+    bac,
+    ac,
+    ev,
+    pv,
+    physical_progress: {
+      planned_pct: plannedPct,
+      actual_pct: actualPct,
+      source: progressSource,
+      schedule_id: scheduleProgress.schedule_id || null,
+    },
+    cv,
+    sv,
+    cpi,
+    spi,
+    eac,
+    etc,
+    vac,
+    performance_status: {
+      cost: cpi === null ? 'غير محدَّد' : (cpi >= 1 ? 'ضمن التكلفة المخططة أو أفضل' : 'تجاوز في التكلفة'),
+      schedule: spi === null ? 'غير محدَّد' : (spi >= 1 ? 'ضمن الجدول الزمني أو أسرع' : 'متأخر عن الجدول الزمني'),
+    },
+    deviation, // { level, label, overrun_pct }
+    budget_variance_pct: actualSummary.variance_pct,
+    over_budget: actualSummary.over_budget,
+  };
+}
+
+function getBudgetEVM(budgetId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  return { success: true, data: computeEVM(budget) };
+}
+
+/**
+ * سجل EVM عبر الزمن: يُنشئ نقطة قياس فعلية (snapshot) لمؤشرات EVM الحالية ويحفظها
+ * ضمن الميزانية (evm_snapshots)، بحيث يمكن لاحقاً رسم تطور CPI/SPI/EAC عبر الزمن
+ * (وليس فقط رقماً لحظياً). يُستدعى يدوياً (زر "تسجيل نقطة قياس") أو دورياً.
+ */
+function recordEVMSnapshot(budgetId, { actor = null, note = '' } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const evm = computeEVM(budget);
+
+  const snapshot = {
+    id: newId('EVMS'),
+    date: nowISO().slice(0, 10),
+    recorded_at: nowISO(),
+    note: note || '',
+    ...evm,
+  };
+
+  if (!budget.evm_snapshots) budget.evm_snapshots = [];
+  budget.evm_snapshots.push(snapshot);
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'record_evm_snapshot',
+    targetId: budget.id,
+    summary: `تسجيل نقطة قياس EVM: CPI=${evm.cpi ?? 'غ.م'} SPI=${evm.spi ?? 'غ.م'} انحراف=${evm.deviation.label}`,
+    details: { budget_id: budget.id, snapshot_id: snapshot.id, cpi: evm.cpi, spi: evm.spi },
+  });
+
+  return { success: true, data: snapshot };
+}
+
+function listEVMSnapshots(budgetId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const items = (budget.evm_snapshots || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+  return { success: true, data: { items, count: items.length } };
+}
+
+/**
+ * تفصيل الانحراف المالي حسب المرحلة (phase) داخل BBS: لكل مرحلة، التكلفة المخططة
+ * (مجموع BBS الفعلي لأبنائها) مقابل التكلفة الفعلية المسجَّلة عليها وعلى أبنائها
+ * (من actual_costs المُصنَّفة أصلاً بـ phase_id عند التسجيل - الجزء 3/10)، مع نسبة
+ * انحراف وتصنيف شدة مستقلَّين لكل مرحلة - يساعد على تحديد أين يقع التجاوز فعلياً
+ * بدل الاكتفاء برقم إجمالي واحد للمشروع كله.
+ */
+function computeDeviationByPhase(budget) {
+  const phases = (budget.bbs || []).filter(n => n.node_type === 'phase');
+  const actualCosts = budget.actual_costs || [];
+
+  return phases.map(phase => {
+    const planned = computeNodeTotal(phase);
+    const actual = r2(actualCosts.filter(ac => ac.phase_id === phase.id).reduce((s, ac) => s + ac.amount, 0));
+    const variance = r2(planned - actual);
+    const variancePct = planned > 0 ? r2((variance / planned) * 100) : 0;
+    const deviation = classifyDeviation(variancePct);
+
+    return {
+      phase_id: phase.id,
+      phase_name: phase.name,
+      planned_cost: planned,
+      actual_cost: actual,
+      variance,
+      variance_pct: variancePct,
+      deviation,
+    };
+  }).sort((a, b) => a.variance - b.variance); // الأكثر تجاوزاً أولاً (variance الأكثر سلبية)
+}
+
+function getDeviationAnalysis(budgetId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const overall = computeActualCostSummary(budget);
+  const overallDeviation = classifyDeviation(overall.variance_pct);
+  const byPhase = computeDeviationByPhase(budget);
+
+  return {
+    success: true,
+    data: {
+      budget_id: budget.id,
+      project_id: budget.project_id,
+      project_name: budget.project_name,
+      overall: {
+        planned_cost: overall.planned_total,
+        actual_cost: overall.total_actual_cost,
+        variance: overall.variance,
+        variance_pct: overall.variance_pct,
+        deviation: overallDeviation,
+      },
+      by_phase: byPhase,
+      thresholds: DEVIATION_THRESHOLDS,
+    },
+  };
+}
+
+/**
+ * نظرة عامة على الانحرافات المالية ومؤشرات EVM عبر كل الميزانيات - لتغذية لوحة
+ * التحكم المالية الرئيسية (ودعم تنبيهات تلقائية للمشاريع ذات الانحراف الخطير)، بنفس
+ * نمط getActualCostsOverview / getRevenuesOverview / getChangeOrdersOverview.
+ */
+function getEVMOverview() {
+  const db = loadDB();
+  const perBudget = db.budgets.map(b => computeEVM(b));
+
+  const severeCount = perBudget.filter(p => p.deviation.level === 'severe').length;
+  const moderateCount = perBudget.filter(p => p.deviation.level === 'moderate').length;
+  const minorCount = perBudget.filter(p => p.deviation.level === 'minor').length;
+
+  const totalBAC = r2(perBudget.reduce((s, p) => s + p.bac, 0));
+  const totalEAC = r2(perBudget.reduce((s, p) => s + p.eac, 0));
+  const totalVAC = r2(totalBAC - totalEAC);
+
+  const alerts = perBudget
+    .filter(p => p.deviation.level === 'severe')
+    .map(p => ({
+      budget_id: p.budget_id,
+      project_id: p.project_id,
+      project_name: p.project_name,
+      overrun_pct: p.deviation.overrun_pct,
+      eac: p.eac,
+      bac: p.bac,
+      message: `تجاوز مالي خطير (${p.deviation.overrun_pct}%) في مشروع "${p.project_name}" — التكلفة المتوقعة عند الإنجاز (EAC) = ${p.eac} مقابل ميزانية معتمدة ${p.bac}`,
+    }));
+
+  return {
+    success: true,
+    data: {
+      summary: {
+        total_bac_all_projects: totalBAC,
+        total_eac_all_projects: totalEAC,
+        total_vac_all_projects: totalVAC,
+        severe_deviation_count: severeCount,
+        moderate_deviation_count: moderateCount,
+        minor_deviation_count: minorCount,
+      },
+      per_budget: perBudget,
+      alerts,
+    },
+  };
+}
+
+// ------------------------------------------------------------------------------
+// تحديث لوحة التحكم الرئيسية لتضمين ملخص EVM/الانحرافات (دون تغيير شكل الاستجابة
+// الخارجي القائم أصلاً - إضافة حقول فقط بنفس أسلوب الأجزاء 3/10-5/10).
+// ------------------------------------------------------------------------------
+const _changeOrdersOnlyGetDashboardStats = getDashboardStatsWithChangeOrders;
+function getDashboardStatsWithEVM() {
+  const base = _changeOrdersOnlyGetDashboardStats();
+  const evmOverview = getEVMOverview();
+
+  base.data.summary.total_eac_all_projects = evmOverview.data.summary.total_eac_all_projects;
+  base.data.summary.total_vac_all_projects = evmOverview.data.summary.total_vac_all_projects;
+  base.data.summary.severe_deviation_projects_count = evmOverview.data.summary.severe_deviation_count;
+  base.data.financial_alerts = evmOverview.data.alerts;
+
+  const evmByBudgetId = {};
+  for (const p of evmOverview.data.per_budget) evmByBudgetId[p.budget_id] = p;
+
+  base.data.over_budget_projects = base.data.over_budget_projects.map(p => ({
+    ...p, evm: evmByBudgetId[p.id] || null,
+  }));
+  base.data.within_budget_projects = base.data.within_budget_projects.map(p => ({
+    ...p, evm: evmByBudgetId[p.id] || null,
+  }));
+
+  return base;
+}
+
 module.exports = {
   // إدارة الميزانية الأساسية
   createBudget,
@@ -2177,8 +2567,15 @@ module.exports = {
   getChangeOrdersOverview,
   CHANGE_ORDER_STATUSES,
   CHANGE_ORDER_STATUS_LABELS,
-  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج أوامر التغيير - الجزء 5/10)
-  getDashboardStats: getDashboardStatsWithChangeOrders,
+  // مراقبة الانحرافات المالية + القيمة المكتسبة EVM (الجزء 6/10)
+  getBudgetEVM,
+  recordEVMSnapshot,
+  listEVMSnapshots,
+  getDeviationAnalysis,
+  getEVMOverview,
+  DEVIATION_THRESHOLDS,
+  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج EVM/الانحرافات - الجزء 6/10)
+  getDashboardStats: getDashboardStatsWithEVM,
   listAudit,
   // ثوابت مساعدة للواجهة
   BUDGET_STATUSES,
