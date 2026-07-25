@@ -94,6 +94,7 @@ const BUDGET = require('./utils/budgetManagement');
 const BUDGET_REPORTS = require('./utils/budgetReports');
 const BUDGET_AI = require('./utils/budgetAI');
 const BUDGET_INTEG = require('./utils/budgetIntegrations');
+const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8126,6 +8127,74 @@ const API_HANDLERS = {
       if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
       return { success: true, data: BUDGET_INTEG.getProcurementReconciliation(query.budget_id) };
     },
+  },
+
+  // ===================== القسم 14: نظام التقارير والتحليلات - الجزء 1/10 =====================
+  '/api/reports/dashboard': {
+    GET: async (_body, query) => ({
+      success: true,
+      data: REPORTS_CENTER.getReportsDashboard({ projectId: query?.projectId || null }),
+    }),
+  },
+  '/api/reports/catalog': {
+    GET: async () => ({ success: true, data: REPORTS_CENTER.getReportsCatalog() }),
+  },
+  '/api/reports/catalog/category': {
+    GET: async (_body, query) => {
+      if (!query?.category) throw new Error('يجب تحديد التصنيف (category)');
+      return { success: true, data: REPORTS_CENTER.listCatalogByCategory(query.category) };
+    },
+  },
+  '/api/reports/records': {
+    GET: async (_body, query) => ({
+      success: true,
+      data: REPORTS_CENTER.listReportRecords({
+        projectId: query?.projectId || null,
+        category: query?.category || null,
+        status: query?.status || null,
+        userId: query?.userId || null,
+        search: query?.search || null,
+        limit: query?.limit ? Number(query.limit) : 100,
+      }),
+    }),
+    POST: async (body) => ({ success: true, data: REPORTS_CENTER.registerReportRecord(body) }),
+  },
+  '/api/reports/records/get': {
+    GET: async (_body, query) => {
+      if (!query?.id) throw new Error('معرّف التقرير (id) مطلوب');
+      return { success: true, data: REPORTS_CENTER.getReportRecord(query.id) };
+    },
+  },
+  '/api/reports/records/view': {
+    POST: async (body) => {
+      if (!body?.id) throw new Error('معرّف التقرير (id) مطلوب');
+      return { success: true, data: REPORTS_CENTER.markReportViewed(body.id, body.userId || null) };
+    },
+  },
+  '/api/reports/records/download': {
+    POST: async (body) => {
+      if (!body?.id) throw new Error('معرّف التقرير (id) مطلوب');
+      return {
+        success: true,
+        data: REPORTS_CENTER.markReportDownloaded(body.id, { format: body.format || null, userId: body.userId || null }),
+      };
+    },
+  },
+  '/api/reports/records/delete': {
+    POST: async (body) => {
+      if (!body?.id) throw new Error('معرّف التقرير (id) مطلوب');
+      return { success: true, data: REPORTS_CENTER.deleteReportRecord(body.id, body.userId || null) };
+    },
+  },
+  '/api/reports/audit-log': {
+    GET: async (_body, query) => ({
+      success: true,
+      data: REPORTS_CENTER.listAuditLog({
+        limit: query?.limit ? Number(query.limit) : 200,
+        action: query?.action || null,
+        projectId: query?.projectId || null,
+      }),
+    }),
   },
 };
 
