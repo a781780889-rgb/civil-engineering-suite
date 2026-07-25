@@ -1,17 +1,20 @@
 /**
  * القسم الثالث عشر - نظام إدارة الميزانية (Budget Management System)
  * ===================================================================
- * تم تنفيذه حتى الجزء (4/10): البنية الأساسية + طبقة التخزين الموحّدة +
+ * تم تنفيذه حتى الجزء (5/10): البنية الأساسية + طبقة التخزين الموحّدة +
  *                      إنشاء/تعديل ميزانية المشروع + هيكل تقسيم الميزانية (BBS) +
  *                      بنود التكلفة + الربط مع BOQ + التكاليف الفعلية + الإيرادات
- *                      والتحصيل + لوحة تحكم مالية + سجل تدقيق + الربط بالمشاريع.
+ *                      والتحصيل + أوامر التغيير + لوحة تحكم مالية + سجل تدقيق +
+ *                      الربط بالمشاريع.
  *
  * خطة التقسيم الكاملة (راجع BUDGET_PLAN.md):
  *  1/10: الأساس + التخزين + إنشاء الميزانية + BBS + لوحة تحكم أساسية (منجَز)
  *  2/10: إدارة بنود التكلفة + الربط مع حصر الكميات (BOQ) (منجَز)
  *  3/10: إدارة التكاليف الفعلية (مواد/عمالة/معدات/أخرى) (منجَز)
- *  4/10: إدارة الإيرادات + الدفعات + المستخلصات (منجَز - هذا الملف)
- *  5/10: أوامر التغيير (Change Orders)
+ *  4/10: إدارة الإيرادات + الدفعات + المستخلصات (منجَز)
+ *  5/10: أوامر التغيير (Change Orders) - موافقة على مستويين (مدير مشروع ثم إدارة/
+ *        مالي)، تُطبَّق تلقائياً على BBS وcontract_value عند الاعتماد النهائي
+ *        (منجَز - هذا الملف)
  *  6/10: مراقبة الانحرافات المالية + تحليل القيمة المكتسبة (EVM)
  *  7/10: التدفقات النقدية (Cash Flow) + الموافقات المالية
  *  8/10: الفواتير والمستخلصات (Invoicing)
@@ -1757,6 +1760,368 @@ function getDashboardStatsWithRevenues() {
   return base;
 }
 
+
+// ==================================================================================
+// ============================ أوامر التغيير (الجزء 5/10) ==========================
+// ==================================================================================
+// دورة حياة أمر التغيير: pending → (منتظر اعتماد مدير المشروع) → pm_approved →
+//                         (منتظر اعتماد الإدارة/المالي) → approved → مُطبَّق تلقائياً
+//                         على الميزانية (BBS + contract_value + إصدار جديد)
+//                         أو rejected في أي مرحلة (نهائي، لا يُطبَّق شيء).
+// عند "approved": يُنشأ فعلياً عقدة BBS جديدة (تحت نشاط محدَّد، أو تحت شجرة جذرية
+// مستقلة باسم "أوامر التغيير المعتمدة" إن لم يُحدَّد موقع)، وتُرفَع contract_value
+// وتُستدعى updateBudget لترقية الإصدار وأرشفة النسخة السابقة تلقائياً - بنفس الآلية
+// المستخدَمة في بقية الأجزاء، دون كسر أي واجهة برمجية قائمة.
+
+const CHANGE_ORDER_STATUSES = ['pending', 'pm_approved', 'approved', 'rejected'];
+const CHANGE_ORDER_STATUS_LABELS = {
+  pending: 'قيد المراجعة',
+  pm_approved: 'معتمد من مدير المشروع (بانتظار اعتماد الإدارة)',
+  approved: 'معتمد ومُطبَّق على الميزانية',
+  rejected: 'مرفوض',
+};
+
+function validateChangeOrderStatus(status) {
+  if (status && !CHANGE_ORDER_STATUSES.includes(status)) {
+    throw new Error(`حالة أمر تغيير غير معروفة: ${status}. القيم المسموحة: ${CHANGE_ORDER_STATUSES.join(', ')}`);
+  }
+}
+
+function validateChangeOrderInput(body, { partial = false } = {}) {
+  if (!partial) {
+    if (!body.title || !String(body.title).trim()) throw new Error('عنوان التغيير (title) مطلوب');
+    if (!body.description || !String(body.description).trim()) throw new Error('وصف التغيير (description) مطلوب');
+    if (!body.reason || !String(body.reason).trim()) throw new Error('سبب التغيير (reason) مطلوب');
+    if (body.additional_cost === undefined || body.additional_cost === null || isNaN(Number(body.additional_cost))) {
+      throw new Error('التكلفة الإضافية (additional_cost) مطلوبة ويجب أن تكون رقماً');
+    }
+  }
+  if (body.status !== undefined) validateChangeOrderStatus(body.status);
+  if (body.schedule_impact_days !== undefined && body.schedule_impact_days !== null && isNaN(Number(body.schedule_impact_days))) {
+    throw new Error('التأثير على الجدول الزمني (schedule_impact_days) يجب أن يكون رقماً');
+  }
+}
+
+function generateChangeOrderNumber(db, budget) {
+  db.change_order_seq = (db.change_order_seq || 0) + 1;
+  return `CO-${budget.budget_number}-${String(db.change_order_seq).padStart(3, '0')}`;
+}
+
+function createChangeOrder(budgetId, body = {}, { actor = null } = {}) {
+  validateChangeOrderInput(body, { partial: false });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+
+  let linkedNode = null;
+  if (body.bbs_node_id) {
+    linkedNode = findNode(budget.bbs, body.bbs_node_id);
+    if (!linkedNode) throw new Error('عقدة الهيكل المرتبطة (bbs_node_id) غير موجودة في هذه الميزانية');
+  }
+
+  if (!budget.change_orders) budget.change_orders = [];
+
+  const changeOrder = {
+    id: newId('CO'),
+    co_number: generateChangeOrderNumber(db, budget),
+    budget_id: budget.id,
+    title: String(body.title).trim(),
+    description: String(body.description).trim(),
+    reason: String(body.reason).trim(),
+    additional_cost: r2(body.additional_cost),
+    schedule_impact_days: body.schedule_impact_days !== undefined && body.schedule_impact_days !== null ? Number(body.schedule_impact_days) : 0,
+    bbs_node_id: body.bbs_node_id || null,
+    bbs_node_name: linkedNode ? linkedNode.name : null,
+    status: 'pending',
+    approvals: [],
+    applied_bbs_node_id: null,
+    requested_by: actor,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  budget.change_orders.push(changeOrder);
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'create_change_order',
+    targetId: budget.id,
+    summary: `إنشاء أمر تغيير: ${changeOrder.title} (${changeOrder.co_number}) — تكلفة إضافية ${changeOrder.additional_cost}`,
+    details: { budget_id: budget.id, change_order_id: changeOrder.id, additional_cost: changeOrder.additional_cost },
+  });
+
+  return { success: true, data: changeOrder };
+}
+
+function findChangeOrderOrThrow(budget, changeOrderId) {
+  const co = (budget.change_orders || []).find(c => c.id === changeOrderId || c.co_number === changeOrderId);
+  if (!co) throw new Error('أمر التغيير غير موجود');
+  return co;
+}
+
+function listChangeOrders(budgetId, { status = null, page = 1, pageSize = 50 } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  let items = (budget.change_orders || []).slice();
+
+  if (status) { validateChangeOrderStatus(status); items = items.filter(c => c.status === status); }
+
+  items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  const total = items.length;
+  const p = Math.max(1, Number(page) || 1);
+  const ps = Math.max(1, Number(pageSize) || 50);
+  const start = (p - 1) * ps;
+
+  return {
+    success: true,
+    data: items.slice(start, start + ps),
+    pagination: { page: p, pageSize: ps, total, totalPages: Math.ceil(total / ps) || 1 },
+  };
+}
+
+function getChangeOrder(budgetId, changeOrderId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  return { success: true, data: findChangeOrderOrThrow(budget, changeOrderId) };
+}
+
+function updateChangeOrder(budgetId, changeOrderId, updates = {}, { actor = null } = {}) {
+  validateChangeOrderInput(updates, { partial: true });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const co = findChangeOrderOrThrow(budget, changeOrderId);
+
+  if (co.status !== 'pending') {
+    throw new Error(`لا يمكن تعديل أمر تغيير في حالة "${CHANGE_ORDER_STATUS_LABELS[co.status]}" — التعديل مسموح فقط في حالة "قيد المراجعة"`);
+  }
+
+  const editableFields = ['title', 'description', 'reason', 'additional_cost', 'schedule_impact_days', 'bbs_node_id'];
+  for (const field of editableFields) {
+    if (updates[field] !== undefined) {
+      if (field === 'additional_cost') co.additional_cost = r2(updates.additional_cost);
+      else if (field === 'schedule_impact_days') co.schedule_impact_days = Number(updates.schedule_impact_days);
+      else if (field === 'bbs_node_id') {
+        const node = findNode(budget.bbs, updates.bbs_node_id);
+        if (!node) throw new Error('عقدة الهيكل المرتبطة (bbs_node_id) غير موجودة في هذه الميزانية');
+        co.bbs_node_id = updates.bbs_node_id;
+        co.bbs_node_name = node.name;
+      } else {
+        co[field] = String(updates[field]).trim();
+      }
+    }
+  }
+  co.updated_at = nowISO();
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'update_change_order',
+    targetId: budget.id,
+    summary: `تحديث أمر تغيير: ${co.title} (${co.co_number})`,
+    details: { budget_id: budget.id, change_order_id: co.id, updates },
+  });
+
+  return { success: true, data: co };
+}
+
+function deleteChangeOrder(budgetId, changeOrderId, { actor = null } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const idx = (budget.change_orders || []).findIndex(c => c.id === changeOrderId || c.co_number === changeOrderId);
+  if (idx === -1) throw new Error('أمر التغيير غير موجود');
+  const co = budget.change_orders[idx];
+
+  if (co.status === 'approved') {
+    throw new Error('لا يمكن حذف أمر تغيير مُعتمَد ومُطبَّق فعلياً على الميزانية — يجب إلغاؤه عبر إنشاء أمر تغيير عكسي إن لزم، حفاظاً على سلامة السجل المالي');
+  }
+
+  budget.change_orders.splice(idx, 1);
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'delete_change_order',
+    targetId: budget.id,
+    summary: `حذف أمر تغيير: ${co.title} (${co.co_number})`,
+    details: { budget_id: budget.id, change_order_id: co.id },
+  });
+
+  return { success: true, data: { deleted: co.id } };
+}
+
+function pmApproveChangeOrder(budgetId, changeOrderId, { actor = null, note = '' } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const co = findChangeOrderOrThrow(budget, changeOrderId);
+
+  if (co.status !== 'pending') {
+    throw new Error(`لا يمكن اعتماد مدير المشروع على أمر تغيير في حالة "${CHANGE_ORDER_STATUS_LABELS[co.status]}"`);
+  }
+
+  co.status = 'pm_approved';
+  co.approvals.push({ step: 'pm_approval', actor, decision: 'approved', note: note || '', at: nowISO() });
+  co.updated_at = nowISO();
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'pm_approve_change_order',
+    targetId: budget.id,
+    summary: `اعتماد مدير المشروع على أمر تغيير: ${co.title} (${co.co_number})`,
+    details: { budget_id: budget.id, change_order_id: co.id },
+  });
+
+  return { success: true, data: co };
+}
+
+function approveChangeOrder(budgetId, changeOrderId, { actor = null, note = '', requirePmApprovalFirst = true } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const co = findChangeOrderOrThrow(budget, changeOrderId);
+
+  if (co.status === 'approved') throw new Error('أمر التغيير معتمَد ومُطبَّق بالفعل');
+  if (co.status === 'rejected') throw new Error('لا يمكن اعتماد أمر تغيير مرفوض سابقاً');
+  if (requirePmApprovalFirst && co.status !== 'pm_approved') {
+    throw new Error('يجب اعتماد مدير المشروع أولاً (pm_approve) قبل الاعتماد النهائي من الإدارة/المدير المالي');
+  }
+
+  let appliedNodeId = null;
+  if (co.bbs_node_id) {
+    const targetNode = findNode(budget.bbs, co.bbs_node_id);
+    if (!targetNode) throw new Error('عقدة الهيكل المرتبطة بأمر التغيير لم تعد موجودة في الميزانية');
+    if (targetNode.node_type === 'activity') {
+      const resourceNode = makeBBSNode({ name: `تغيير معتمَد: ${co.title}`, node_type: 'resource', cost: co.additional_cost, parent_id: targetNode.id });
+      targetNode.children.push(resourceNode);
+      appliedNodeId = resourceNode.id;
+    } else {
+      throw new Error('عقدة الهيكل المرتبطة يجب أن تكون من نوع "نشاط" (activity) لإضافة تكلفة أمر التغيير كمورد تحتها');
+    }
+  } else {
+    let coPhase = budget.bbs.find(n => n.node_type === 'phase' && n.__is_change_orders_phase);
+    if (!coPhase) {
+      coPhase = makeBBSNode({ name: 'أوامر التغيير المعتمدة', node_type: 'phase' });
+      coPhase.__is_change_orders_phase = true;
+      budget.bbs.push(coPhase);
+    }
+    const mainItem = makeBBSNode({ name: co.title, node_type: 'main_item', parent_id: coPhase.id });
+    const subItem = makeBBSNode({ name: co.reason, node_type: 'sub_item', parent_id: mainItem.id });
+    const activity = makeBBSNode({ name: 'تنفيذ التغيير', node_type: 'activity', parent_id: subItem.id });
+    const resource = makeBBSNode({ name: `تغيير معتمَد: ${co.title}`, node_type: 'resource', cost: co.additional_cost, parent_id: activity.id });
+    activity.children.push(resource);
+    subItem.children.push(activity);
+    mainItem.children.push(subItem);
+    coPhase.children.push(mainItem);
+    appliedNodeId = resource.id;
+  }
+
+  co.status = 'approved';
+  co.applied_bbs_node_id = appliedNodeId;
+  co.approvals.push({ step: 'final_approval', actor, decision: 'approved', note: note || '', at: nowISO() });
+  co.updated_at = nowISO();
+
+  saveDB(db);
+
+  const newContractValue = r2(budget.contract_value + co.additional_cost);
+  updateBudget(budget.id, { contract_value: newContractValue, status: 'revised' }, { actor, bumpVersion: true });
+
+  recordAudit({
+    actor,
+    action: 'approve_change_order',
+    targetId: budget.id,
+    summary: `اعتماد نهائي وتطبيق أمر تغيير: ${co.title} (${co.co_number}) — تكلفة إضافية ${co.additional_cost}، تأثير جدول زمني: ${co.schedule_impact_days} يوم`,
+    details: {
+      budget_id: budget.id, change_order_id: co.id, additional_cost: co.additional_cost,
+      schedule_impact_days: co.schedule_impact_days, applied_bbs_node_id: appliedNodeId,
+      new_contract_value: newContractValue,
+    },
+  });
+
+  return { success: true, data: co };
+}
+
+function rejectChangeOrder(budgetId, changeOrderId, { actor = null, note = '' } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const co = findChangeOrderOrThrow(budget, changeOrderId);
+
+  if (co.status === 'approved') throw new Error('لا يمكن رفض أمر تغيير معتمَد ومُطبَّق بالفعل');
+  if (co.status === 'rejected') throw new Error('أمر التغيير مرفوض بالفعل');
+
+  const step = co.status === 'pm_approved' ? 'final_review' : 'pm_review';
+  co.status = 'rejected';
+  co.approvals.push({ step, actor, decision: 'rejected', note: note || '', at: nowISO() });
+  co.updated_at = nowISO();
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'reject_change_order',
+    targetId: budget.id,
+    summary: `رفض أمر تغيير: ${co.title} (${co.co_number})${note ? ' — السبب: ' + note : ''}`,
+    details: { budget_id: budget.id, change_order_id: co.id, note },
+  });
+
+  return { success: true, data: co };
+}
+
+function computeChangeOrdersSummary(budget) {
+  const items = budget.change_orders || [];
+  const approved = items.filter(c => c.status === 'approved');
+  const pending = items.filter(c => c.status === 'pending' || c.status === 'pm_approved');
+  const rejected = items.filter(c => c.status === 'rejected');
+
+  return {
+    total_count: items.length,
+    approved_count: approved.length,
+    pending_count: pending.length,
+    rejected_count: rejected.length,
+    total_approved_additional_cost: r2(approved.reduce((s, c) => s + c.additional_cost, 0)),
+    total_pending_additional_cost: r2(pending.reduce((s, c) => s + c.additional_cost, 0)),
+    total_approved_schedule_impact_days: approved.reduce((s, c) => s + (c.schedule_impact_days || 0), 0),
+  };
+}
+
+function getChangeOrdersOverview(budgetId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  return { success: true, data: computeChangeOrdersSummary(budget) };
+}
+
+function getDashboardStatsWithChangeOrders() {
+  const base = getDashboardStatsWithRevenues();
+  const db = loadDB();
+
+  let totalApprovedCOCostAll = 0;
+  let totalPendingCOCostAll = 0;
+  const perBudgetCO = {};
+  for (const b of db.budgets) {
+    const summary = computeChangeOrdersSummary(b);
+    perBudgetCO[b.id] = summary;
+    totalApprovedCOCostAll = r2(totalApprovedCOCostAll + summary.total_approved_additional_cost);
+    totalPendingCOCostAll = r2(totalPendingCOCostAll + summary.total_pending_additional_cost);
+  }
+
+  base.data.summary.total_approved_change_orders_cost = totalApprovedCOCostAll;
+  base.data.summary.total_pending_change_orders_cost = totalPendingCOCostAll;
+
+  base.data.over_budget_projects = base.data.over_budget_projects.map(p => ({
+    ...p, change_orders: perBudgetCO[p.id] || null,
+  }));
+  base.data.within_budget_projects = base.data.within_budget_projects.map(p => ({
+    ...p, change_orders: perBudgetCO[p.id] || null,
+  }));
+
+  return base;
+}
+
 module.exports = {
   // إدارة الميزانية الأساسية
   createBudget,
@@ -1800,8 +2165,20 @@ module.exports = {
   REVENUE_TYPE_LABELS,
   REVENUE_STATUSES,
   REVENUE_STATUS_LABELS,
-  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج الإيرادات والأرباح الفعلية - الجزء 4/10)
-  getDashboardStats: getDashboardStatsWithRevenues,
+  // أوامر التغيير (الجزء 5/10)
+  createChangeOrder,
+  getChangeOrder,
+  listChangeOrders,
+  updateChangeOrder,
+  deleteChangeOrder,
+  pmApproveChangeOrder,
+  approveChangeOrder,
+  rejectChangeOrder,
+  getChangeOrdersOverview,
+  CHANGE_ORDER_STATUSES,
+  CHANGE_ORDER_STATUS_LABELS,
+  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج أوامر التغيير - الجزء 5/10)
+  getDashboardStats: getDashboardStatsWithChangeOrders,
   listAudit,
   // ثوابت مساعدة للواجهة
   BUDGET_STATUSES,
