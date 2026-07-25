@@ -96,6 +96,7 @@ const BUDGET_AI = require('./utils/budgetAI');
 const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
 const REPORT_BUILDER = require('./utils/reportBuilder'); // القسم 14 - الجزء 2/10
+const REPORT_PERIODS = require('./utils/reportPeriodsComparisons'); // القسم 14 - الجزء 3/10
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8271,6 +8272,67 @@ const API_HANDLERS = {
         title: report.title,
         category: 'custom_builder',
         projectId: body?.overrideFilters?.projectId || null,
+        userId: body?.userId || null,
+        status: 'completed',
+      });
+      return { success: true, data: { ...report, record_id: registered.id } };
+    },
+  },
+
+  // ===================== القسم 14: نظام التقارير - الجزء 3/10 (التقارير الزمنية والمقارنة) =====================
+  '/api/reports/periods/types': {
+    GET: async () => ({ success: true, data: REPORT_PERIODS.PERIOD_TYPES }),
+  },
+  '/api/reports/periods/range': {
+    GET: async (_body, query) => {
+      if (!query?.periodType) throw new Error('يجب تحديد نوع الفترة (periodType)');
+      const range = REPORT_PERIODS.resolvePeriodRange(query.periodType, {
+        refDate: query.refDate ? new Date(query.refDate) : new Date(),
+        customFrom: query.customFrom || null,
+        customTo: query.customTo || null,
+      });
+      return { success: true, data: { from: range.from.toISOString(), to: range.to.toISOString() } };
+    },
+  },
+  '/api/reports/periods/run': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      const report = REPORT_PERIODS.buildPeriodReport(body || {});
+      const registered = REPORTS_CENTER.registerReportRecord({
+        title: report.title,
+        category: 'period_report',
+        projectId: body?.filters?.projectId || null,
+        userId: body?.userId || null,
+        status: 'completed',
+      });
+      return { success: true, data: { ...report, record_id: registered.id } };
+    },
+  },
+  '/api/reports/periods/compare': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      const report = REPORT_PERIODS.buildPeriodComparisonReport(body || {});
+      const registered = REPORTS_CENTER.registerReportRecord({
+        title: report.title,
+        category: 'period_comparison',
+        projectId: body?.filters?.projectId || null,
+        userId: body?.userId || null,
+        status: 'completed',
+      });
+      return { success: true, data: { ...report, record_id: registered.id } };
+    },
+  },
+  '/api/reports/comparisons/dimensions': {
+    GET: async () => ({ success: true, data: REPORT_PERIODS.getComparisonDimensions() }),
+  },
+  '/api/reports/comparisons/run': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      const report = REPORT_PERIODS.buildComparisonReport(body || {});
+      const registered = REPORTS_CENTER.registerReportRecord({
+        title: report.title,
+        category: 'comparison_report',
+        projectId: body?.projectId || null,
         userId: body?.userId || null,
         status: 'completed',
       });
