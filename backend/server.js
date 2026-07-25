@@ -92,6 +92,8 @@ const DRAW_AI = require('./utils/drawingAI');
 const DRAW_LINKS = require('./utils/drawingModuleLinks');
 const BUDGET = require('./utils/budgetManagement');
 const BUDGET_REPORTS = require('./utils/budgetReports');
+const BUDGET_AI = require('./utils/budgetAI');
+const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8014,6 +8016,115 @@ const API_HANDLERS = {
         category: body.category || null, status: body.status || null,
       });
       return { success: true, reportType: body.report_type, format: body.format, ...result.export };
+    },
+  },
+
+  // ===================================================================
+  // القسم الثالث عشر (الجزء 10/10 - أ) - المساعد الذكي المالي (Budget AI)
+  // ===================================================================
+  '/api/budget/ai/status': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      return { success: true, available: BUDGET_AI.isAIAvailable() };
+    },
+  },
+  '/api/budget/ai/financial-performance': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET_AI.analyzeFinancialPerformance({ budgetId: body.budget_id });
+    },
+  },
+  '/api/budget/ai/predict-overrun': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET_AI.predictBudgetOverrun({ budgetId: body.budget_id });
+    },
+  },
+  '/api/budget/ai/anomalous-expenses': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET_AI.detectAnomalousExpenses({ budgetId: body.budget_id });
+    },
+  },
+  '/api/budget/ai/forecast-final-cost': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET_AI.forecastFinalCost({ budgetId: body.budget_id });
+    },
+  },
+  '/api/budget/ai/cost-reduction-suggestions': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET_AI.suggestCostReductions({ budgetId: body.budget_id });
+    },
+  },
+  '/api/budget/ai/deviation-root-causes': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET_AI.analyzeDeviationRootCauses({ budgetId: body.budget_id });
+    },
+  },
+  '/api/budget/ai/compare-historical-projects': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET_AI.compareHistoricalProjectCosts({ budgetId: body.budget_id, compareLimit: Number(body.compare_limit) || 5 });
+    },
+  },
+  '/api/budget/ai/procurement-decisions': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET_AI.suggestProcurementDecisions({
+        budgetId: body.budget_id, itemName: body.item_name || null, itemCode: body.item_code || null,
+      });
+    },
+  },
+  '/api/budget/ai/management-brief': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET_AI.generateManagementFinancialBrief({ budgetId: body.budget_id });
+    },
+  },
+
+  // ===================================================================
+  // القسم الثالث عشر (الجزء 10/10 - ب) - التكامل الشامل مع بقية الأقسام
+  // ===================================================================
+  '/api/budget/integrations/overview': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_INTEG.getFullIntegrationOverview(query.budget_id) };
+    },
+  },
+  '/api/budget/integrations/equipment-reconciliation': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_INTEG.getEquipmentCostReconciliation(query.budget_id) };
+    },
+  },
+  '/api/budget/integrations/equipment-sync': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id || !body?.resource_node_id) {
+        throw new Error('معرّفا الميزانية (budget_id) وعقدة المورد (resource_node_id) مطلوبان');
+      }
+      return BUDGET_INTEG.syncEquipmentCostGapToBudget(body.budget_id, body.resource_node_id, { actor: token });
+    },
+  },
+  '/api/budget/integrations/procurement-reconciliation': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_INTEG.getProcurementReconciliation(query.budget_id) };
     },
   },
 };
