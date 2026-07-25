@@ -7678,6 +7678,42 @@ const API_HANDLERS = {
       return BUDGET.getChangeOrdersOverview(query.budget_id);
     },
   },
+
+  // ===== مراقبة الانحرافات المالية + القيمة المكتسبة EVM (الجزء 6/10) =====
+  '/api/budget/evm/get': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.getBudgetEVM(query.budget_id);
+    },
+  },
+  '/api/budget/evm/snapshot': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'budget', 'update');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.recordEVMSnapshot(body.budget_id, { actor: token, note: body.note || '' });
+    },
+  },
+  '/api/budget/evm/snapshots': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.listEVMSnapshots(query.budget_id);
+    },
+  },
+  '/api/budget/deviation/analysis': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return BUDGET.getDeviationAnalysis(query.budget_id);
+    },
+  },
+  '/api/budget/evm/overview': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      return BUDGET.getEVMOverview();
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
