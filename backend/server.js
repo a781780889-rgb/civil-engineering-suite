@@ -91,6 +91,7 @@ const DRAW_REPORTS = require('./utils/drawingReports');
 const DRAW_AI = require('./utils/drawingAI');
 const DRAW_LINKS = require('./utils/drawingModuleLinks');
 const BUDGET = require('./utils/budgetManagement');
+const BUDGET_REPORTS = require('./utils/budgetReports');
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -7902,6 +7903,117 @@ const API_HANDLERS = {
     GET: async (_body, _query, req) => {
       requirePermission(req, 'budget', 'view');
       return BUDGET.getInvoicesOverview();
+    },
+  },
+
+  // ============================================================
+  // الجزء 9/10: التقارير المالية + الرسوم البيانية + التصدير
+  // ============================================================
+  '/api/budget/reports/general': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_REPORTS.buildGeneralBudgetReport(query.budget_id) };
+    },
+  },
+  '/api/budget/reports/expenses': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return {
+        success: true,
+        data: BUDGET_REPORTS.buildExpensesReport(query.budget_id, {
+          fromDate: query.from_date || null, toDate: query.to_date || null, category: query.category || null,
+        }),
+      };
+    },
+  },
+  '/api/budget/reports/revenues': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return {
+        success: true,
+        data: BUDGET_REPORTS.buildRevenuesReport(query.budget_id, {
+          fromDate: query.from_date || null, toDate: query.to_date || null, status: query.status || null,
+        }),
+      };
+    },
+  },
+  '/api/budget/reports/profit-loss': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_REPORTS.buildProfitLossReport(query.budget_id) };
+    },
+  },
+  '/api/budget/reports/deviation': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_REPORTS.buildDeviationReport(query.budget_id) };
+    },
+  },
+  '/api/budget/reports/cash-flow': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_REPORTS.buildCashFlowReport(query.budget_id) };
+    },
+  },
+  '/api/budget/reports/cost-by-item': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_REPORTS.buildCostByItemReport(query.budget_id) };
+    },
+  },
+  '/api/budget/reports/cost-by-phase': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_REPORTS.buildCostByPhaseReport(query.budget_id) };
+    },
+  },
+  '/api/budget/reports/financial-performance': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_REPORTS.buildFinancialPerformanceReport(query.budget_id) };
+    },
+  },
+  '/api/budget/reports/evm': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_REPORTS.buildEVMReport(query.budget_id) };
+    },
+  },
+  '/api/budget/reports/charts': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_REPORTS.buildBudgetCharts(query.budget_id) };
+    },
+  },
+  '/api/budget/reports/full-pack': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!query?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return { success: true, data: BUDGET_REPORTS.buildFullReportPack(query.budget_id) };
+    },
+  },
+  '/api/budget/reports/export': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'budget', 'view');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      if (!body?.report_type) throw new Error('نوع التقرير (report_type) مطلوب');
+      if (!body?.format) throw new Error('صيغة التصدير (format) مطلوبة: pdf, excel, csv, word');
+      const result = BUDGET_REPORTS.exportBudgetReport(body.report_type, body.budget_id, body.format, {
+        fromDate: body.from_date || null, toDate: body.to_date || null,
+        category: body.category || null, status: body.status || null,
+      });
+      return { success: true, reportType: body.report_type, format: body.format, ...result.export };
     },
   },
 };
