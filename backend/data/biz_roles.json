@@ -1,571 +1,744 @@
 {
-    "system_admin": {
-        "label": "مدير النظام",
-        "permissions": {
-            "*": [
-                "*"
-            ]
-        }
-    },
-    "ceo": {
-        "label": "المدير التنفيذي",
-        "permissions": {
-            "dashboard": [
-                "view"
-            ],
-            "clients": [
-                "view",
-                "create",
-                "update",
-                "delete"
-            ],
-            "suppliers": [
-                "view",
-                "create",
-                "update",
-                "delete"
-            ],
-            "contracts": [
-                "view",
-                "create",
-                "update",
-                "delete"
-            ],
-            "invoices": [
-                "view",
-                "create",
-                "update"
-            ],
-            "purchasing": [
-                "view",
-                "create",
-                "update"
-            ],
-            "warehouse": [
-                "view"
-            ],
-            "hr": [
-                "view",
-                "create",
-                "update"
-            ],
-            "meetings": [
-                "view",
-                "create",
-                "update"
-            ],
-            "tasks": [
-                "view",
-                "create",
-                "update"
-            ],
-            "assets": [
-                "view"
-            ],
-            "quality": [
-                "view"
-            ],
-            "safety": [
-                "view"
-            ],
-            "documents": [
-                "view",
-                "create"
-            ],
-            "reports": [
-                "view",
-                "export"
-            ],
-            "ai": [
-                "use"
-            ],
-            "qms": [
-                "view",
-                "view_reports",
-                "export_reports"
-            ],
-            "drawings": [
-                "view",
-                "create",
-                "update",
-                "delete",
-                "approve"
-            ]
-        }
-    },
-    "cfo": {
-        "label": "المدير المالي",
-        "permissions": {
-            "dashboard": [
-                "view"
-            ],
-            "contracts": [
-                "view"
-            ],
-            "invoices": [
-                "view",
-                "create",
-                "update"
-            ],
-            "purchasing": [
-                "view"
-            ],
-            "reports": [
-                "view",
-                "export"
-            ],
-            "ai": [
-                "use"
-            ],
-            "documents": [
-                "view"
-            ],
-            "drawings": [
-                "view"
-            ]
-        }
-    },
-    "project_manager": {
-        "label": "مدير المشاريع",
-        "permissions": {
-            "dashboard": [
-                "view"
-            ],
-            "contracts": [
-                "view"
-            ],
-            "tasks": [
-                "view",
-                "create",
-                "update",
-                "delete"
-            ],
-            "meetings": [
-                "view",
-                "create",
-                "update"
-            ],
-            "quality": [
-                "view",
-                "create"
-            ],
-            "safety": [
-                "view",
-                "create"
-            ],
-            "documents": [
-                "view",
-                "create"
-            ],
-            "reports": [
-                "view",
-                "export"
-            ],
-            "qms": [
-                "view",
-                "create",
-                "update",
-                "view_reports",
-                "export_reports"
-            ],
-            "drawings": [
-                "view",
-                "create",
-                "update",
-                "delete",
-                "approve"
-            ]
-        }
-    },
-    "hr_manager": {
-        "label": "مدير الموارد البشرية",
-        "permissions": {
-            "hr": [
-                "view",
-                "create",
-                "update",
-                "delete"
-            ],
-            "documents": [
-                "view",
-                "create"
-            ],
-            "reports": [
-                "view",
-                "export"
-            ],
-            "drawings": [
-                "view",
-                "create",
-                "update",
-                "delete",
-                "approve"
-            ]
-        }
-    },
-    "purchasing_manager": {
-        "label": "مدير المشتريات",
-        "permissions": {
-            "suppliers": [
-                "view",
-                "create",
-                "update"
-            ],
-            "purchasing": [
-                "view",
-                "create",
-                "update",
-                "delete"
-            ],
-            "warehouse": [
-                "view"
-            ],
-            "reports": [
-                "view",
-                "export"
-            ]
-        }
-    },
-    "warehouse_manager": {
-        "label": "مدير المخازن",
-        "permissions": {
-            "warehouse": [
-                "view",
-                "create",
-                "update",
-                "delete"
-            ],
-            "reports": [
-                "view",
-                "export"
-            ]
-        }
-    },
-    "accountant": {
-        "label": "المحاسب",
-        "permissions": {
-            "invoices": [
-                "view",
-                "create",
-                "update"
-            ],
-            "contracts": [
-                "view"
-            ],
-            "reports": [
-                "view",
-                "export"
-            ]
-        }
-    },
-    "engineer": {
-        "label": "المهندس",
-        "permissions": {
-            "tasks": [
-                "view",
-                "update"
-            ],
-            "quality": [
-                "view",
-                "create"
-            ],
-            "safety": [
-                "view",
-                "create"
-            ],
-            "documents": [
-                "view",
-                "create"
-            ],
-            "reports": [
-                "view"
-            ],
-            "qms": [
-                "view",
-                "create",
-                "update",
-                "view_reports"
-            ],
-            "drawings": [
-                "view",
-                "create",
-                "update",
-                "delete",
-                "approve"
-            ]
-        }
-    },
-    "supervisor": {
-        "label": "المشرف",
-        "permissions": {
-            "tasks": [
-                "view",
-                "update"
-            ],
-            "safety": [
-                "view",
-                "create"
-            ],
-            "quality": [
-                "view",
-                "create"
-            ],
-            "reports": [
-                "view"
-            ],
-            "qms": [
-                "view",
-                "create",
-                "view_reports"
-            ]
-        }
-    },
-    "client_viewer": {
-        "label": "العميل (عرض فقط)",
-        "permissions": {
-            "dashboard": [
-                "view"
-            ],
-            "contracts": [
-                "view"
-            ],
-            "invoices": [
-                "view"
-            ],
-            "reports": [
-                "view"
-            ],
-            "equipment": [
-                "view"
-            ],
-            "qms": [
-                "view"
-            ]
-        }
-    },
-    "equipment_manager": {
-        "label": "مدير المعدات",
-        "permissions": {
-            "equipment": [
-                "view",
-                "create",
-                "update",
-                "delete",
-                "manage"
-            ],
-            "dashboard": [
-                "view"
-            ],
-            "reports": [
-                "view",
-                "export"
-            ],
-            "ai": [
-                "use"
-            ]
-        }
-    },
-    "site_engineer": {
-        "label": "مهندس الموقع",
-        "permissions": {
-            "equipment": [
-                "view",
-                "create",
-                "update"
-            ],
-            "dashboard": [
-                "view"
-            ],
-            "reports": [
-                "view"
-            ]
-        }
-    },
-    "maintenance_officer": {
-        "label": "مسؤول الصيانة",
-        "permissions": {
-            "equipment": [
-                "view",
-                "update",
-                "maintenance"
-            ],
-            "dashboard": [
-                "view"
-            ],
-            "reports": [
-                "view"
-            ]
-        }
-    },
-    "warehouse_keeper": {
-        "label": "أمين المخزن",
-        "permissions": {
-            "equipment": [
-                "view",
-                "spare_parts"
-            ],
-            "warehouse": [
-                "view",
-                "create",
-                "update"
-            ],
-            "dashboard": [
-                "view"
-            ]
-        }
-    },
-    "equipment_operator": {
-        "label": "المشغل",
-        "permissions": {
-            "equipment": [
-                "view",
-                "operate"
-            ]
-        }
-    },
-    "hse_manager": {
-        "label": "مدير السلامة (HSE Manager)",
-        "permissions": {
-            "safety": [
-                "view",
-                "create",
-                "update",
-                "delete",
-                "approve",
-                "manage"
-            ],
-            "dashboard": [
-                "view"
-            ],
-            "reports": [
-                "view",
-                "export"
-            ],
-            "ai": [
-                "use"
-            ]
-        }
-    },
-    "safety_officer": {
-        "label": "مسؤول السلامة",
-        "permissions": {
-            "safety": [
-                "view",
-                "create",
-                "update"
-            ],
-            "dashboard": [
-                "view"
-            ],
-            "reports": [
-                "view"
-            ]
-        }
-    },
-    "field_supervisor": {
-        "label": "المشرف الميداني",
-        "permissions": {
-            "safety": [
-                "view",
-                "create"
-            ],
-            "dashboard": [
-                "view"
-            ]
-        }
-    },
-    "hse_worker": {
-        "label": "العامل (صلاحيات محدودة - السلامة)",
-        "permissions": {
-            "safety": [
-                "view"
-            ]
-        }
-    },
-    "qa_qc_manager": {
-        "label": "مدير الجودة (QA/QC Manager)",
-        "permissions": {
-            "qms": [
-                "view",
-                "create",
-                "update",
-                "delete",
-                "approve",
-                "manage",
-                "view_reports",
-                "export_reports"
-            ],
-            "dashboard": [
-                "view"
-            ],
-            "reports": [
-                "view",
-                "export"
-            ],
-            "ai": [
-                "use"
-            ]
-        }
-    },
-    "qa_engineer": {
-        "label": "مهندس الجودة (QA Engineer)",
-        "permissions": {
-            "qms": [
-                "view",
-                "create",
-                "update",
-                "view_reports",
-                "export_reports"
-            ],
-            "dashboard": [
-                "view"
-            ],
-            "reports": [
-                "view"
-            ]
-        }
-    },
-    "qc_inspector": {
-        "label": "مفتش الجودة (QC Inspector)",
-        "permissions": {
-            "qms": [
-                "view",
-                "create",
-                "update",
-                "view_reports"
-            ],
-            "dashboard": [
-                "view"
-            ]
-        }
-    },
-    "consultant": {
-        "label": "الاستشاري",
-        "permissions": {
-            "qms": [
-                "view",
-                "approve",
-                "view_reports"
-            ],
-            "dashboard": [
-                "view"
-            ],
-            "reports": [
-                "view"
-            ]
-        }
-    },
-    "contractor": {
-        "label": "المقاول",
-        "permissions": {
-            "qms": [
-                "view",
-                "create",
-                "view_reports"
-            ],
-            "dashboard": [
-                "view"
-            ]
-        }
+  "system_admin": {
+    "label": "مدير النظام",
+    "permissions": {
+      "*": [
+        "*"
+      ]
     }
+  },
+  "ceo": {
+    "label": "المدير التنفيذي",
+    "permissions": {
+      "dashboard": [
+        "view"
+      ],
+      "clients": [
+        "view",
+        "create",
+        "update",
+        "delete"
+      ],
+      "suppliers": [
+        "view",
+        "create",
+        "update",
+        "delete"
+      ],
+      "contracts": [
+        "view",
+        "create",
+        "update",
+        "delete"
+      ],
+      "invoices": [
+        "view",
+        "create",
+        "update"
+      ],
+      "purchasing": [
+        "view",
+        "create",
+        "update"
+      ],
+      "warehouse": [
+        "view"
+      ],
+      "hr": [
+        "view",
+        "create",
+        "update"
+      ],
+      "meetings": [
+        "view",
+        "create",
+        "update"
+      ],
+      "tasks": [
+        "view",
+        "create",
+        "update"
+      ],
+      "assets": [
+        "view"
+      ],
+      "quality": [
+        "view"
+      ],
+      "safety": [
+        "view"
+      ],
+      "documents": [
+        "view",
+        "create"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "ai": [
+        "use"
+      ],
+      "qms": [
+        "view",
+        "view_reports",
+        "export_reports"
+      ],
+      "drawings": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "approve"
+      ],
+      "budget": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "approve"
+      ]
+    }
+  },
+  "cfo": {
+    "label": "المدير المالي",
+    "permissions": {
+      "dashboard": [
+        "view"
+      ],
+      "contracts": [
+        "view"
+      ],
+      "invoices": [
+        "view",
+        "create",
+        "update"
+      ],
+      "purchasing": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "ai": [
+        "use"
+      ],
+      "documents": [
+        "view"
+      ],
+      "drawings": [
+        "view"
+      ],
+      "budget": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "approve"
+      ]
+    }
+  },
+  "project_manager": {
+    "label": "مدير المشاريع",
+    "permissions": {
+      "dashboard": [
+        "view"
+      ],
+      "contracts": [
+        "view"
+      ],
+      "tasks": [
+        "view",
+        "create",
+        "update",
+        "delete"
+      ],
+      "meetings": [
+        "view",
+        "create",
+        "update"
+      ],
+      "quality": [
+        "view",
+        "create"
+      ],
+      "safety": [
+        "view",
+        "create"
+      ],
+      "documents": [
+        "view",
+        "create"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "qms": [
+        "view",
+        "create",
+        "update",
+        "view_reports",
+        "export_reports"
+      ],
+      "drawings": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "approve"
+      ],
+      "budget": [
+        "view",
+        "create",
+        "update"
+      ]
+    }
+  },
+  "hr_manager": {
+    "label": "مدير الموارد البشرية",
+    "permissions": {
+      "hr": [
+        "view",
+        "create",
+        "update",
+        "delete"
+      ],
+      "documents": [
+        "view",
+        "create"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "drawings": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "approve"
+      ]
+    }
+  },
+  "purchasing_manager": {
+    "label": "مدير المشتريات",
+    "permissions": {
+      "suppliers": [
+        "view",
+        "create",
+        "update"
+      ],
+      "purchasing": [
+        "view",
+        "create",
+        "update",
+        "delete"
+      ],
+      "warehouse": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ]
+    }
+  },
+  "warehouse_manager": {
+    "label": "مدير المخازن",
+    "permissions": {
+      "warehouse": [
+        "view",
+        "create",
+        "update",
+        "delete"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ]
+    }
+  },
+  "accountant": {
+    "label": "المحاسب",
+    "permissions": {
+      "invoices": [
+        "view",
+        "create",
+        "update"
+      ],
+      "contracts": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "budget": [
+        "view",
+        "create",
+        "update"
+      ]
+    }
+  },
+  "engineer": {
+    "label": "المهندس",
+    "permissions": {
+      "tasks": [
+        "view",
+        "update"
+      ],
+      "quality": [
+        "view",
+        "create"
+      ],
+      "safety": [
+        "view",
+        "create"
+      ],
+      "documents": [
+        "view",
+        "create"
+      ],
+      "reports": [
+        "view"
+      ],
+      "qms": [
+        "view",
+        "create",
+        "update",
+        "view_reports"
+      ],
+      "drawings": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "approve"
+      ]
+    }
+  },
+  "supervisor": {
+    "label": "المشرف",
+    "permissions": {
+      "tasks": [
+        "view",
+        "update"
+      ],
+      "safety": [
+        "view",
+        "create"
+      ],
+      "quality": [
+        "view",
+        "create"
+      ],
+      "reports": [
+        "view"
+      ],
+      "qms": [
+        "view",
+        "create",
+        "view_reports"
+      ]
+    }
+  },
+  "client_viewer": {
+    "label": "العميل (عرض فقط)",
+    "permissions": {
+      "dashboard": [
+        "view"
+      ],
+      "contracts": [
+        "view"
+      ],
+      "invoices": [
+        "view"
+      ],
+      "reports": [
+        "view"
+      ],
+      "equipment": [
+        "view"
+      ],
+      "qms": [
+        "view"
+      ],
+      "budget": [
+        "view"
+      ]
+    }
+  },
+  "equipment_manager": {
+    "label": "مدير المعدات",
+    "permissions": {
+      "equipment": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "manage"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "ai": [
+        "use"
+      ]
+    }
+  },
+  "site_engineer": {
+    "label": "مهندس الموقع",
+    "permissions": {
+      "equipment": [
+        "view",
+        "create",
+        "update"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view"
+      ]
+    }
+  },
+  "maintenance_officer": {
+    "label": "مسؤول الصيانة",
+    "permissions": {
+      "equipment": [
+        "view",
+        "update",
+        "maintenance"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view"
+      ]
+    }
+  },
+  "warehouse_keeper": {
+    "label": "أمين المخزن",
+    "permissions": {
+      "equipment": [
+        "view",
+        "spare_parts"
+      ],
+      "warehouse": [
+        "view",
+        "create",
+        "update"
+      ],
+      "dashboard": [
+        "view"
+      ]
+    }
+  },
+  "equipment_operator": {
+    "label": "المشغل",
+    "permissions": {
+      "equipment": [
+        "view",
+        "operate"
+      ]
+    }
+  },
+  "hse_manager": {
+    "label": "مدير السلامة (HSE Manager)",
+    "permissions": {
+      "safety": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "approve",
+        "manage"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "ai": [
+        "use"
+      ]
+    }
+  },
+  "safety_officer": {
+    "label": "مسؤول السلامة",
+    "permissions": {
+      "safety": [
+        "view",
+        "create",
+        "update"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view"
+      ]
+    }
+  },
+  "field_supervisor": {
+    "label": "المشرف الميداني",
+    "permissions": {
+      "safety": [
+        "view",
+        "create"
+      ],
+      "dashboard": [
+        "view"
+      ]
+    }
+  },
+  "hse_worker": {
+    "label": "العامل (صلاحيات محدودة - السلامة)",
+    "permissions": {
+      "safety": [
+        "view"
+      ]
+    }
+  },
+  "qa_qc_manager": {
+    "label": "مدير الجودة (QA/QC Manager)",
+    "permissions": {
+      "qms": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "approve",
+        "manage",
+        "view_reports",
+        "export_reports"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "ai": [
+        "use"
+      ]
+    }
+  },
+  "qa_engineer": {
+    "label": "مهندس الجودة (QA Engineer)",
+    "permissions": {
+      "qms": [
+        "view",
+        "create",
+        "update",
+        "view_reports",
+        "export_reports"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view"
+      ]
+    }
+  },
+  "qc_inspector": {
+    "label": "مفتش الجودة (QC Inspector)",
+    "permissions": {
+      "qms": [
+        "view",
+        "create",
+        "update",
+        "view_reports"
+      ],
+      "dashboard": [
+        "view"
+      ]
+    }
+  },
+  "consultant": {
+    "label": "الاستشاري",
+    "permissions": {
+      "qms": [
+        "view",
+        "approve",
+        "view_reports"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view"
+      ]
+    }
+  },
+  "contractor": {
+    "label": "المقاول",
+    "permissions": {
+      "qms": [
+        "view",
+        "create",
+        "view_reports"
+      ],
+      "dashboard": [
+        "view"
+      ]
+    }
+  },
+  "survey_manager": {
+    "label": "مدير المساحة",
+    "permissions": {
+      "survey": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "manage"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "ai": [
+        "use"
+      ]
+    }
+  },
+  "survey_engineer": {
+    "label": "مهندس المساحة",
+    "permissions": {
+      "survey": [
+        "view",
+        "create",
+        "update"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ]
+    }
+  },
+  "field_surveyor": {
+    "label": "المسّاح الميداني",
+    "permissions": {
+      "survey": [
+        "view",
+        "create",
+        "field_entry"
+      ],
+      "dashboard": [
+        "view"
+      ]
+    }
+  },
+  "supervising_engineer": {
+    "label": "المهندس المشرف",
+    "permissions": {
+      "survey": [
+        "view",
+        "update",
+        "approve"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view"
+      ]
+    }
+  },
+  "survey_consultant": {
+    "label": "الاستشاري (مساحة)",
+    "permissions": {
+      "survey": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ]
+    }
+  },
+  "survey_client_viewer": {
+    "label": "العميل (عرض فقط - مساحة)",
+    "permissions": {
+      "survey": [
+        "view"
+      ],
+      "reports": [
+        "view"
+      ]
+    }
+  },
+  "document_controller": {
+    "label": "مدير الوثائق (Document Controller)",
+    "permissions": {
+      "documents": [
+        "view",
+        "create",
+        "update",
+        "delete",
+        "approve",
+        "manage"
+      ],
+      "dashboard": [
+        "view"
+      ],
+      "reports": [
+        "view",
+        "export"
+      ],
+      "ai": [
+        "use"
+      ]
+    }
+  },
+  "quality_engineer_dms": {
+    "label": "مهندس الجودة (وصول المستندات)",
+    "permissions": {
+      "documents": [
+        "view",
+        "create",
+        "update"
+      ],
+      "dashboard": [
+        "view"
+      ]
+    }
+  },
+  "consultant_viewer": {
+    "label": "الاستشاري (اطلاع على المستندات)",
+    "permissions": {
+      "documents": [
+        "view"
+      ],
+      "dashboard": [
+        "view"
+      ]
+    }
+  },
+  "contractor_viewer": {
+    "label": "المقاول (اطلاع على المستندات)",
+    "permissions": {
+      "documents": [
+        "view"
+      ]
+    }
+  }
 }
