@@ -1,11 +1,12 @@
 /**
  * القسم الثالث عشر - نظام إدارة الميزانية (Budget Management System)
  * ===================================================================
- * تم تنفيذه حتى الجزء (5/10): البنية الأساسية + طبقة التخزين الموحّدة +
+ * تم تنفيذه حتى الجزء (7/10): البنية الأساسية + طبقة التخزين الموحّدة +
  *                      إنشاء/تعديل ميزانية المشروع + هيكل تقسيم الميزانية (BBS) +
  *                      بنود التكلفة + الربط مع BOQ + التكاليف الفعلية + الإيرادات
- *                      والتحصيل + أوامر التغيير + لوحة تحكم مالية + سجل تدقيق +
- *                      الربط بالمشاريع.
+ *                      والتحصيل + أوامر التغيير + الانحرافات المالية وEVM +
+ *                      التدفقات النقدية الشاملة + نظام الموافقات المالية الكامل +
+ *                      لوحة تحكم مالية + سجل تدقيق + الربط بالمشاريع.
  *
  * خطة التقسيم الكاملة (راجع BUDGET_PLAN.md):
  *  1/10: الأساس + التخزين + إنشاء الميزانية + BBS + لوحة تحكم أساسية (منجَز)
@@ -15,8 +16,10 @@
  *  5/10: أوامر التغيير (Change Orders) - موافقة على مستويين (مدير مشروع ثم إدارة/
  *        مالي)، تُطبَّق تلقائياً على BBS وcontract_value عند الاعتماد النهائي
  *        (منجَز)
- *  6/10: مراقبة الانحرافات المالية + تحليل القيمة المكتسبة (EVM) (منجَز - هذا الملف)
- *  7/10: التدفقات النقدية (Cash Flow) + الموافقات المالية
+ *  6/10: مراقبة الانحرافات المالية + تحليل القيمة المكتسبة (EVM) (منجَز)
+ *  7/10: التدفقات النقدية الشاملة (إيرادات+مصروفات، متوقع مقابل فعلي، رصيد تراكمي)
+ *        + نظام موافقات صرف كامل على 4 مراحل (مراجعة مالية → مدير مشروع → إدارة →
+ *        صرف فعلي يُسجَّل تلقائياً كتكلفة فعلية) (منجَز - هذا الملف)
  *  8/10: الفواتير والمستخلصات (Invoicing)
  *  9/10: التقارير المالية + الرسوم البيانية + التصدير (PDF/Excel/CSV/Word)
  *  10/10: الذكاء الاصطناعي المالي + التكامل الشامل مع بقية الأقسام
@@ -2512,6 +2515,486 @@ function getDashboardStatsWithEVM() {
   return base;
 }
 
+// ==================================================================================
+// ===================== الجزء 7/10: التدفقات النقدية الشاملة =======================
+// ==================================================================================
+
+function monthsBetween(startDateStr, endDateStr) {
+  if (!startDateStr || !endDateStr) return [];
+  const start = new Date(startDateStr);
+  const end = new Date(endDateStr);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return [];
+  const months = [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const last = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cursor <= last) {
+    months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return months;
+}
+
+function computeComprehensiveCashFlow(budget) {
+  const revenueFlow = computeCashFlow(budget).data;
+  const actualCosts = budget.actual_costs || [];
+
+  const months = {};
+  function ensureMonth(key) {
+    if (!months[key]) {
+      months[key] = {
+        month: key,
+        revenue_received: 0, revenue_expected: 0, revenue_overdue: 0,
+        expense_actual: 0, expense_planned: 0,
+      };
+    }
+    return months[key];
+  }
+
+  for (const m of revenueFlow.months) {
+    const e = ensureMonth(m.month);
+    e.revenue_received = m.received;
+    e.revenue_expected = m.expected;
+    e.revenue_overdue = m.overdue;
+  }
+
+  for (const c of actualCosts) {
+    if (!c.date) continue;
+    const e = ensureMonth(c.date.slice(0, 7));
+    e.expense_actual = r2(e.expense_actual + c.amount);
+  }
+
+  const plannedTotal = computeBBSGrandTotal(budget);
+  const projectMonths = monthsBetween(budget.start_date, budget.end_date);
+  if (projectMonths.length > 0 && plannedTotal > 0) {
+    const perMonth = r2(plannedTotal / projectMonths.length);
+    for (const key of projectMonths) {
+      const e = ensureMonth(key);
+      e.expense_planned = perMonth;
+    }
+  }
+
+  const sortedKeys = Object.keys(months).sort();
+  let cumulativeReceived = 0, cumulativeExpectedIn = 0, cumulativeActualOut = 0, cumulativePlannedOut = 0;
+  let cumulativeActualBalance = 0, cumulativeProjectedBalance = 0;
+
+  const rows = sortedKeys.map(key => {
+    const m = months[key];
+    cumulativeReceived = r2(cumulativeReceived + m.revenue_received);
+    cumulativeExpectedIn = r2(cumulativeExpectedIn + m.revenue_received + m.revenue_expected);
+    cumulativeActualOut = r2(cumulativeActualOut + m.expense_actual);
+    cumulativePlannedOut = r2(cumulativePlannedOut + m.expense_planned);
+
+    const netActual = r2(m.revenue_received - m.expense_actual);
+    const netProjected = r2((m.revenue_received + m.revenue_expected) - m.expense_planned);
+    cumulativeActualBalance = r2(cumulativeActualBalance + netActual);
+    cumulativeProjectedBalance = r2(cumulativeProjectedBalance + netProjected);
+
+    return {
+      month: key,
+      revenue_received: m.revenue_received,
+      revenue_expected: m.revenue_expected,
+      revenue_overdue: m.revenue_overdue,
+      expense_actual: m.expense_actual,
+      expense_planned: m.expense_planned,
+      net_cash_actual: netActual,
+      net_cash_projected: netProjected,
+      cumulative_balance_actual: cumulativeActualBalance,
+      cumulative_balance_projected: cumulativeProjectedBalance,
+      variance_vs_plan: r2(cumulativeActualBalance - cumulativeProjectedBalance),
+    };
+  });
+
+  return {
+    success: true,
+    data: {
+      budget_id: budget.id,
+      currency: budget.currency,
+      months: rows,
+      totals: {
+        total_revenue_received: cumulativeReceived,
+        total_revenue_expected_incl_received: cumulativeExpectedIn,
+        total_expense_actual: cumulativeActualOut,
+        total_expense_planned: cumulativePlannedOut,
+        final_balance_actual: cumulativeActualBalance,
+        final_balance_projected: cumulativeProjectedBalance,
+      },
+    },
+  };
+}
+
+function getComprehensiveCashFlow(budgetId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  return computeComprehensiveCashFlow(budget);
+}
+
+function getCashFlowOverview() {
+  const db = loadDB();
+  const perBudget = db.budgets.map(b => {
+    const flow = computeComprehensiveCashFlow(b);
+    return {
+      budget_id: b.id, project_id: b.project_id, project_name: b.project_name,
+      currency: b.currency, totals: flow.data.totals,
+    };
+  });
+
+  const summary = perBudget.reduce((acc, p) => {
+    acc.total_revenue_received = r2(acc.total_revenue_received + p.totals.total_revenue_received);
+    acc.total_expense_actual = r2(acc.total_expense_actual + p.totals.total_expense_actual);
+    acc.total_final_balance_actual = r2(acc.total_final_balance_actual + p.totals.final_balance_actual);
+    acc.total_final_balance_projected = r2(acc.total_final_balance_projected + p.totals.final_balance_projected);
+    return acc;
+  }, { total_revenue_received: 0, total_expense_actual: 0, total_final_balance_actual: 0, total_final_balance_projected: 0 });
+
+  return { success: true, data: { summary, per_budget: perBudget } };
+}
+
+// ==================================================================================
+// ========================= الجزء 7/10: الموافقات المالية ==========================
+// ==================================================================================
+
+const PAYMENT_REQUEST_STATUSES = [
+  'pending_review', 'financial_review_approved', 'pm_approved',
+  'management_approved', 'disbursed', 'rejected',
+];
+
+const PAYMENT_REQUEST_STATUS_LABELS = {
+  pending_review: 'بانتظار المراجعة المالية',
+  financial_review_approved: 'اعتُمدت المراجعة المالية',
+  pm_approved: 'اعتمد مدير المشروع',
+  management_approved: 'اعتمدت الإدارة',
+  disbursed: 'تم الصرف',
+  rejected: 'مرفوض',
+};
+
+const PAYMENT_REQUEST_CATEGORIES = ['materials', 'labor', 'equipment', 'subcontractor', 'other'];
+
+function validatePaymentRequestInput(body, { partial = false } = {}) {
+  if (!partial) {
+    if (!body.node_id) throw new Error('عقدة الهيكل المرتبطة (node_id) مطلوبة لطلب الصرف');
+    if (!body.description || !String(body.description).trim()) {
+      throw new Error('وصف طلب الصرف (description) مطلوب');
+    }
+    if (body.amount === undefined || body.amount === null || isNaN(Number(body.amount))) {
+      throw new Error('مبلغ طلب الصرف (amount) مطلوب ويجب أن يكون رقماً');
+    }
+    if (Number(body.amount) <= 0) throw new Error('مبلغ طلب الصرف يجب أن يكون أكبر من صفر');
+    if (body.category && !PAYMENT_REQUEST_CATEGORIES.includes(body.category)) {
+      throw new Error(`فئة طلب صرف غير معروفة: ${body.category}. القيم المسموحة: ${PAYMENT_REQUEST_CATEGORIES.join(', ')}`);
+    }
+  } else if (body.amount !== undefined && Number(body.amount) <= 0) {
+    throw new Error('مبلغ طلب الصرف يجب أن يكون أكبر من صفر');
+  }
+}
+
+function generatePaymentRequestNumber(db, budget) {
+  const count = (budget.payment_requests || []).length + 1;
+  return `PR-${budget.budget_number}-${String(count).padStart(4, '0')}`;
+}
+
+function createPaymentRequest(budgetId, body = {}, { actor = null } = {}) {
+  validatePaymentRequestInput(body, { partial: false });
+
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+
+  const node = findNode(budget.bbs, body.node_id);
+  if (!node) throw new Error('عقدة الهيكل (node_id) غير موجودة في هذه الميزانية');
+  const ancestors = findActualCostAncestors(budget, node);
+
+  const pr = {
+    id: newId('PR'),
+    pr_number: generatePaymentRequestNumber(db, budget),
+    budget_id: budget.id,
+    node_id: node.id,
+    node_name: node.name,
+    phase_id: ancestors.phase ? ancestors.phase.id : null,
+    phase_name: ancestors.phase ? ancestors.phase.name : null,
+    category: body.category || 'other',
+    description: String(body.description).trim(),
+    amount: r2(body.amount),
+    beneficiary: body.beneficiary || null,
+    reference: body.reference || null,
+    requested_by: actor,
+    status: 'pending_review',
+    approvals: [{ step: 'request', actor, decision: 'submitted', note: body.note || '', at: nowISO() }],
+    linked_actual_cost_id: null,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+
+  if (!budget.payment_requests) budget.payment_requests = [];
+  budget.payment_requests.push(pr);
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor,
+    action: 'create_payment_request',
+    targetId: budget.id,
+    summary: `طلب صرف جديد (${pr.pr_number}): ${pr.description} — ${pr.amount} ${budget.currency}`,
+    details: { budget_id: budget.id, payment_request_id: pr.id, amount: pr.amount, node_id: node.id },
+  });
+
+  return { success: true, data: pr };
+}
+
+function findPaymentRequestOrThrow(budget, prId) {
+  const pr = (budget.payment_requests || []).find(p => p.id === prId);
+  if (!pr) throw new Error('طلب الصرف غير موجود في هذه الميزانية');
+  return pr;
+}
+
+function listPaymentRequests(budgetId, { status = null, category = null, page = 1, pageSize = 50 } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  let items = (budget.payment_requests || []).slice();
+
+  if (status) items = items.filter(p => p.status === status);
+  if (category) items = items.filter(p => p.category === category);
+  items.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+
+  const total = items.length;
+  const p = Math.max(1, Number(page) || 1);
+  const ps = Math.max(1, Number(pageSize) || 50);
+  const start = (p - 1) * ps;
+
+  return {
+    success: true,
+    data: {
+      items: items.slice(start, start + ps), total, page: p, pageSize: ps,
+      summary: computePaymentRequestsSummary(budget),
+    },
+  };
+}
+
+function getPaymentRequest(budgetId, prId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  return { success: true, data: findPaymentRequestOrThrow(budget, prId) };
+}
+
+function financialReviewPaymentRequest(budgetId, prId, { actor = null, note = '' } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const pr = findPaymentRequestOrThrow(budget, prId);
+
+  if (pr.status !== 'pending_review') {
+    throw new Error(`لا يمكن إجراء مراجعة مالية على طلب صرف في حالة "${PAYMENT_REQUEST_STATUS_LABELS[pr.status]}"`);
+  }
+
+  pr.status = 'financial_review_approved';
+  pr.approvals.push({ step: 'financial_review', actor, decision: 'approved', note: note || '', at: nowISO() });
+  pr.updated_at = nowISO();
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor, action: 'financial_review_payment_request', targetId: budget.id,
+    summary: `مراجعة مالية معتمَدة لطلب صرف: ${pr.pr_number} — ${pr.amount}`,
+    details: { budget_id: budget.id, payment_request_id: pr.id },
+  });
+
+  return { success: true, data: pr };
+}
+
+function pmApprovePaymentRequest(budgetId, prId, { actor = null, note = '' } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const pr = findPaymentRequestOrThrow(budget, prId);
+
+  if (pr.status !== 'financial_review_approved') {
+    throw new Error('يجب اعتماد المراجعة المالية أولاً قبل اعتماد مدير المشروع');
+  }
+
+  pr.status = 'pm_approved';
+  pr.approvals.push({ step: 'pm_approval', actor, decision: 'approved', note: note || '', at: nowISO() });
+  pr.updated_at = nowISO();
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor, action: 'pm_approve_payment_request', targetId: budget.id,
+    summary: `اعتماد مدير المشروع على طلب صرف: ${pr.pr_number}`,
+    details: { budget_id: budget.id, payment_request_id: pr.id },
+  });
+
+  return { success: true, data: pr };
+}
+
+function managementApprovePaymentRequest(budgetId, prId, { actor = null, note = '' } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const pr = findPaymentRequestOrThrow(budget, prId);
+
+  if (pr.status !== 'pm_approved') {
+    throw new Error('يجب اعتماد مدير المشروع أولاً قبل اعتماد الإدارة');
+  }
+
+  pr.status = 'management_approved';
+  pr.approvals.push({ step: 'management_approval', actor, decision: 'approved', note: note || '', at: nowISO() });
+  pr.updated_at = nowISO();
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor, action: 'management_approve_payment_request', targetId: budget.id,
+    summary: `اعتماد الإدارة على طلب صرف: ${pr.pr_number} — ${pr.amount}`,
+    details: { budget_id: budget.id, payment_request_id: pr.id },
+  });
+
+  return { success: true, data: pr };
+}
+
+function disbursePaymentRequest(budgetId, prId, { actor = null, note = '', payment_date = null, payment_method = null } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const pr = findPaymentRequestOrThrow(budget, prId);
+
+  if (pr.status !== 'management_approved') {
+    throw new Error('لا يمكن الصرف إلا بعد اعتماد الإدارة على طلب الصرف');
+  }
+
+  const disbursementDate = payment_date || nowISO().slice(0, 10);
+
+  const actualCostResult = addActualCost(budget.id, {
+    category: pr.category,
+    node_id: pr.node_id,
+    description: `صرف مالي معتمَد: ${pr.description} (${pr.pr_number})`,
+    date: disbursementDate,
+    amount: pr.amount,
+    supplier: pr.beneficiary,
+    reference: pr.pr_number,
+  }, { actor });
+
+  const db2 = loadDB();
+  const budget2 = findBudgetOrThrow(db2, budgetId);
+  const pr2 = findPaymentRequestOrThrow(budget2, prId);
+
+  pr2.status = 'disbursed';
+  pr2.payment_date = disbursementDate;
+  pr2.payment_method = payment_method || null;
+  pr2.linked_actual_cost_id = actualCostResult.data.actual_cost
+    ? actualCostResult.data.actual_cost.id
+    : (actualCostResult.data.id || null);
+  pr2.approvals.push({ step: 'disbursement', actor, decision: 'disbursed', note: note || '', at: nowISO() });
+  pr2.updated_at = nowISO();
+  budget2.updated_at = nowISO();
+  saveDB(db2);
+
+  recordAudit({
+    actor, action: 'disburse_payment_request', targetId: budget2.id,
+    summary: `صرف فعلي لطلب: ${pr2.pr_number} — ${pr2.amount} ${budget2.currency} (${disbursementDate})`,
+    details: { budget_id: budget2.id, payment_request_id: pr2.id, linked_actual_cost_id: pr2.linked_actual_cost_id },
+  });
+
+  return { success: true, data: pr2 };
+}
+
+function rejectPaymentRequest(budgetId, prId, { actor = null, note = '' } = {}) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  const pr = findPaymentRequestOrThrow(budget, prId);
+
+  if (pr.status === 'disbursed') throw new Error('لا يمكن رفض طلب صرف تم صرفه بالفعل');
+  if (pr.status === 'rejected') throw new Error('طلب الصرف مرفوض بالفعل');
+
+  const stepLabels = {
+    pending_review: 'financial_review',
+    financial_review_approved: 'pm_review',
+    pm_approved: 'management_review',
+    management_approved: 'management_review',
+  };
+
+  const stepName = stepLabels[pr.status] || 'review';
+  pr.status = 'rejected';
+  pr.approvals.push({ step: stepName, actor, decision: 'rejected', note: note || '', at: nowISO() });
+  pr.updated_at = nowISO();
+  budget.updated_at = nowISO();
+  saveDB(db);
+
+  recordAudit({
+    actor, action: 'reject_payment_request', targetId: budget.id,
+    summary: `رفض طلب صرف: ${pr.pr_number}${note ? ' — السبب: ' + note : ''}`,
+    details: { budget_id: budget.id, payment_request_id: pr.id, note },
+  });
+
+  return { success: true, data: pr };
+}
+
+function computePaymentRequestsSummary(budget) {
+  const items = budget.payment_requests || [];
+  const pendingStatuses = ['pending_review', 'financial_review_approved', 'pm_approved', 'management_approved'];
+  const pending = items.filter(p => pendingStatuses.includes(p.status));
+  const disbursed = items.filter(p => p.status === 'disbursed');
+  const rejected = items.filter(p => p.status === 'rejected');
+
+  const byStatus = PAYMENT_REQUEST_STATUSES.reduce((acc, s) => {
+    acc[s] = items.filter(p => p.status === s).length;
+    return acc;
+  }, {});
+
+  return {
+    total_count: items.length,
+    pending_count: pending.length,
+    disbursed_count: disbursed.length,
+    rejected_count: rejected.length,
+    total_pending_amount: r2(pending.reduce((s, p) => s + p.amount, 0)),
+    total_disbursed_amount: r2(disbursed.reduce((s, p) => s + p.amount, 0)),
+    by_status: byStatus,
+  };
+}
+
+function getPaymentRequestsOverview(budgetId) {
+  const db = loadDB();
+  const budget = findBudgetOrThrow(db, budgetId);
+  return { success: true, data: computePaymentRequestsSummary(budget) };
+}
+
+function getPendingApprovalsOverview() {
+  const db = loadDB();
+  const pending = [];
+  for (const b of db.budgets) {
+    for (const pr of (b.payment_requests || [])) {
+      if (['pending_review', 'financial_review_approved', 'pm_approved', 'management_approved'].includes(pr.status)) {
+        pending.push({
+          budget_id: b.id, project_name: b.project_name, currency: b.currency,
+          payment_request_id: pr.id, pr_number: pr.pr_number, description: pr.description,
+          amount: pr.amount, status: pr.status, status_label: PAYMENT_REQUEST_STATUS_LABELS[pr.status],
+          next_step: {
+            pending_review: 'financial_review', financial_review_approved: 'pm_approval',
+            pm_approved: 'management_approval', management_approved: 'disbursement',
+          }[pr.status],
+          created_at: pr.created_at,
+        });
+      }
+    }
+  }
+  pending.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  return {
+    success: true,
+    data: {
+      total_pending: pending.length,
+      total_pending_amount: r2(pending.reduce((s, p) => s + p.amount, 0)),
+      items: pending,
+    },
+  };
+}
+
+function getDashboardStatsWithCashFlow() {
+  const base = getDashboardStatsWithEVM();
+  const cashFlowOverview = getCashFlowOverview();
+  const pendingApprovals = getPendingApprovalsOverview();
+
+  base.data.summary.total_cash_balance_actual = cashFlowOverview.data.summary.total_final_balance_actual;
+  base.data.summary.total_cash_balance_projected = cashFlowOverview.data.summary.total_final_balance_projected;
+  base.data.summary.pending_payment_approvals_count = pendingApprovals.data.total_pending;
+  base.data.summary.pending_payment_approvals_amount = pendingApprovals.data.total_pending_amount;
+  base.data.pending_payment_approvals = pendingApprovals.data.items.slice(0, 10);
+
+  return base;
+}
+
 module.exports = {
   // إدارة الميزانية الأساسية
   createBudget,
@@ -2574,8 +3057,25 @@ module.exports = {
   getDeviationAnalysis,
   getEVMOverview,
   DEVIATION_THRESHOLDS,
-  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج EVM/الانحرافات - الجزء 6/10)
-  getDashboardStats: getDashboardStatsWithEVM,
+  // التدفقات النقدية الشاملة (الجزء 7/10)
+  getComprehensiveCashFlow,
+  getCashFlowOverview,
+  // الموافقات المالية (الجزء 7/10)
+  createPaymentRequest,
+  getPaymentRequest,
+  listPaymentRequests,
+  financialReviewPaymentRequest,
+  pmApprovePaymentRequest,
+  managementApprovePaymentRequest,
+  disbursePaymentRequest,
+  rejectPaymentRequest,
+  getPaymentRequestsOverview,
+  getPendingApprovalsOverview,
+  PAYMENT_REQUEST_STATUSES,
+  PAYMENT_REQUEST_STATUS_LABELS,
+  PAYMENT_REQUEST_CATEGORIES,
+  // لوحة التحكم وسجل التدقيق (محدَّثة لتدمج التدفق النقدي والموافقات - الجزء 7/10)
+  getDashboardStats: getDashboardStatsWithCashFlow,
   listAudit,
   // ثوابت مساعدة للواجهة
   BUDGET_STATUSES,

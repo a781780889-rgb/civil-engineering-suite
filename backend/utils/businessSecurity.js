@@ -289,7 +289,12 @@ const DEFAULT_ROLES = {
   },
   accountant: {
     label: 'المحاسب',
-    permissions: { invoices: ['view', 'create', 'update'], contracts: ['view'], reports: ['view', 'export'] },
+    permissions: {
+      invoices: ['view', 'create', 'update'], contracts: ['view'], reports: ['view', 'export'],
+      // صلاحية view/update فقط (بدون approve) — تكفي للمراجعة المالية على طلبات
+      // الصرف (الجزء 7/10) دون منح صلاحية الاعتماد النهائي أو الصرف الفعلي.
+      budget: ['view', 'update'],
+    },
   },
   engineer: {
     label: 'المهندس',
