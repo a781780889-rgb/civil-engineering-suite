@@ -101,6 +101,9 @@ const REPORT_INTERACTIVE = require('./utils/reportInteractive'); // القسم 1
 const REPORT_EXEC_PERIODIC = require('./utils/reportExecutivePeriodic'); // القسم 14 - الجزء 5/10
 const REPORT_EXPORT_ENGINE = require('./utils/reportExportEngine'); // القسم 14 - الجزء 6/10
 const REPORT_SCHEDULER = require('./utils/reportScheduler'); // القسم 14 - الجزء 6/10
+const REPORT_TEMPLATES = require('./utils/reportTemplates'); // القسم 14 - الجزء 7/10
+const REPORT_APPROVALS = require('./utils/reportApprovals'); // القسم 14 - الجزء 7/10
+const REPORT_ATTACHMENTS = require('./utils/reportAttachments'); // القسم 14 - الجزء 7/10
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8577,6 +8580,187 @@ const API_HANDLERS = {
     POST: async (body) => {
       if (!body || !body.id) throw new Error('معرّف التنبيه (id) مطلوب');
       return { success: true, data: REPORT_SCHEDULER.markNotificationRead(body.id) };
+    },
+  },
+
+  // ===================== القسم 14 - الجزء 7/10: قوالب التقارير =====================
+
+  '/api/reports/templates/list': {
+    GET: async (_body, query) => ({
+      success: true,
+      data: REPORT_TEMPLATES.listTemplates({
+        reportType: query.reportType || null,
+        activeOnly: query.activeOnly === 'true',
+        search: query.search || null,
+      }),
+    }),
+  },
+
+  '/api/reports/templates/get': {
+    GET: async (_body, query) => {
+      if (!query.id) throw new Error('معرّف القالب (id) مطلوب');
+      return { success: true, data: REPORT_TEMPLATES.getTemplate(query.id) };
+    },
+  },
+
+  '/api/reports/templates/create': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'create');
+      const session = SEC.getSessionUser(token);
+      return { success: true, data: REPORT_TEMPLATES.createTemplate({ ...body, userId: session ? session.username : null }) };
+    },
+  },
+
+  '/api/reports/templates/update': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'edit');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.id) throw new Error('معرّف القالب (id) مطلوب');
+      const { id, ...updates } = body;
+      return { success: true, data: REPORT_TEMPLATES.updateTemplate(id, updates, session ? session.username : null) };
+    },
+  },
+
+  '/api/reports/templates/clone': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'create');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.id) throw new Error('معرّف القالب (id) مطلوب');
+      return { success: true, data: REPORT_TEMPLATES.cloneTemplate(body.id, { newName: body.newName || null, userId: session ? session.username : null }) };
+    },
+  },
+
+  '/api/reports/templates/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'delete');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.id) throw new Error('معرّف القالب (id) مطلوب');
+      return { success: true, data: REPORT_TEMPLATES.deleteTemplate(body.id, session ? session.username : null) };
+    },
+  },
+
+  '/api/reports/templates/apply': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'view');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.templateId) throw new Error('معرّف القالب (templateId) مطلوب');
+      const { templateId, ...requestOpts } = body;
+      return { success: true, data: REPORT_TEMPLATES.applyTemplateToReportRequest(templateId, requestOpts, session ? session.username : null) };
+    },
+  },
+
+  '/api/reports/templates/summary': {
+    GET: async () => ({ success: true, data: REPORT_TEMPLATES.getTemplatesSummary() }),
+  },
+
+  // ===================== القسم 14 - الجزء 7/10: التوقيعات والاعتمادات على التقارير =====================
+
+  '/api/reports/approvals/start': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'edit');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.reportRecordId) throw new Error('معرّف سجل التقرير (reportRecordId) مطلوب');
+      const { reportRecordId, ...opts } = body;
+      return { success: true, data: REPORT_APPROVALS.startApprovalCycle(reportRecordId, { ...opts, userId: session ? session.username : null }) };
+    },
+  },
+
+  '/api/reports/approvals/state': {
+    GET: async (_body, query) => {
+      if (!query.reportRecordId) throw new Error('معرّف سجل التقرير (reportRecordId) مطلوب');
+      return { success: true, data: REPORT_APPROVALS.getApprovalState(query.reportRecordId) };
+    },
+  },
+
+  '/api/reports/approvals/sign': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.reportRecordId) throw new Error('معرّف سجل التقرير (reportRecordId) مطلوب');
+      const { reportRecordId, ...signPayload } = body;
+      return { success: true, data: REPORT_APPROVALS.signReport(reportRecordId, signPayload) };
+    },
+  },
+
+  '/api/reports/approvals/return-for-review': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'edit');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.reportRecordId) throw new Error('معرّف سجل التقرير (reportRecordId) مطلوب');
+      return { success: true, data: REPORT_APPROVALS.returnForReview(body.reportRecordId, { reason: body.reason, userId: session ? session.username : null }) };
+    },
+  },
+
+  '/api/reports/approvals/revoke-signature': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'edit');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.reportRecordId || !body.signatureId) throw new Error('reportRecordId و signatureId مطلوبان');
+      return {
+        success: true,
+        data: REPORT_APPROVALS.revokeReportSignature(body.reportRecordId, body.signatureId, { reason: body.reason, userId: session ? session.username : null }),
+      };
+    },
+  },
+
+  '/api/reports/approvals/verify-signature': {
+    GET: async (_body, query) => {
+      if (!query.reportRecordId || !query.signatureId) throw new Error('reportRecordId و signatureId مطلوبان');
+      return { success: true, data: REPORT_APPROVALS.verifyReportSignature(query.reportRecordId, query.signatureId) };
+    },
+  },
+
+  '/api/reports/approvals/pending': {
+    GET: async (_body, query) => ({
+      success: true,
+      data: REPORT_APPROVALS.listPendingApprovals({
+        projectId: query.projectId || null,
+        level: query.level ? Number(query.level) : null,
+      }),
+    }),
+  },
+
+  // ===================== القسم 14 - الجزء 7/10: الصور والمرفقات على التقارير =====================
+
+  '/api/reports/attachments/add': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'edit');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.reportRecordId) throw new Error('معرّف سجل التقرير (reportRecordId) مطلوب');
+      const { reportRecordId, ...filePayload } = body;
+      return { success: true, data: REPORT_ATTACHMENTS.addAttachment(reportRecordId, { ...filePayload, userId: session ? session.username : null }) };
+    },
+  },
+
+  '/api/reports/attachments/list': {
+    GET: async (_body, query) => {
+      if (!query.reportRecordId) throw new Error('معرّف سجل التقرير (reportRecordId) مطلوب');
+      return { success: true, data: REPORT_ATTACHMENTS.listAttachments(query.reportRecordId) };
+    },
+  },
+
+  '/api/reports/attachments/download': {
+    GET: async (_body, query) => {
+      if (!query.id) throw new Error('معرّف المرفق (id) مطلوب');
+      return { success: true, data: REPORT_ATTACHMENTS.getAttachmentFile(query.id) };
+    },
+  },
+
+  '/api/reports/attachments/update-meta': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'edit');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.id) throw new Error('معرّف المرفق (id) مطلوب');
+      const { id, ...meta } = body;
+      return { success: true, data: REPORT_ATTACHMENTS.updateAttachmentMeta(id, meta, session ? session.username : null) };
+    },
+  },
+
+  '/api/reports/attachments/delete': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'delete');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.id) throw new Error('معرّف المرفق (id) مطلوب');
+      return { success: true, data: REPORT_ATTACHMENTS.deleteAttachment(body.id, session ? session.username : null) };
     },
   },
 };
