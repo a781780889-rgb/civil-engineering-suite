@@ -105,6 +105,7 @@ const REPORT_TEMPLATES = require('./utils/reportTemplates'); // القسم 14 - 
 const REPORT_APPROVALS = require('./utils/reportApprovals'); // القسم 14 - الجزء 7/10
 const REPORT_ATTACHMENTS = require('./utils/reportAttachments'); // القسم 14 - الجزء 7/10
 const REPORTS_AI = require('./utils/reportsAI'); // القسم 14 - الجزء 8/10
+const REPORTS_INTEGRATION = require('./utils/reportsIntegration'); // القسم 14 - الجزء 9/10
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8900,6 +8901,129 @@ const API_HANDLERS = {
       return { success: true, data: await REPORTS_AI.predictProductivityOutlook({ projectId: body.projectId }) };
     },
   },
+
+  // ===================== القسم 14 - الجزء 9/10: الربط الكامل بكل الأقسام =====================
+
+  '/api/reports/integration/register': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'create');
+      const session = SEC.getSessionUser(token);
+      return { success: true, data: REPORTS_INTEGRATION.registerCrossModuleReport({ ...body, userId: session?.userId || null }) };
+    },
+  },
+
+  '/api/reports/integration/summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      return { success: true, data: REPORTS_INTEGRATION.getModuleIntegrationSummary({ projectId: query.projectId || null }) };
+    },
+  },
+
+  '/api/reports/integration/source': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!query.reportId) throw new Error('معرّف التقرير (reportId) مطلوب');
+      return { success: true, data: REPORTS_INTEGRATION.getReportSource(query.reportId) };
+    },
+  },
+
+  '/api/reports/integration/list-by-module': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!query.sourceModule) throw new Error('القسم المصدر (sourceModule) مطلوب');
+      return { success: true, data: REPORTS_INTEGRATION.listReportsByModule(query.sourceModule, { projectId: query.projectId || null }) };
+    },
+  },
+
+  // ===================== القسم 14 - الجزء 9/10: سجل التقارير التفصيلي =====================
+
+  '/api/reports/registry': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      return {
+        success: true,
+        data: REPORTS_INTEGRATION.listReportsRegistry({
+          projectId: query.projectId || null,
+          userId: query.userId || null,
+          category: query.category || null,
+          status: query.status || null,
+          sourceModule: query.sourceModule || null,
+          search: query.search || null,
+          dateFrom: query.dateFrom || null,
+          dateTo: query.dateTo || null,
+        }),
+      };
+    },
+  },
+
+  '/api/reports/history': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!query.reportId) throw new Error('معرّف التقرير (reportId) مطلوب');
+      return { success: true, data: REPORTS_INTEGRATION.getReportHistory(query.reportId) };
+    },
+  },
+
+  // ===================== القسم 14 - الجزء 9/10: مشاركة التقارير (رابط خارجي آمن) =====================
+
+  '/api/reports/share/create': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'share');
+      const session = SEC.getSessionUser(token);
+      return { success: true, data: REPORTS_INTEGRATION.createReportShareLink({ ...body, created_by: session?.userId || null }) };
+    },
+  },
+
+  '/api/reports/share/open': {
+    POST: async (body, _query, req) => {
+      if (!body || !body.token) throw new Error('رمز الرابط (token) مطلوب');
+      return REPORTS_INTEGRATION.openReportShareLink(body.token, { password: body.password || null, ip: req?.socket?.remoteAddress || null });
+    },
+  },
+
+  '/api/reports/share/download': {
+    POST: async (body, _query, req) => {
+      if (!body || !body.token) throw new Error('رمز الرابط (token) مطلوب');
+      return REPORTS_INTEGRATION.downloadViaReportShareLink(body.token, { password: body.password || null, ip: req?.socket?.remoteAddress || null });
+    },
+  },
+
+  '/api/reports/share/revoke': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'share');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.shareId) throw new Error('معرّف رابط المشاركة (shareId) مطلوب');
+      return { success: true, data: REPORTS_INTEGRATION.revokeReportShareLink(body.shareId, { actor: session?.userId || null }) };
+    },
+  },
+
+  '/api/reports/share/list': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      return {
+        success: true,
+        data: REPORTS_INTEGRATION.listReportShareLinks({
+          reportId: query.reportId || null, projectId: query.projectId || null,
+          includeRevoked: query.includeRevoked !== 'false',
+        }),
+      };
+    },
+  },
+
+  '/api/reports/share/internal': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'share');
+      const session = SEC.getSessionUser(token);
+      return { success: true, data: REPORTS_INTEGRATION.shareReportInternally({ ...body, created_by: session?.userId || null }) };
+    },
+  },
+
+  '/api/reports/share/summary': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      return { success: true, data: REPORTS_INTEGRATION.getReportSharingSummary({ projectId: query.projectId || null }) };
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -8934,6 +9058,11 @@ const server = http.createServer(async (req, res) => {
   // صفحة عامة لفتح روابط مشاركة المستندات الخارجية (بدون تسجيل دخول) - القسم الحادي عشر
   if (pathname.startsWith('/share/')) {
     return sendFile(res, path.join(FRONTEND_DIR, 'share.html'));
+  }
+
+  // صفحة عامة لفتح روابط مشاركة التقارير الخارجية (بدون تسجيل دخول) - القسم 14 الجزء 9/10
+  if (pathname.startsWith('/rshare/')) {
+    return sendFile(res, path.join(FRONTEND_DIR, 'rshare.html'));
   }
 
   if (pathname.startsWith('/reports/')) {
