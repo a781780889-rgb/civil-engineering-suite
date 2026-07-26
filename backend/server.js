@@ -99,6 +99,8 @@ const REPORT_BUILDER = require('./utils/reportBuilder'); // القسم 14 - ال
 const REPORT_PERIODS = require('./utils/reportPeriodsComparisons'); // القسم 14 - الجزء 3/10
 const REPORT_INTERACTIVE = require('./utils/reportInteractive'); // القسم 14 - الجزء 4/10
 const REPORT_EXEC_PERIODIC = require('./utils/reportExecutivePeriodic'); // القسم 14 - الجزء 5/10
+const REPORT_EXPORT_ENGINE = require('./utils/reportExportEngine'); // القسم 14 - الجزء 6/10
+const REPORT_SCHEDULER = require('./utils/reportScheduler'); // القسم 14 - الجزء 6/10
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8452,6 +8454,131 @@ const API_HANDLERS = {
       return { success: true, data: result };
     },
   },
+
+  // ===================== القسم 14 - الجزء 6/10: التصدير والطباعة الموحّد =====================
+
+  '/api/reports/export': {
+    // body: { format: pdf|xlsx|csv|word|print, report: {...أي نتيجة تقرير من أي جزء سابق}, meta?: {...} }
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'export');
+      const session = SEC.getSessionUser(token);
+      const { format, report, meta = {} } = body || {};
+      if (!format) throw new Error('صيغة التصدير (format) مطلوبة');
+      if (!report) throw new Error('بيانات التقرير (report) مطلوبة للتصدير');
+      const result = REPORT_EXPORT_ENGINE.exportReport(format, report, { ...meta, userId: session ? session.userId : null, userName: session ? session.username : null });
+      return { success: true, data: result };
+    },
+  },
+
+  '/api/reports/print-preview': {
+    // body: { report: {...}, meta?: {...}, printOptions?: { paperSize, orientation, marginMm, showHeader, showFooter, showPageNumbers, companyLogoText, companyLogoUrl } }
+    POST: async (body) => {
+      const { report, meta = {}, printOptions = {} } = body || {};
+      if (!report) throw new Error('بيانات التقرير (report) مطلوبة للمعاينة');
+      const result = REPORT_EXPORT_ENGINE.buildPrintPreviewHTML(report, meta, printOptions);
+      return { success: true, data: result };
+    },
+  },
+
+  '/api/reports/export/formats': {
+    GET: async () => ({ success: true, data: { formats: REPORT_EXPORT_ENGINE.SUPPORTED_FORMATS, paperSizes: Object.keys(REPORT_EXPORT_ENGINE.PAPER_SIZES) } }),
+  },
+
+  // ===================== القسم 14 - الجزء 6/10: الجدولة التلقائية للتقارير =====================
+
+  '/api/reports/scheduler/meta': {
+    GET: async () => ({
+      success: true,
+      data: {
+        recurrenceTypes: REPORT_SCHEDULER.RECURRENCE_TYPES,
+        deliveryMethods: REPORT_SCHEDULER.DELIVERY_METHODS,
+        schedulableReportKinds: REPORT_SCHEDULER.SCHEDULABLE_REPORT_KINDS,
+      },
+    }),
+  },
+
+  '/api/reports/scheduler/list': {
+    GET: async (_body, query) => {
+      const result = REPORT_SCHEDULER.listSchedules({
+        projectId: query.projectId || null,
+        active: query.active !== undefined ? query.active === 'true' : null,
+        page: query.page ? Number(query.page) : 1,
+        pageSize: query.pageSize ? Number(query.pageSize) : 20,
+      });
+      return { success: true, data: result };
+    },
+  },
+
+  '/api/reports/scheduler/get': {
+    GET: async (_body, query) => {
+      if (!query.id) throw new Error('معرّف الجدولة (id) مطلوب');
+      return { success: true, data: REPORT_SCHEDULER.getSchedule(query.id) };
+    },
+  },
+
+  '/api/reports/scheduler/create': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'create');
+      const session = SEC.getSessionUser(token);
+      const record = REPORT_SCHEDULER.createSchedule(body || {}, session ? session.username : null);
+      return { success: true, data: record };
+    },
+  },
+
+  '/api/reports/scheduler/update': {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'edit');
+      const session = SEC.getSessionUser(token);
+      if (!body || !body.id) throw new Error('معرّف الجدولة (id) مطلوب');
+      const { id, ...updates } = body;
+      const record = REPORT_SCHEDULER.updateSchedule(id, updates, session ? session.username : null);
+      return { success: true, data: record };
+    },
+  },
+
+  '/api/reports/scheduler/toggle': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'edit');
+      if (!body || !body.id || typeof body.active !== 'boolean') throw new Error('id و active مطلوبان');
+      const record = REPORT_SCHEDULER.setScheduleActive(body.id, body.active);
+      return { success: true, data: record };
+    },
+  },
+
+  '/api/reports/scheduler/delete': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'delete');
+      if (!body || !body.id) throw new Error('معرّف الجدولة (id) مطلوب');
+      return { success: true, data: REPORT_SCHEDULER.deleteSchedule(body.id) };
+    },
+  },
+
+  '/api/reports/scheduler/run-now': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'export');
+      if (!body || !body.id) throw new Error('معرّف الجدولة (id) مطلوب');
+      const result = REPORT_SCHEDULER.runScheduleNow(body.id);
+      return { success: true, data: result };
+    },
+  },
+
+  '/api/reports/scheduler/notifications': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      const session = token ? SEC.getSessionUser(token) : null;
+      const recipient = query.recipient || (session ? session.username : null);
+      if (!recipient) throw new Error('recipient مطلوب');
+      const items = REPORT_SCHEDULER.listNotifications(recipient, { unreadOnly: query.unreadOnly === 'true' });
+      return { success: true, data: items };
+    },
+  },
+
+  '/api/reports/scheduler/notifications/mark-read': {
+    POST: async (body) => {
+      if (!body || !body.id) throw new Error('معرّف التنبيه (id) مطلوب');
+      return { success: true, data: REPORT_SCHEDULER.markNotificationRead(body.id) };
+    },
+  },
 };
 
 const server = http.createServer(async (req, res) => {
@@ -8580,4 +8707,12 @@ server.listen(PORT, () => {
   // الجزء الخامس (5/10) من القسم الحادي عشر: البحث الذكي جاهز للاستخدام مباشرة.
   // فهرسة المحتوى تتم تلقائياً عند كل رفع/إصدار جديد؛ لا تحتاج تهيئة عند الإقلاع.
   console.log('🔎 قسم إدارة المستندات - البحث الذكي (الجزء 5/10) جاهز.');
+
+  // القسم 14 - الجزء 6/10: تشغيل مؤقّت الجدولة التلقائية للتقارير (فحص كل دقيقة)
+  try {
+    REPORT_SCHEDULER.startBackgroundScheduler(60 * 1000);
+    console.log('🗓️  قسم التقارير - الجدولة التلقائية والتصدير الموحّد (الجزء 6/10) جاهز.');
+  } catch (e) {
+    console.error('⚠️  تعذّر بدء مؤقّت الجدولة التلقائية لقسم التقارير:', e.message);
+  }
 });
