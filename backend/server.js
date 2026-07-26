@@ -97,6 +97,7 @@ const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
 const REPORT_BUILDER = require('./utils/reportBuilder'); // القسم 14 - الجزء 2/10
 const REPORT_PERIODS = require('./utils/reportPeriodsComparisons'); // القسم 14 - الجزء 3/10
+const REPORT_INTERACTIVE = require('./utils/reportInteractive'); // القسم 14 - الجزء 4/10
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8337,6 +8338,47 @@ const API_HANDLERS = {
         status: 'completed',
       });
       return { success: true, data: { ...report, record_id: registered.id } };
+    },
+  },
+
+  // ===================== القسم 14: نظام التقارير - الجزء 4/10 (التقارير التفاعلية + الرسوم البيانية) =====================
+  '/api/reports/interactive/chart-types': {
+    GET: async () => ({ success: true, data: REPORT_INTERACTIVE.getChartTypes() }),
+  },
+  '/api/reports/interactive/chart': {
+    // body: { chartType, reportSpec: {...نفس مواصفة buildCustomReport...}, options: { labelField, valueField, valueOp, xField, yField, dateField, rowField, colField, scheduleId, progressField } }
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      const { chartType, reportSpec = {}, options = {} } = body || {};
+      if (!chartType) throw new Error('يجب تحديد نوع الرسم البياني (chartType)');
+      const chart = REPORT_INTERACTIVE.buildChartFromSpec(chartType, reportSpec, options);
+      return { success: true, data: chart };
+    },
+  },
+  '/api/reports/interactive/drill-down/group': {
+    // body: { spec: {...مواصفة التقرير الأصلية بها groupBy...}, groupKey }
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body?.spec) throw new Error('مواصفة التقرير الأصلية (spec) مطلوبة');
+      if (body.groupKey === undefined) throw new Error('قيمة المجموعة (groupKey) مطلوبة');
+      return { success: true, data: REPORT_INTERACTIVE.drillDownFromGroup(body.spec, body.groupKey) };
+    },
+  },
+  '/api/reports/interactive/drill-down/row': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!query?.dataSource) throw new Error('يجب تحديد مصدر البيانات (dataSource)');
+      if (!query?.rowId) throw new Error('يجب تحديد معرّف السجل (rowId)');
+      return { success: true, data: REPORT_INTERACTIVE.drillDownRow(query.dataSource, query.rowId) };
+    },
+  },
+  '/api/reports/interactive/rerun': {
+    // body: { spec: {...المواصفة الأصلية...}, overrides: { filters, dateFrom, dateTo, sortBy, sortDir, fields, groupBy } }
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body?.spec) throw new Error('مواصفة التقرير الأصلية (spec) مطلوبة');
+      const report = REPORT_INTERACTIVE.reRunWithFilters(body.spec, body.overrides || {});
+      return { success: true, data: report };
     },
   },
 };
