@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>تقرير مشترك — Civil Engineering Suite</title>
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background:#f4f6f8; margin:0; padding:0; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .share-card { background:#fff; border-radius:12px; box-shadow:0 4px 18px rgba(0,0,0,0.08); padding:32px; max-width:520px; width:92%; }
+  h1 { font-size:20px; margin:0 0 6px; }
+  .muted { color:#666; font-size:13px; margin:0 0 18px; }
+  .field { margin-bottom:14px; }
+  label { display:block; margin-bottom:6px; font-size:13px; color:#333; }
+  input[type=password] { width:100%; padding:9px 10px; border:1px solid #ccc; border-radius:6px; box-sizing:border-box; }
+  .btn { padding:9px 18px; border:none; border-radius:6px; background:#2563eb; color:#fff; font-size:14px; cursor:pointer; }
+  .btn:hover { background:#1d4ed8; }
+  .error { color:#c0392b; margin-top:10px; font-size:13px; }
+  .rpt-meta p { margin:4px 0; font-size:14px; }
+  .rpt-meta strong { color:#111; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:12px; font-size:12px; background:#e7f4ec; color:#245c3d; }
+</style>
+</head>
+<body>
+  <div class="share-card" id="share-root">
+    <h1>تقرير مشترك</h1>
+    <p class="muted">تم مشاركة هذا التقرير معك عبر نظام التقارير — Civil Engineering Suite</p>
+    <div id="share-body">جارِ التحقق من الرابط...</div>
+  </div>
+
+<script>
+const token = window.location.pathname.split('/rshare/')[1];
+const bodyEl = document.getElementById('share-body');
+
+async function openLink(password) {
+  const res = await fetch('/api/reports/share/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password: password || null }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.success === false) throw new Error(data.error || 'تعذّر فتح الرابط');
+  return data.data;
+}
+
+function renderPasswordForm(errorMsg) {
+  bodyEl.innerHTML = `
+    <div class="field">
+      <label>هذا الرابط محمي بكلمة مرور</label>
+      <input type="password" id="share-password" placeholder="أدخل كلمة المرور" />
+    </div>
+    ${errorMsg ? `<div class="error">${errorMsg}</div>` : ''}
+    <button class="btn" id="share-submit">فتح التقرير</button>
+  `;
+  document.getElementById('share-submit').addEventListener('click', async () => {
+    const pwd = document.getElementById('share-password').value;
+    try {
+      const data = await openLink(pwd);
+      renderReport(data);
+    } catch (e) {
+      renderPasswordForm(e.message);
+    }
+  });
+}
+
+function renderReport(data) {
+  const rpt = data.report;
+  const canDownload = data.permission === 'download';
+  bodyEl.innerHTML = `
+    <div class="rpt-meta">
+      <p><span class="badge">${rpt.category || '-'}</span></p>
+      <p><strong>عنوان التقرير:</strong> ${rpt.title}</p>
+      <p><strong>الفترة:</strong> ${rpt.period_from || '-'} إلى ${rpt.period_to || '-'}</p>
+      <p><strong>الصيغة:</strong> ${rpt.format || '-'}</p>
+      <p><strong>تاريخ الإنشاء:</strong> ${rpt.created_at || '-'}</p>
+    </div>
+    ${canDownload ? '<button class="btn" id="share-download">تنزيل التقرير</button>' : '<p class="muted">هذا الرابط للاطلاع فقط ولا يسمح بتنزيل الملف.</p>'}
+  `;
+  const dlBtn = document.getElementById('share-download');
+  if (dlBtn) {
+    dlBtn.addEventListener('click', async () => {
+      dlBtn.textContent = 'جارِ التنزيل...';
+      dlBtn.disabled = true;
+      try {
+        const pwd = document.getElementById('share-password')?.value || null;
+        const res = await fetch('/api/reports/share/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, password: pwd }),
+        });
+        const result = await res.json();
+        if (!res.ok || result.success === false) throw new Error(result.error || 'تعذّر التنزيل');
+        window.location.href = `/reports/${result.data.file_path.split('/').pop()}`;
+        dlBtn.textContent = 'تنزيل التقرير';
+        dlBtn.disabled = false;
+      } catch (e) {
+        dlBtn.textContent = 'تنزيل التقرير';
+        dlBtn.disabled = false;
+        alert(e.message);
+      }
+    });
+  }
+}
+
+(async () => {
+  if (!token) {
+    bodyEl.innerHTML = '<div class="error">رابط غير صحيح</div>';
+    return;
+  }
+  try {
+    const data = await openLink(null);
+    renderReport(data);
+  } catch (e) {
+    if (e.message.includes('كلمة المرور')) {
+      renderPasswordForm();
+    } else {
+      bodyEl.innerHTML = `<div class="error">${e.message}</div>`;
+    }
+  }
+})();
+</script>
+</body>
+</html>
