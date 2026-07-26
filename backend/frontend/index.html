@@ -340,6 +340,17 @@
     <div class="nav-item" data-panel="draw-approvals">
       <span class="nav-icon">🖋️</span> الاعتمادات المتعددة
     </div>
+
+    <div class="sidebar-title" style="margin-top:16px">القسم الرابع عشر — التقارير الزمنية والمقارنة</div>
+    <div class="nav-item" data-panel="rpc-periods">
+      <span class="nav-icon">📅</span> تقارير الفترات الزمنية
+    </div>
+    <div class="nav-item" data-panel="rpc-compare-periods">
+      <span class="nav-icon">🔁</span> مقارنة الفترة الحالية بالسابقة
+    </div>
+    <div class="nav-item" data-panel="rpc-comparisons">
+      <span class="nav-icon">⚖️</span> المقارنات العامة (مشروع/مقاول/ميزانية...)
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4773,6 +4784,153 @@
 
     <h4 style="margin-top:16px">سجل الاعتمادات (بالتوقيع والختم الزمني)</h4>
     <div id="draw-apr-table"><div class="mini-list-empty">لا توجد بيانات بعد</div></div>
+  </div>
+</section>
+
+<!-- ============ القسم الرابع عشر - الجزء 5: تقارير الفترات الزمنية ============ -->
+<section class="calc-panel" id="panel-rpc-periods">
+  <div class="calc-card" id="rpc-period-root">
+    <h2>القسم الرابع عشر — تقارير الفترات الزمنية</h2>
+    <p style="font-size:12px;color:#777">إنشاء تقرير فعلي فوق أي مصدر بيانات مسجَّل، لأي فترة زمنية: يومي / أسبوعي / نصف شهري / شهري / ربع سنوي / نصف سنوي / سنوي / فترة مخصصة.</p>
+
+    <div class="toolbar rpc-toolbar">
+      <div class="field">
+        <label>مصدر البيانات</label>
+        <select id="rpc-period-datasource-select" class="form-select"></select>
+      </div>
+      <div class="field">
+        <label>نوع الفترة</label>
+        <select id="rpc-period-type-select" class="form-select" onchange="rpcOnPeriodTypeChange()">
+          <option value="daily">يومي</option>
+          <option value="weekly">أسبوعي</option>
+          <option value="biweekly">نصف شهري</option>
+          <option value="monthly" selected>شهري</option>
+          <option value="quarterly">ربع سنوي</option>
+          <option value="semiannual">نصف سنوي</option>
+          <option value="annual">سنوي</option>
+          <option value="custom">فترة مخصصة</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>تاريخ مرجعي (اختياري)</label>
+        <input type="date" id="rpc-period-refdate-input">
+      </div>
+    </div>
+
+    <div class="toolbar rpc-toolbar" id="rpc-period-custom-wrap" style="display:none">
+      <div class="field">
+        <label>من تاريخ</label>
+        <input type="date" id="rpc-period-from-input">
+      </div>
+      <div class="field">
+        <label>إلى تاريخ</label>
+        <input type="date" id="rpc-period-to-input">
+      </div>
+    </div>
+
+    <div class="toolbar rpc-toolbar">
+      <div class="field field-full">
+        <label>عنوان التقرير (اختياري)</label>
+        <input type="text" id="rpc-period-title-input" placeholder="مثال: تقرير الأعمال المنفذة الشهري">
+      </div>
+      <div class="field field-full">
+        <label>معادلات إضافية (اختياري، مفصولة بفاصلة)</label>
+        <input type="text" id="rpc-period-formulas-input" placeholder="مثال: SUM(cost), COUNT(id)">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="rpc-period-btn-run" onclick="rpcRunPeriodReport()">إنشاء تقرير الفترة</button>
+    </div>
+
+    <div id="rpc-period-result" style="margin-top:16px"></div>
+  </div>
+</section>
+
+<!-- ============ القسم الرابع عشر - الجزء 5: مقارنة الفترة الحالية بالسابقة ============ -->
+<section class="calc-panel" id="panel-rpc-compare-periods">
+  <div class="calc-card" id="rpc-period-compare-root">
+    <h2>القسم الرابع عشر — مقارنة الفترة الحالية مقابل الفترة السابقة</h2>
+    <p style="font-size:12px;color:#777">مقارنة تلقائية لنفس مصدر البيانات بين الفترة الحالية والفترة التي تسبقها مباشرة (بنفس الطول الزمني): الفرق، نسبة التغيّر، والاتجاه.</p>
+
+    <div class="toolbar rpc-toolbar">
+      <div class="field">
+        <label>مصدر البيانات</label>
+        <select id="rpc-compare-datasource-select" class="form-select"></select>
+      </div>
+      <div class="field">
+        <label>نوع الفترة</label>
+        <select id="rpc-compare-period-type-select" class="form-select">
+          <option value="daily">يومي</option>
+          <option value="weekly">أسبوعي</option>
+          <option value="biweekly">نصف شهري</option>
+          <option value="monthly" selected>شهري</option>
+          <option value="quarterly">ربع سنوي</option>
+          <option value="semiannual">نصف سنوي</option>
+          <option value="annual">سنوي</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>تاريخ مرجعي (اختياري)</label>
+        <input type="date" id="rpc-compare-refdate-input">
+      </div>
+    </div>
+
+    <div class="toolbar rpc-toolbar">
+      <div class="field field-full">
+        <label>عنوان التقرير (اختياري)</label>
+        <input type="text" id="rpc-compare-title-input" placeholder="مثال: مقارنة الإنجاز الشهري">
+      </div>
+      <div class="field field-full">
+        <label>معادلات إضافية (اختياري، مفصولة بفاصلة)</label>
+        <input type="text" id="rpc-compare-formulas-input" placeholder="مثال: SUM(cost), AVG(progress_percent)">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="rpc-compare-btn-run" onclick="rpcRunPeriodComparison()">إنشاء المقارنة</button>
+    </div>
+
+    <div id="rpc-period-compare-result" style="margin-top:16px"></div>
+  </div>
+</section>
+
+<!-- ============ القسم الرابع عشر - الجزء 5: المقارنات العامة ============ -->
+<section class="calc-panel" id="panel-rpc-comparisons">
+  <div class="calc-card" id="rpc-comparison-root">
+    <h2>القسم الرابع عشر — المقارنات العامة</h2>
+    <p style="font-size:12px;color:#777">مقارنة بين: مشروع ومشروع، مقاول ومقاول، ميزانية ومصروفات فعلية، إنجاز مخطط مقابل فعلي (S-Curve)، فترة وفترة، شهر وشهر، إصدار ميزانية وإصدار.</p>
+
+    <div class="toolbar rpc-toolbar">
+      <div class="field">
+        <label>نوع المقارنة</label>
+        <select id="rpc-dimension-select" class="form-select"></select>
+      </div>
+    </div>
+
+    <div class="toolbar rpc-toolbar">
+      <div class="field field-full">
+        <label>العنصر الأول (نص بسيط، أو JSON مثل {"scheduleId":"..."})</label>
+        <input type="text" id="rpc-item-a-input" placeholder="مثال: معرّف مشروع، اسم مقاول، أو JSON">
+      </div>
+      <div class="field field-full">
+        <label>العنصر الثاني (نص بسيط، أو JSON)</label>
+        <input type="text" id="rpc-item-b-input" placeholder="مثال: معرّف مشروع، اسم مقاول، أو JSON">
+      </div>
+    </div>
+
+    <div class="toolbar rpc-toolbar">
+      <div class="field field-full">
+        <label>عنوان التقرير (اختياري)</label>
+        <input type="text" id="rpc-comparison-title-input" placeholder="مثال: مقارنة أداء مقاولين">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="rpc-comparison-btn-run" onclick="rpcRunComparison()">تشغيل المقارنة</button>
+    </div>
+
+    <div id="rpc-comparison-result" style="margin-top:16px"></div>
   </div>
 </section>
 
