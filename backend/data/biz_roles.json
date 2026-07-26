@@ -78,25 +78,6 @@
       ],
       "ai": [
         "use"
-      ],
-      "qms": [
-        "view",
-        "view_reports",
-        "export_reports"
-      ],
-      "drawings": [
-        "view",
-        "create",
-        "update",
-        "delete",
-        "approve"
-      ],
-      "budget": [
-        "view",
-        "create",
-        "update",
-        "delete",
-        "approve"
       ]
     }
   },
@@ -126,16 +107,6 @@
       ],
       "documents": [
         "view"
-      ],
-      "drawings": [
-        "view"
-      ],
-      "budget": [
-        "view",
-        "create",
-        "update",
-        "delete",
-        "approve"
       ]
     }
   },
@@ -174,25 +145,6 @@
       "reports": [
         "view",
         "export"
-      ],
-      "qms": [
-        "view",
-        "create",
-        "update",
-        "view_reports",
-        "export_reports"
-      ],
-      "drawings": [
-        "view",
-        "create",
-        "update",
-        "delete",
-        "approve"
-      ],
-      "budget": [
-        "view",
-        "create",
-        "update"
       ]
     }
   },
@@ -212,13 +164,6 @@
       "reports": [
         "view",
         "export"
-      ],
-      "drawings": [
-        "view",
-        "create",
-        "update",
-        "delete",
-        "approve"
       ]
     }
   },
@@ -277,7 +222,6 @@
       ],
       "budget": [
         "view",
-        "create",
         "update"
       ]
     }
@@ -303,19 +247,6 @@
       ],
       "reports": [
         "view"
-      ],
-      "qms": [
-        "view",
-        "create",
-        "update",
-        "view_reports"
-      ],
-      "drawings": [
-        "view",
-        "create",
-        "update",
-        "delete",
-        "approve"
       ]
     }
   },
@@ -336,11 +267,6 @@
       ],
       "reports": [
         "view"
-      ],
-      "qms": [
-        "view",
-        "create",
-        "view_reports"
       ]
     }
   },
@@ -360,12 +286,6 @@
         "view"
       ],
       "equipment": [
-        "view"
-      ],
-      "qms": [
-        "view"
-      ],
-      "budget": [
         "view"
       ]
     }
@@ -509,18 +429,16 @@
       ]
     }
   },
-  "qa_qc_manager": {
-    "label": "مدير الجودة (QA/QC Manager)",
+  "financial_manager": {
+    "label": "المدير المالي",
     "permissions": {
-      "qms": [
+      "budget": [
         "view",
         "create",
         "update",
         "delete",
         "approve",
-        "manage",
-        "view_reports",
-        "export_reports"
+        "manage"
       ],
       "dashboard": [
         "view"
@@ -534,15 +452,13 @@
       ]
     }
   },
-  "qa_engineer": {
-    "label": "مهندس الجودة (QA Engineer)",
+  "budget_owner": {
+    "label": "مسؤول الميزانية",
     "permissions": {
-      "qms": [
+      "budget": [
         "view",
         "create",
-        "update",
-        "view_reports",
-        "export_reports"
+        "update"
       ],
       "dashboard": [
         "view"
@@ -552,45 +468,16 @@
       ]
     }
   },
-  "qc_inspector": {
-    "label": "مفتش الجودة (QC Inspector)",
+  "project_budget_viewer": {
+    "label": "مدير المشروع (اطّلاع على الميزانية)",
     "permissions": {
-      "qms": [
-        "view",
-        "create",
-        "update",
-        "view_reports"
-      ],
-      "dashboard": [
+      "budget": [
         "view"
-      ]
-    }
-  },
-  "consultant": {
-    "label": "الاستشاري",
-    "permissions": {
-      "qms": [
-        "view",
-        "approve",
-        "view_reports"
       ],
       "dashboard": [
         "view"
       ],
       "reports": [
-        "view"
-      ]
-    }
-  },
-  "contractor": {
-    "label": "المقاول",
-    "permissions": {
-      "qms": [
-        "view",
-        "create",
-        "view_reports"
-      ],
-      "dashboard": [
         "view"
       ]
     }
