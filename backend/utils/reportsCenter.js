@@ -428,4 +428,8 @@ module.exports = {
   getReportsDashboard,
   // سجل التدقيق
   listAuditLog,
+  // وصول داخلي لطبقة التخزين - يُستخدم حصراً من وحدات نظام التقارير الأخرى
+  // (reportsIntegration.js وغيرها في الأجزاء 9-10) لتجنّب تكرار منطق القراءة/الكتابة
+  // وضمان مصدر بيانات واحد متّسق (نفس reportsCenter.json) عبر كل أجزاء القسم 14.
+  _internal: { loadStore, saveStore, audit },
 };
