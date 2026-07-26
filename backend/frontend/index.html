@@ -351,6 +351,17 @@
     <div class="nav-item" data-panel="rpc-comparisons">
       <span class="nav-icon">⚖️</span> المقارنات العامة (مشروع/مقاول/ميزانية...)
     </div>
+
+    <div class="sidebar-title" style="margin-top:16px">القسم الرابع عشر — التقارير</div>
+    <div class="nav-item" data-panel="reports-dashboard">
+      <span class="nav-icon">📊</span> لوحة تحكم التقارير
+    </div>
+    <div class="nav-item" data-panel="reports-catalog">
+      <span class="nav-icon">📚</span> مركز التقارير (الكتالوج)
+    </div>
+    <div class="nav-item" data-panel="reports-builder">
+      <span class="nav-icon">🛠️</span> منشئ التقارير المخصص
+    </div>
   </nav>
 
   <main class="main-content">
@@ -4934,7 +4945,144 @@
   </div>
 </section>
 
-<script src="js/app.js"></script>
+<!-- ============ القسم الرابع عشر - الجزء 1: لوحة تحكم التقارير ============ -->
+<section class="calc-panel" id="panel-reports-dashboard">
+  <div class="calc-card">
+    <h2>القسم الرابع عشر — لوحة تحكم التقارير</h2>
+    <p style="font-size:12px;color:#777">مؤشرات حية مبنية على سجل التقارير الفعلي في قاعدة البيانات المركزية: الإجمالي، اليوم، الأسبوع، الشهر، المجدولة، المحفوظة، المشتركة، قيد الإنشاء، آخر التقارير، الأكثر استخداماً، والتوزيع حسب التصنيف.</p>
+
+    <div class="toolbar">
+      <div class="field">
+        <label>تصفية حسب المشروع (اختياري)</label>
+        <input type="text" id="reports-dashboard-project-filter" placeholder="معرّف المشروع">
+      </div>
+      <div class="field" style="align-self:flex-end">
+        <button class="btn btn-sm" onclick="rptLoadDashboard(document.getElementById('reports-dashboard-project-filter').value || null)">تحديث</button>
+      </div>
+    </div>
+
+    <div id="reports-dashboard-root"></div>
+  </div>
+</section>
+
+<!-- ============ القسم الرابع عشر - الجزء 1: مركز التقارير (الكتالوج) ============ -->
+<section class="calc-panel" id="panel-reports-catalog">
+  <div class="calc-card">
+    <h2>القسم الرابع عشر — مركز التقارير (الكتالوج)</h2>
+    <p style="font-size:12px;color:#777">فهرس كامل لجميع أنواع التقارير المتاحة في كل قسم من أقسام المنصة، موزعة حسب التصنيف، مع مصدر البيانات الفعلي لكل تقرير. اضغط على أي تصنيف لعرض تقاريره، ثم "إنشاء تقرير" لتسجيله في السجل المركزي.</p>
+
+    <div id="reports-catalog-root"></div>
+  </div>
+</section>
+
+<!-- ============ القسم الرابع عشر - الجزء 2: منشئ التقارير (Report Builder) ============ -->
+<section class="calc-panel" id="panel-reports-builder">
+  <div class="calc-card" id="rb-builder-root">
+    <h2>القسم الرابع عشر — منشئ التقارير المخصص</h2>
+    <p style="font-size:12px;color:#777">إنشاء تقرير مخصص بدون كود: اختر مصدر البيانات، الحقول، الفلاتر، الترتيب، التجميع، والمعادلات — كل ذلك مبني على بيانات النظام الفعلية.</p>
+
+    <div class="toolbar">
+      <div class="field">
+        <label>مصدر البيانات</label>
+        <select id="rb-datasource-select" class="form-select" onchange="rbOnDataSourceChange()"></select>
+      </div>
+      <div class="field">
+        <label>عنوان التقرير (اختياري)</label>
+        <input type="text" id="rb-title-input" placeholder="مثال: تقرير المشاريع النشطة">
+      </div>
+      <div class="field" id="rb-schedule-id-wrap" style="display:none">
+        <label>معرّف الجدول الزمني (Schedule ID)</label>
+        <input type="text" id="rb-schedule-id" placeholder="مطلوب لأنشطة الجدول الزمني">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h4>الحقول المطلوب عرضها</h4>
+      <div id="rb-fields-root"><div class="empty-row">اختر مصدر بيانات أولاً</div></div>
+    </div>
+
+    <div class="panel">
+      <h4>الفلاتر</h4>
+      <div class="toolbar">
+        <div class="field"><label>المشروع</label><input type="text" id="rb-filter-projectId" placeholder="معرّف المشروع"></div>
+        <div class="field"><label>العميل</label><input type="text" id="rb-filter-client"></div>
+        <div class="field"><label>المقاول</label><input type="text" id="rb-filter-contractor"></div>
+        <div class="field"><label>الاستشاري</label><input type="text" id="rb-filter-consultant"></div>
+        <div class="field"><label>المهندس</label><input type="text" id="rb-filter-engineer"></div>
+      </div>
+      <div class="toolbar">
+        <div class="field"><label>القسم</label><input type="text" id="rb-filter-department"></div>
+        <div class="field"><label>المدينة</label><input type="text" id="rb-filter-city"></div>
+        <div class="field"><label>الحالة</label><input type="text" id="rb-filter-status"></div>
+        <div class="field"><label>الأولوية</label><input type="text" id="rb-filter-priority"></div>
+        <div class="field"><label>المستخدم</label><input type="text" id="rb-filter-userId"></div>
+        <div class="field"><label>نوع النشاط</label><input type="text" id="rb-filter-activityType"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h4>الفترة الزمنية</h4>
+      <div class="toolbar">
+        <div class="field">
+          <label>حقل التاريخ</label>
+          <select id="rb-date-field" class="form-select"></select>
+        </div>
+        <div class="field"><label>من تاريخ</label><input type="date" id="rb-date-from"></div>
+        <div class="field"><label>إلى تاريخ</label><input type="date" id="rb-date-to"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h4>الترتيب والتجميع</h4>
+      <div class="toolbar">
+        <div class="field">
+          <label>ترتيب حسب</label>
+          <select id="rb-sort-field" class="form-select"></select>
+        </div>
+        <div class="field">
+          <label>اتجاه الترتيب</label>
+          <select id="rb-sort-dir" class="form-select">
+            <option value="asc">تصاعدي</option>
+            <option value="desc">تنازلي</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>تجميع حسب</label>
+          <select id="rb-group-field" class="form-select"></select>
+        </div>
+        <div class="field">
+          <label>حقل التجميع (Aggregate)</label>
+          <select id="rb-aggregate-field" class="form-select"></select>
+        </div>
+        <div class="field">
+          <label>عملية التجميع</label>
+          <select id="rb-aggregate-op" class="form-select">
+            <option value="count">عدد (Count)</option>
+            <option value="sum">مجموع (Sum)</option>
+            <option value="avg">متوسط (Avg)</option>
+            <option value="min">أدنى قيمة (Min)</option>
+            <option value="max">أعلى قيمة (Max)</option>
+          </select>
+        </div>
+      </div>
+      <div class="field field-full">
+        <label>المعادلات (مفصولة بفاصلة، اختياري)</label>
+        <input type="text" id="rb-formulas-input" placeholder="مثال: budget-spent, spent/budget*100">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="rbRunReport()">تشغيل التقرير</button>
+    </div>
+
+    <div id="rb-result-root" style="margin-top:16px"></div>
+
+    <div class="panel" style="margin-top:24px">
+      <h3>التقارير المحفوظة</h3>
+      <div id="rb-saved-root"></div>
+    </div>
+  </div>
+</section>
 <script src="js/pm.js"></script>
 <script src="js/schedule.js"></script>
 <script src="js/equipment.js"></script>
@@ -4976,5 +5124,6 @@
 <script src="js/reportPeriodsComparisons.js"></script>
 <script src="js/reportInteractive.js"></script>
 <script src="js/reportExecutivePeriodic.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
