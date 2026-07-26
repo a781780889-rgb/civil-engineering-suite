@@ -98,6 +98,7 @@ const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - ال
 const REPORT_BUILDER = require('./utils/reportBuilder'); // القسم 14 - الجزء 2/10
 const REPORT_PERIODS = require('./utils/reportPeriodsComparisons'); // القسم 14 - الجزء 3/10
 const REPORT_INTERACTIVE = require('./utils/reportInteractive'); // القسم 14 - الجزء 4/10
+const REPORT_EXEC_PERIODIC = require('./utils/reportExecutivePeriodic'); // القسم 14 - الجزء 5/10
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8379,6 +8380,76 @@ const API_HANDLERS = {
       if (!body?.spec) throw new Error('مواصفة التقرير الأصلية (spec) مطلوبة');
       const report = REPORT_INTERACTIVE.reRunWithFilters(body.spec, body.overrides || {});
       return { success: true, data: report };
+    },
+  },
+
+  // ===================== القسم 14: نظام التقارير - الجزء 5/10 (التقارير التنفيذية + الدورية) =====================
+  '/api/reports/executive/thresholds': {
+    GET: async () => ({ success: true, data: REPORT_EXEC_PERIODIC.INDICATOR_THRESHOLDS }),
+  },
+  '/api/reports/executive/project': {
+    // query: { projectId, userId? }
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!query?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      const data = REPORT_EXEC_PERIODIC.generateAndRegister(
+        'project_executive',
+        { projectId: query.projectId },
+        { userId: query.userId || null },
+      );
+      return { success: true, data };
+    },
+  },
+  '/api/reports/executive/portfolio': {
+    // query: { status?, userId? }
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      const data = REPORT_EXEC_PERIODIC.generateAndRegister(
+        'portfolio_executive',
+        { statusFilter: query?.status || null },
+        { userId: query?.userId || null },
+      );
+      return { success: true, data };
+    },
+  },
+  '/api/reports/periodic/types': {
+    GET: async () => ({ success: true, data: REPORT_EXEC_PERIODIC.PERIODIC_TYPES }),
+  },
+  '/api/reports/periodic/run': {
+    // body: { projectId, periodType: daily|weekly|monthly, refDate?, notes?, userId? }
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body?.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      const data = REPORT_EXEC_PERIODIC.generateAndRegister(
+        'periodic',
+        {
+          projectId: body.projectId,
+          periodType: body.periodType || 'daily',
+          refDate: body.refDate ? new Date(body.refDate) : new Date(),
+          notes: body.notes || null,
+        },
+        { userId: body.userId || null },
+      );
+      return { success: true, data };
+    },
+  },
+  '/api/reports/executive-periodic/export': {
+    // body: { report: {...الناتج من أحد المسارات أعلاه...}, format: pdf|xlsx|csv|word|html, meta? }
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'export');
+      const { report, format, meta = {} } = body || {};
+      if (!report) throw new Error('بيانات التقرير (report) مطلوبة للتصدير');
+      if (!format) throw new Error('صيغة التصدير (format) مطلوبة');
+      let result;
+      switch (format) {
+        case 'pdf': result = REPORT_EXEC_PERIODIC.exportExecPeriodicReportToPDF(report, meta); break;
+        case 'xlsx': result = REPORT_EXEC_PERIODIC.exportExecPeriodicReportToExcel(report); break;
+        case 'csv': result = REPORT_EXEC_PERIODIC.exportExecPeriodicReportToCSV(report); break;
+        case 'word': result = REPORT_EXEC_PERIODIC.exportExecPeriodicReportToWord(report); break;
+        case 'html': result = REPORT_EXEC_PERIODIC.exportExecPeriodicReportToPrintableHTML(report, meta); break;
+        default: throw new Error(`صيغة تصدير غير مدعومة: ${format}. القيم المسموحة: pdf, xlsx, csv, word, html`);
+      }
+      return { success: true, data: result };
     },
   },
 };
