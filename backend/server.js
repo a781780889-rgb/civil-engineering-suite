@@ -104,6 +104,7 @@ const REPORT_SCHEDULER = require('./utils/reportScheduler'); // القسم 14 - 
 const REPORT_TEMPLATES = require('./utils/reportTemplates'); // القسم 14 - الجزء 7/10
 const REPORT_APPROVALS = require('./utils/reportApprovals'); // القسم 14 - الجزء 7/10
 const REPORT_ATTACHMENTS = require('./utils/reportAttachments'); // القسم 14 - الجزء 7/10
+const REPORTS_AI = require('./utils/reportsAI'); // القسم 14 - الجزء 8/10
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8761,6 +8762,142 @@ const API_HANDLERS = {
       const session = SEC.getSessionUser(token);
       if (!body || !body.id) throw new Error('معرّف المرفق (id) مطلوب');
       return { success: true, data: REPORT_ATTACHMENTS.deleteAttachment(body.id, session ? session.username : null) };
+    },
+  },
+
+  // ===================== القسم 14 - الجزء 8/10: المساعد الذكي في التقارير =====================
+
+  '/api/reports/ai/status': {
+    GET: async () => ({ success: true, data: { available: REPORTS_AI.isAIAvailable() } }),
+  },
+
+  '/api/reports/ai/generate-from-data': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.spec) throw new Error('مواصفة التقرير (spec) مطلوبة');
+      return { success: true, data: await REPORTS_AI.generateReportFromData({ spec: body.spec, projectId: body.projectId || null }) };
+    },
+  },
+
+  '/api/reports/ai/summarize': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.reportId) throw new Error('معرّف التقرير (reportId) مطلوب');
+      return { success: true, data: await REPORTS_AI.summarizeReport({ reportId: body.reportId, fullReportBody: body.fullReportBody || null }) };
+    },
+  },
+
+  '/api/reports/ai/analyze-indicators': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.analyzeProjectIndicators({ projectId: body.projectId }) };
+    },
+  },
+
+  '/api/reports/ai/detect-issues': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.detectIssues({ projectId: body.projectId }) };
+    },
+  },
+
+  '/api/reports/ai/detect-deviations': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.detectDeviations({ projectId: body.projectId }) };
+    },
+  },
+
+  '/api/reports/ai/analyze-delays': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.analyzeDelays({ projectId: body.projectId }) };
+    },
+  },
+
+  '/api/reports/ai/analyze-costs': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.analyzeCosts({ projectId: body.projectId }) };
+    },
+  },
+
+  '/api/reports/ai/analyze-quality-safety': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.analyzeQualityAndSafety({ projectId: body.projectId }) };
+    },
+  },
+
+  '/api/reports/ai/executive-summary': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.writeExecutiveSummary({ projectId: body.projectId }) };
+    },
+  },
+
+  '/api/reports/ai/corrective-actions': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.suggestCorrectiveActions({ projectId: body.projectId }) };
+    },
+  },
+
+  // ===================== القسم 14 - الجزء 8/10: التقارير التنبؤية =====================
+
+  '/api/reports/ai/predict-delay-risk': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.predictProjectDelayRisk({ projectId: body.projectId }) };
+    },
+  },
+
+  '/api/reports/ai/predict-forecast-cost': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || (!body.projectId && !body.budgetId)) throw new Error('يجب تحديد projectId أو budgetId');
+      return { success: true, data: await REPORTS_AI.predictForecastCost({ projectId: body.projectId || null, budgetId: body.budgetId || null }) };
+    },
+  },
+
+  '/api/reports/ai/predict-budget-overrun': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || (!body.projectId && !body.budgetId)) throw new Error('يجب تحديد projectId أو budgetId');
+      return { success: true, data: await REPORTS_AI.predictBudgetOverrunLikelihood({ projectId: body.projectId || null, budgetId: body.budgetId || null }) };
+    },
+  },
+
+  '/api/reports/ai/predict-risks': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.predictPotentialRisks({ projectId: body.projectId }) };
+    },
+  },
+
+  '/api/reports/ai/predict-performance-trend': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.predictPerformanceTrend({ projectId: body.projectId, periodType: body.periodType || 'monthly' }) };
+    },
+  },
+
+  '/api/reports/ai/predict-productivity': {
+    POST: async (body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      if (!body || !body.projectId) throw new Error('معرّف المشروع (projectId) مطلوب');
+      return { success: true, data: await REPORTS_AI.predictProductivityOutlook({ projectId: body.projectId }) };
     },
   },
 };
