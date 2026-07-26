@@ -784,3 +784,74 @@ a:focus-visible, button:focus-visible, .nav-item:focus-visible, .subtab:focus-vi
 .dms-badge-danger { background: #fbe9e7; color: #7d2a22; border-color: var(--danger); }
 
 .dms-detail-panel { margin-top: 18px; }
+
+/* ==================================================================
+   القسم الرابع عشر - الجزء 5/10: تقارير الفترات الزمنية والمقارنة
+   ================================================================== */
+.rpc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.rpc-toolbar .field { min-width: 200px; flex: 1; }
+.rpc-toolbar .field-full { flex-basis: 100%; }
+
+.form-select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #d8cfb8;
+  border-radius: var(--radius);
+  background: #fff;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: inherit;
+}
+.form-select:focus { outline: none; border-color: var(--blueprint-navy); }
+
+.rpc-report-card {
+  border: 1px solid #e4dcc8;
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  background: #fffdf7;
+}
+.rpc-report-card h4 { margin-top: 0; }
+
+.rpc-meta {
+  font-size: 12.5px;
+  color: #6b6250;
+  margin-bottom: 10px;
+  line-height: 1.7;
+}
+
+.rpc-formulas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.rpc-formula-chip {
+  background: #eef2f7;
+  border: 1px solid #b9c8d8;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  color: #35506b;
+}
+
+.rpc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.rpc-table th, .rpc-table td {
+  border: 1px solid #e4dcc8;
+  padding: 7px 10px;
+  text-align: center;
+}
+.rpc-table th {
+  background: var(--blueprint-navy);
+  color: #fff;
+  font-weight: 600;
+}
+.rpc-table tr:nth-child(even) { background: #faf7ef; }
