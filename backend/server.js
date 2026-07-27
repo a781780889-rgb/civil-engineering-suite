@@ -98,6 +98,7 @@ const AI_DATA = require('./utils/aiDataAccessLayer'); // القسم 15 - الج�
 const AI_PROJECT = require('./utils/aiProjectIntelligence'); // القسم 15 - الجزء 4/10
 const AI_ASSISTANT = require('./utils/aiEngineerAssistant');
 const AI_DELAY = require('./utils/aiDelayPrediction'); // القسم 15 - الجزء 5/10
+const AI_SCHED = require('./utils/aiScheduleAnalytics'); // القسم 15 - الجزء 6/10
 const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
 const REPORT_BUILDER = require('./utils/reportBuilder'); // القسم 14 - الجزء 2/10
@@ -9235,6 +9236,45 @@ const API_HANDLERS = {
       const token = getAuthToken(req);
       if (!query.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
       return AI_DELAY.getDelayIndicatorsOnly({ token, projectId: query.project_id });
+    },
+  },
+
+  // ===================================================================
+  // القسم الخامس عشر (الجزء 6/10) - تحليل الجدول الزمني المتقدم
+  // ===================================================================
+  '/api/ai/schedule/deep-analysis': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      if (!query.schedule_id) throw new Error('معرّف الجدول الزمني (schedule_id) مطلوب');
+      return AI_SCHED.analyzeScheduleDeep({ token, scheduleId: query.schedule_id });
+    },
+  },
+  '/api/ai/schedule/bottlenecks': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      if (!query.schedule_id) throw new Error('معرّف الجدول الزمني (schedule_id) مطلوب');
+      return AI_SCHED.getBottlenecksOnly({ token, scheduleId: query.schedule_id });
+    },
+  },
+  '/api/ai/schedule/float-analysis': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      if (!query.schedule_id) throw new Error('معرّف الجدول الزمني (schedule_id) مطلوب');
+      return AI_SCHED.getFloatAnalysisOnly({ token, scheduleId: query.schedule_id });
+    },
+  },
+  '/api/ai/schedule/baseline-comparison': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      if (!query.schedule_id) throw new Error('معرّف الجدول الزمني (schedule_id) مطلوب');
+      return AI_SCHED.getBaselineComparisonOnly({ token, scheduleId: query.schedule_id });
+    },
+  },
+  '/api/ai/schedule/rescheduling-scenarios': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      if (!query.schedule_id) throw new Error('معرّف الجدول الزمني (schedule_id) مطلوب');
+      return AI_SCHED.getReschedulingScenariosOnly({ token, scheduleId: query.schedule_id });
     },
   },
 };
