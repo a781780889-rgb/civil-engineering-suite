@@ -326,12 +326,16 @@ function getProjectSnapshot(token, projectId) {
   safeFetch('project', 'get', { projectId }, 'project_info');
   safeFetch('project', 'risks', { projectId }, 'project_risks');
   safeFetch('project', 'resources', { projectId }, 'project_resources');
+  safeFetch('project', 'transactions', { projectId }, 'project_transactions');
   safeFetch('schedule', 'list', { projectId }, 'schedules');
+  safeFetch('budget', 'list', { project_id: projectId }, 'budgets');
   safeFetch('equipment', 'list', { filters: { projectId } }, 'equipment');
   safeFetch('safety', 'incidents', { filters: { projectId } }, 'safety_incidents');
+  safeFetch('safety', 'risks', { filters: { projectId } }, 'safety_risks');
   safeFetch('quality', 'inspectionRequests', { filters: { projectId } }, 'quality_inspections');
   safeFetch('document', 'list', { filters: { projectId } }, 'documents');
   safeFetch('drawing', 'list', { filters: { projectId } }, 'drawings');
+  safeFetch('contract', 'list', { project_id: projectId }, 'contracts');
 
   return snapshot;
 }
