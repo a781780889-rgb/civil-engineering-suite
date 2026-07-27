@@ -95,6 +95,7 @@ const BUDGET_REPORTS = require('./utils/budgetReports');
 const BUDGET_AI = require('./utils/budgetAI');
 const AI_CORE = require('./utils/aiEngineeringCore');
 const AI_DATA = require('./utils/aiDataAccessLayer'); // القسم 15 - الجزء 3/10
+const AI_PROJECT = require('./utils/aiProjectIntelligence'); // القسم 15 - الجزء 4/10
 const AI_ASSISTANT = require('./utils/aiEngineerAssistant');
 const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
@@ -9197,6 +9198,24 @@ const API_HANDLERS = {
       const token = getAuthToken(req);
       if (!query.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
       return { success: true, data: AI_DATA.getProjectSnapshot(token, query.project_id) };
+    },
+  },
+
+  // ===================================================================
+  // القسم الخامس عشر (الجزء 4/10) - الذكاء الاصطناعي لإدارة المشاريع
+  // ===================================================================
+  '/api/ai/project/analyze': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      if (!query.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+      return AI_PROJECT.analyzeProjectComprehensive({ token, projectId: query.project_id });
+    },
+  },
+  '/api/ai/project/indicators': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      if (!query.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+      return AI_PROJECT.getProjectIndicatorsOnly({ token, projectId: query.project_id });
     },
   },
 };
