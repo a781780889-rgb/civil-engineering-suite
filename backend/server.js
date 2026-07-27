@@ -97,6 +97,7 @@ const AI_CORE = require('./utils/aiEngineeringCore');
 const AI_DATA = require('./utils/aiDataAccessLayer'); // القسم 15 - الجزء 3/10
 const AI_PROJECT = require('./utils/aiProjectIntelligence'); // القسم 15 - الجزء 4/10
 const AI_ASSISTANT = require('./utils/aiEngineerAssistant');
+const AI_DELAY = require('./utils/aiDelayPrediction'); // القسم 15 - الجزء 5/10
 const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
 const REPORT_BUILDER = require('./utils/reportBuilder'); // القسم 14 - الجزء 2/10
@@ -9216,6 +9217,24 @@ const API_HANDLERS = {
       const token = getAuthToken(req);
       if (!query.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
       return AI_PROJECT.getProjectIndicatorsOnly({ token, projectId: query.project_id });
+    },
+  },
+
+  // ===================================================================
+  // القسم الخامس عشر (الجزء 5/10) - التنبؤ بتأخر المشاريع
+  // ===================================================================
+  '/api/ai/schedule/predict-delay': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      if (!query.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+      return AI_DELAY.predictProjectDelay({ token, projectId: query.project_id });
+    },
+  },
+  '/api/ai/schedule/delay-indicators': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      if (!query.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+      return AI_DELAY.getDelayIndicatorsOnly({ token, projectId: query.project_id });
     },
   },
 };
