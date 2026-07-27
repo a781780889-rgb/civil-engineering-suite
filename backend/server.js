@@ -93,6 +93,7 @@ const DRAW_LINKS = require('./utils/drawingModuleLinks');
 const BUDGET = require('./utils/budgetManagement');
 const BUDGET_REPORTS = require('./utils/budgetReports');
 const BUDGET_AI = require('./utils/budgetAI');
+const AI_CORE = require('./utils/aiEngineeringCore');
 const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
 const REPORT_BUILDER = require('./utils/reportBuilder'); // القسم 14 - الجزء 2/10
@@ -9102,6 +9103,51 @@ const API_HANDLERS = {
     GET: async (_body, query, req) => {
       requirePermission(req, 'reports', 'view');
       return { success: true, data: REPORTS_INTEGRATION.getReportSharingSummary({ projectId: query.projectId || null }) };
+    },
+  },
+
+  // ===================================================================
+  // القسم الخامس عشر (الجزء 1/10) - لوحة تحكم AI + سجل العمليات + حالة الخدمات
+  // ===================================================================
+  '/api/ai/dashboard': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      return AI_CORE.getAIDashboard({ fromDate: query.from_date || null, toDate: query.to_date || null });
+    },
+  },
+  '/api/ai/services/status': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'ai', 'use');
+      return { success: true, data: AI_CORE.getSubServicesStatus() };
+    },
+  },
+  '/api/ai/services/status/detail': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      if (!query.key) throw new Error('معرّف الخدمة (key) مطلوب كمعامل استعلام ?key=');
+      return AI_CORE.getSubServiceDetail(query.key);
+    },
+  },
+  '/api/ai/operations-log': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      return AI_CORE.listAIOperations({
+        domain: query.domain || null,
+        userId: query.user_id || null,
+        projectId: query.project_id || null,
+        success: query.success === undefined ? null : query.success === 'true',
+        from: query.from || null,
+        to: query.to || null,
+        page: Number(query.page) || 1,
+        pageSize: Number(query.pageSize) || 100,
+      });
+    },
+  },
+  '/api/ai/permissions/check': {
+    GET: async (_body, query, req) => {
+      const token = requirePermission(req, 'ai', 'use');
+      if (!query.domain) throw new Error('نطاق التحليل (domain) مطلوب');
+      return { success: true, data: { domain: query.domain, allowed: AI_CORE.canUseAIDomain(token, query.domain) } };
     },
   },
 };
