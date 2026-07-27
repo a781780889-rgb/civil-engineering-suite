@@ -94,6 +94,7 @@ const BUDGET = require('./utils/budgetManagement');
 const BUDGET_REPORTS = require('./utils/budgetReports');
 const BUDGET_AI = require('./utils/budgetAI');
 const AI_CORE = require('./utils/aiEngineeringCore');
+const AI_ASSISTANT = require('./utils/aiEngineerAssistant');
 const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
 const REPORT_BUILDER = require('./utils/reportBuilder'); // القسم 14 - الجزء 2/10
@@ -9148,6 +9149,25 @@ const API_HANDLERS = {
       const token = requirePermission(req, 'ai', 'use');
       if (!query.domain) throw new Error('نطاق التحليل (domain) مطلوب');
       return { success: true, data: { domain: query.domain, allowed: AI_CORE.canUseAIDomain(token, query.domain) } };
+    },
+  },
+
+  // ===================================================================
+  // القسم الخامس عشر (الجزء 2/10) - المساعد الهندسي الذكي (Conversational Assistant)
+  // ===================================================================
+  '/api/ai/assistant/ask': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      if (!body?.question) throw new Error('يجب إرسال سؤال (question)');
+      return AI_ASSISTANT.askEngineeringAssistant({
+        token, question: body.question, projectId: body.project_id || null, lang: body.lang || 'ar',
+      });
+    },
+  },
+  '/api/ai/assistant/suggested-questions': {
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'ai', 'use');
+      return AI_ASSISTANT.getSuggestedQuestions({ lang: query.lang || 'ar' });
     },
   },
 };
