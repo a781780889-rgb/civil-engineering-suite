@@ -94,6 +94,7 @@ const BUDGET = require('./utils/budgetManagement');
 const BUDGET_REPORTS = require('./utils/budgetReports');
 const BUDGET_AI = require('./utils/budgetAI');
 const AI_CORE = require('./utils/aiEngineeringCore');
+const AI_DATA = require('./utils/aiDataAccessLayer'); // القسم 15 - الجزء 3/10
 const AI_ASSISTANT = require('./utils/aiEngineerAssistant');
 const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
@@ -9168,6 +9169,34 @@ const API_HANDLERS = {
     GET: async (_body, query, req) => {
       requirePermission(req, 'ai', 'use');
       return AI_ASSISTANT.getSuggestedQuestions({ lang: query.lang || 'ar' });
+    },
+  },
+
+  // ===================================================================
+  // القسم الخامس عشر (الجزء 3/10) - طبقة ربط AI بقاعدة البيانات (Data Access Layer)
+  // ===================================================================
+  '/api/ai/data/accessors': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'ai', 'use');
+      return { success: true, data: AI_DATA.listAvailableDataAccessors() };
+    },
+  },
+  '/api/ai/data/query': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      if (!body?.domain) throw new Error('نطاق البيانات (domain) مطلوب');
+      if (!body?.action) throw new Error('الإجراء (action) مطلوب');
+      return AI_DATA.getAIData(token, body.domain, body.action, body.params || {}, {
+        operationType: body.operation_type || null,
+        projectId: body.project_id || null,
+      });
+    },
+  },
+  '/api/ai/data/project-snapshot': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      if (!query.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+      return { success: true, data: AI_DATA.getProjectSnapshot(token, query.project_id) };
     },
   },
 };
