@@ -87,7 +87,7 @@ function defaultLogDB() { return { operations: [] }; }
  * يجوز استدعاء أي دالة بيانات مباشرة دون التحقق أولاً.
  */
 const AI_DOMAIN_PERMISSIONS = {
-  project: 'dashboard',
+  project: 'tasks',
   schedule: 'tasks',
   budget: 'budget',
   boq: 'reports',
