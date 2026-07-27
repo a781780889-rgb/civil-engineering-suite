@@ -269,7 +269,7 @@ const DEFAULT_ROLES = {
     label: 'مدير المشاريع',
     permissions: {
       dashboard: ['view'], contracts: ['view'], tasks: ['view', 'create', 'update', 'delete'], meetings: ['view', 'create', 'update'],
-      quality: ['view', 'create'], safety: ['view', 'create'], documents: ['view', 'create'], reports: ['view', 'export'],
+      quality: ['view', 'create'], safety: ['view', 'create'], documents: ['view', 'create'], reports: ['view', 'export'], ai: ['use'],
     },
   },
   hr_manager: {
@@ -299,12 +299,12 @@ const DEFAULT_ROLES = {
   engineer: {
     label: 'المهندس',
     permissions: {
-      tasks: ['view', 'update'], quality: ['view', 'create'], safety: ['view', 'create'], documents: ['view', 'create'], reports: ['view'],
+      tasks: ['view', 'update'], quality: ['view', 'create'], safety: ['view', 'create'], documents: ['view', 'create'], reports: ['view'], ai: ['use'],
     },
   },
   supervisor: {
     label: 'المشرف',
-    permissions: { tasks: ['view', 'update'], safety: ['view', 'create'], quality: ['view', 'create'], reports: ['view'] },
+    permissions: { tasks: ['view', 'update'], safety: ['view', 'create'], quality: ['view', 'create'], reports: ['view'], ai: ['use'] },
   },
   client_viewer: {
     label: 'العميل (عرض فقط)',
