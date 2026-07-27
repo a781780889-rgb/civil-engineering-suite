@@ -106,6 +106,7 @@ const REPORT_APPROVALS = require('./utils/reportApprovals'); // القسم 14 - 
 const REPORT_ATTACHMENTS = require('./utils/reportAttachments'); // القسم 14 - الجزء 7/10
 const REPORTS_AI = require('./utils/reportsAI'); // القسم 14 - الجزء 8/10
 const REPORTS_INTEGRATION = require('./utils/reportsIntegration'); // القسم 14 - الجزء 9/10
+const REPORTS_PERMS = require('./utils/reportPermissionsAudit'); // القسم 14 - الجزء 10/10 (الأخير)
 const {
   calculateFootingRebarDetailed,
   calculateColumnRebarDetailed,
@@ -8168,7 +8169,16 @@ const API_HANDLERS = {
         limit: query?.limit ? Number(query.limit) : 100,
       }),
     }),
-    POST: async (body) => ({ success: true, data: REPORTS_CENTER.registerReportRecord(body) }),
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'create');
+      const session = SEC.getSessionUser(token);
+      const data = REPORTS_CENTER.registerReportRecord({ ...body, userId: body.userId || session?.userId || null });
+      REPORTS_PERMS.recordSensitiveReportsAudit({
+        action: 'create', entity: 'report_record', entityId: data?.id || null, projectId: body?.projectId || null,
+        userId: session?.userId || null, username: session?.username || null, summary: `إنشاء تقرير: ${body?.title || data?.id || ''}`,
+      });
+      return { success: true, data };
+    },
   },
   '/api/reports/records/get': {
     GET: async (_body, query) => {
@@ -8177,35 +8187,77 @@ const API_HANDLERS = {
     },
   },
   '/api/reports/records/view': {
-    POST: async (body) => {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'view');
+      const session = SEC.getSessionUser(token);
       if (!body?.id) throw new Error('معرّف التقرير (id) مطلوب');
-      return { success: true, data: REPORTS_CENTER.markReportViewed(body.id, body.userId || null) };
+      return { success: true, data: REPORTS_CENTER.markReportViewed(body.id, body.userId || session?.userId || null) };
     },
   },
   '/api/reports/records/download': {
-    POST: async (body) => {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'export');
+      const session = SEC.getSessionUser(token);
       if (!body?.id) throw new Error('معرّف التقرير (id) مطلوب');
-      return {
-        success: true,
-        data: REPORTS_CENTER.markReportDownloaded(body.id, { format: body.format || null, userId: body.userId || null }),
-      };
+      const data = REPORTS_CENTER.markReportDownloaded(body.id, { format: body.format || null, userId: body.userId || session?.userId || null });
+      REPORTS_PERMS.recordSensitiveReportsAudit({
+        action: 'export', entity: 'report_record', entityId: body.id, projectId: body?.projectId || null,
+        userId: session?.userId || null, username: session?.username || null, summary: `تصدير/تنزيل تقرير (${body.format || 'غير محدد'})`,
+      });
+      return { success: true, data };
     },
   },
   '/api/reports/records/delete': {
-    POST: async (body) => {
+    POST: async (body, _query, req) => {
+      const token = requirePermission(req, 'reports', 'delete');
+      const session = SEC.getSessionUser(token);
       if (!body?.id) throw new Error('معرّف التقرير (id) مطلوب');
-      return { success: true, data: REPORTS_CENTER.deleteReportRecord(body.id, body.userId || null) };
+      const data = REPORTS_CENTER.deleteReportRecord(body.id, body.userId || session?.userId || null);
+      REPORTS_PERMS.recordSensitiveReportsAudit({
+        action: 'delete', entity: 'report_record', entityId: body.id, projectId: body?.projectId || null,
+        userId: session?.userId || null, username: session?.username || null, summary: 'حذف سجل تقرير',
+      });
+      return { success: true, data };
     },
   },
   '/api/reports/audit-log': {
-    GET: async (_body, query) => ({
-      success: true,
-      data: REPORTS_CENTER.listAuditLog({
-        limit: query?.limit ? Number(query.limit) : 200,
-        action: query?.action || null,
-        projectId: query?.projectId || null,
-      }),
-    }),
+    GET: async (_body, query, req) => {
+      requirePermission(req, 'reports', 'view');
+      return {
+        success: true,
+        data: REPORTS_PERMS.getReportsAuditLog({
+          userId: query?.userId || null,
+          action: query?.action || null,
+          entity: query?.entity || null,
+          entityId: query?.entityId || null,
+          projectId: query?.projectId || null,
+          from: query?.from || null,
+          to: query?.to || null,
+          page: query?.page ? Number(query.page) : 1,
+          pageSize: query?.pageSize ? Number(query.pageSize) : 100,
+        }),
+      };
+    },
+  },
+
+  // ===================== القسم 14 - الجزء 10/10: الصلاحيات الدقيقة =====================
+  '/api/reports/permissions/matrix': {
+    GET: async (_body, _query, req) => {
+      requirePermission(req, 'reports', 'view');
+      return { success: true, data: REPORTS_PERMS.getReportsPermissionsMatrix() };
+    },
+  },
+  '/api/reports/permissions/seed-roles': {
+    POST: async (_body, _query, req) => {
+      const token = requirePermission(req, 'security', 'manage');
+      const session = SEC.getSessionUser(token);
+      const data = REPORTS_PERMS.ensureReportsRolesSeeded();
+      REPORTS_PERMS.recordSensitiveReportsAudit({
+        action: 'manage_permissions', entity: 'reports_roles', entityId: null, projectId: null,
+        userId: session?.userId || null, username: session?.username || null, summary: 'إعادة زرع صلاحيات قسم التقارير للأدوار',
+      });
+      return { success: true, data };
+    },
   },
 
   // ===================== القسم 14: نظام التقارير - الجزء 2/10 (منشئ التقارير + الفلاتر المتقدمة) =====================
@@ -8607,25 +8659,35 @@ const API_HANDLERS = {
 
   '/api/reports/templates/create': {
     POST: async (body, _query, req) => {
-      const token = requirePermission(req, 'reports', 'create');
+      const token = requirePermission(req, 'reports', 'manage_templates');
       const session = SEC.getSessionUser(token);
-      return { success: true, data: REPORT_TEMPLATES.createTemplate({ ...body, userId: session ? session.username : null }) };
+      const data = REPORT_TEMPLATES.createTemplate({ ...body, userId: session ? session.username : null });
+      REPORTS_PERMS.recordSensitiveReportsAudit({
+        action: 'manage_templates', entity: 'report_template', entityId: data?.id || null, projectId: null,
+        userId: session?.userId || null, username: session?.username || null, summary: `إنشاء قالب تقرير: ${body?.name || ''}`,
+      });
+      return { success: true, data };
     },
   },
 
   '/api/reports/templates/update': {
     POST: async (body, _query, req) => {
-      const token = requirePermission(req, 'reports', 'edit');
+      const token = requirePermission(req, 'reports', 'manage_templates');
       const session = SEC.getSessionUser(token);
       if (!body || !body.id) throw new Error('معرّف القالب (id) مطلوب');
       const { id, ...updates } = body;
-      return { success: true, data: REPORT_TEMPLATES.updateTemplate(id, updates, session ? session.username : null) };
+      const data = REPORT_TEMPLATES.updateTemplate(id, updates, session ? session.username : null);
+      REPORTS_PERMS.recordSensitiveReportsAudit({
+        action: 'manage_templates', entity: 'report_template', entityId: id, projectId: null,
+        userId: session?.userId || null, username: session?.username || null, summary: 'تعديل قالب تقرير',
+      });
+      return { success: true, data };
     },
   },
 
   '/api/reports/templates/clone': {
     POST: async (body, _query, req) => {
-      const token = requirePermission(req, 'reports', 'create');
+      const token = requirePermission(req, 'reports', 'manage_templates');
       const session = SEC.getSessionUser(token);
       if (!body || !body.id) throw new Error('معرّف القالب (id) مطلوب');
       return { success: true, data: REPORT_TEMPLATES.cloneTemplate(body.id, { newName: body.newName || null, userId: session ? session.username : null }) };
@@ -8634,10 +8696,15 @@ const API_HANDLERS = {
 
   '/api/reports/templates/delete': {
     POST: async (body, _query, req) => {
-      const token = requirePermission(req, 'reports', 'delete');
+      const token = requirePermission(req, 'reports', 'manage_templates');
       const session = SEC.getSessionUser(token);
       if (!body || !body.id) throw new Error('معرّف القالب (id) مطلوب');
-      return { success: true, data: REPORT_TEMPLATES.deleteTemplate(body.id, session ? session.username : null) };
+      const data = REPORT_TEMPLATES.deleteTemplate(body.id, session ? session.username : null);
+      REPORTS_PERMS.recordSensitiveReportsAudit({
+        action: 'manage_templates', entity: 'report_template', entityId: body.id, projectId: null,
+        userId: session?.userId || null, username: session?.username || null, summary: 'حذف قالب تقرير',
+      });
+      return { success: true, data };
     },
   },
 
@@ -8676,31 +8743,44 @@ const API_HANDLERS = {
 
   '/api/reports/approvals/sign': {
     POST: async (body, _query, req) => {
-      requirePermission(req, 'reports', 'view');
+      const token = requirePermission(req, 'reports', 'approve');
+      const session = SEC.getSessionUser(token);
       if (!body || !body.reportRecordId) throw new Error('معرّف سجل التقرير (reportRecordId) مطلوب');
       const { reportRecordId, ...signPayload } = body;
-      return { success: true, data: REPORT_APPROVALS.signReport(reportRecordId, signPayload) };
+      const data = REPORT_APPROVALS.signReport(reportRecordId, signPayload);
+      REPORTS_PERMS.recordSensitiveReportsAudit({
+        action: 'approve', entity: 'report_record', entityId: reportRecordId, projectId: body?.projectId || null,
+        userId: session?.userId || null, username: session?.username || null, summary: 'اعتماد/توقيع تقرير',
+      });
+      return { success: true, data };
     },
   },
 
   '/api/reports/approvals/return-for-review': {
     POST: async (body, _query, req) => {
-      const token = requirePermission(req, 'reports', 'edit');
+      const token = requirePermission(req, 'reports', 'approve');
       const session = SEC.getSessionUser(token);
       if (!body || !body.reportRecordId) throw new Error('معرّف سجل التقرير (reportRecordId) مطلوب');
-      return { success: true, data: REPORT_APPROVALS.returnForReview(body.reportRecordId, { reason: body.reason, userId: session ? session.username : null }) };
+      const data = REPORT_APPROVALS.returnForReview(body.reportRecordId, { reason: body.reason, userId: session ? session.username : null });
+      REPORTS_PERMS.recordSensitiveReportsAudit({
+        action: 'approve', entity: 'report_record', entityId: body.reportRecordId, projectId: null,
+        userId: session?.userId || null, username: session?.username || null, summary: `إعادة تقرير للمراجعة: ${body?.reason || ''}`,
+      });
+      return { success: true, data };
     },
   },
 
   '/api/reports/approvals/revoke-signature': {
     POST: async (body, _query, req) => {
-      const token = requirePermission(req, 'reports', 'edit');
+      const token = requirePermission(req, 'reports', 'approve');
       const session = SEC.getSessionUser(token);
       if (!body || !body.reportRecordId || !body.signatureId) throw new Error('reportRecordId و signatureId مطلوبان');
-      return {
-        success: true,
-        data: REPORT_APPROVALS.revokeReportSignature(body.reportRecordId, body.signatureId, { reason: body.reason, userId: session ? session.username : null }),
-      };
+      const data = REPORT_APPROVALS.revokeReportSignature(body.reportRecordId, body.signatureId, { reason: body.reason, userId: session ? session.username : null });
+      REPORTS_PERMS.recordSensitiveReportsAudit({
+        action: 'approve', entity: 'report_record', entityId: body.reportRecordId, projectId: null,
+        userId: session?.userId || null, username: session?.username || null, summary: `إلغاء توقيع اعتماد: ${body?.reason || ''}`,
+      });
+      return { success: true, data };
     },
   },
 
@@ -9164,5 +9244,14 @@ server.listen(PORT, () => {
     console.log('🗓️  قسم التقارير - الجدولة التلقائية والتصدير الموحّد (الجزء 6/10) جاهز.');
   } catch (e) {
     console.error('⚠️  تعذّر بدء مؤقّت الجدولة التلقائية لقسم التقارير:', e.message);
+  }
+
+  // القسم 14 - الجزء 10/10 (الأخير): زرع صلاحيات قسم التقارير الدقيقة للأدوار الموجودة
+  // (دمج additive فوق الأدوار الحالية في biz_roles.json - لا يستبدل أي صلاحية موجودة)
+  try {
+    const seedResult = REPORTS_PERMS.ensureReportsRolesSeeded();
+    console.log(`🔐 قسم التقارير - الصلاحيات الدقيقة وسجل التدقيق (الجزء 10/10) جاهز. أدوار مُحدَّثة: ${seedResult.data.seeded_roles.join(', ') || 'لا شيء (محدَّثة مسبقاً)'}`);
+  } catch (e) {
+    console.error('⚠️  تعذّرت تهيئة صلاحيات قسم التقارير للأدوار:', e.message);
   }
 });
