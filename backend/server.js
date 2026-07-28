@@ -93,6 +93,7 @@ const DRAW_LINKS = require('./utils/drawingModuleLinks');
 const BUDGET = require('./utils/budgetManagement');
 const BUDGET_REPORTS = require('./utils/budgetReports');
 const BUDGET_AI = require('./utils/budgetAI');
+const BOQ_AI = require('./utils/boqAI'); // القسم 15 - الجزء 8/10: ذكاء حصر الكميات
 const AI_CORE = require('./utils/aiEngineeringCore');
 const AI_DATA = require('./utils/aiDataAccessLayer'); // القسم 15 - الجزء 3/10
 const AI_PROJECT = require('./utils/aiProjectIntelligence'); // القسم 15 - الجزء 4/10
@@ -9275,6 +9276,242 @@ const API_HANDLERS = {
       const token = getAuthToken(req);
       if (!query.schedule_id) throw new Error('معرّف الجدول الزمني (schedule_id) مطلوب');
       return AI_SCHED.getReschedulingScenariosOnly({ token, scheduleId: query.schedule_id });
+    },
+  },
+
+  // ===================================================================
+  // القسم الخامس عشر (الجزء 7/10) - تحليل الميزانية ضمن طبقة AI الموحدة
+  // ===================================================================
+  // ملاحظة: المنطق الفعلي والدوال التسعة الكاملة موجودة في budgetAI.js وتُستدعى
+  // بالفعل عبر مسارات /api/budget/ai/* (القسم 13، الجزء 10/10-أ). هذه المسارات
+  // تُعيد عرض نفس الوحدة (BUDGET_AI) تحت مساحة اسم القسم 15 الموحّدة (/api/ai/*)
+  // مع تسجيل العملية في سجل عمليات AI المركزي (ai_operations_log.json) وفرض طبقة
+  // الصلاحيات الموحّدة resolveAIContext، تحقيقاً لبند "التكامل مع جميع الأقسام"
+  // (البند 30) دون ازدواجية في منطق التحليل نفسه.
+  '/api/ai/budget/status': {
+    GET: async (_body, _query, req) => {
+      const token = getAuthToken(req);
+      AI_CORE.resolveAIContext(token, 'budget');
+      return { success: true, available: BUDGET_AI.isAIAvailable() };
+    },
+  },
+  '/api/ai/budget/financial-performance': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'budget');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'budget', operationType: 'financial_performance_analysis', dataSources: ['budgetManagement', 'budgetReports'] },
+        () => BUDGET_AI.analyzeFinancialPerformance({ budgetId: body.budget_id })
+      );
+    },
+  },
+  '/api/ai/budget/predict-overrun': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'budget');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'budget', operationType: 'predict_budget_overrun', dataSources: ['budgetManagement'] },
+        () => BUDGET_AI.predictBudgetOverrun({ budgetId: body.budget_id })
+      );
+    },
+  },
+  '/api/ai/budget/anomalous-expenses': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'budget');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'budget', operationType: 'detect_anomalous_expenses', dataSources: ['budgetManagement'] },
+        () => BUDGET_AI.detectAnomalousExpenses({ budgetId: body.budget_id })
+      );
+    },
+  },
+  '/api/ai/budget/forecast-final-cost': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'budget');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'budget', operationType: 'forecast_final_cost', dataSources: ['budgetManagement'] },
+        () => BUDGET_AI.forecastFinalCost({ budgetId: body.budget_id })
+      );
+    },
+  },
+  '/api/ai/budget/cost-reduction-suggestions': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'budget');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'budget', operationType: 'suggest_cost_reductions', dataSources: ['budgetManagement'] },
+        () => BUDGET_AI.suggestCostReductions({ budgetId: body.budget_id })
+      );
+    },
+  },
+  '/api/ai/budget/deviation-root-causes': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'budget');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'budget', operationType: 'analyze_deviation_root_causes', dataSources: ['budgetManagement'] },
+        () => BUDGET_AI.analyzeDeviationRootCauses({ budgetId: body.budget_id })
+      );
+    },
+  },
+  '/api/ai/budget/compare-historical-projects': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'budget');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'budget', operationType: 'compare_historical_project_costs', dataSources: ['budgetManagement'] },
+        () => BUDGET_AI.compareHistoricalProjectCosts({ budgetId: body.budget_id, compareLimit: Number(body.compare_limit) || 5 })
+      );
+    },
+  },
+  '/api/ai/budget/procurement-decisions': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'budget');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'budget', operationType: 'suggest_procurement_decisions', dataSources: ['budgetManagement'] },
+        () => BUDGET_AI.suggestProcurementDecisions({ budgetId: body.budget_id, itemName: body.item_name || null, itemCode: body.item_code || null })
+      );
+    },
+  },
+  '/api/ai/budget/management-brief': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'budget');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'budget', operationType: 'generate_management_financial_brief', dataSources: ['budgetManagement', 'budgetReports'] },
+        () => BUDGET_AI.generateManagementFinancialBrief({ budgetId: body.budget_id })
+      );
+    },
+  },
+
+  // ===================================================================
+  // القسم الخامس عشر (الجزء 8/10) - ذكاء حصر الكميات (BOQ Intelligence)
+  // ===================================================================
+  // ملاحظة معمارية مهمة: لا يوجد تخزين دائم لقوائم BOQ لكل مشروع في هذا النظام
+  // (حاسبات القسم الثالث تعمل بمبدأ "حساب عند الطلب")؛ لذلك هذه المسارات تستقبل
+  // بيانات البنود (items) مباشرة في جسم الطلب من الواجهة الأمامية (نفس البيانات
+  // التي تعرضها شاشة الحصر فعلياً للمستخدم)، وليس معرّف مشروع فقط. ربط الميزانية
+  // (linkQuantitiesToBudget) هو الاستثناء الوحيد الذي يقرأ بيانات فعلية مخزَّنة
+  // مباشرة عبر budgetId.
+  '/api/ai/boq/status': {
+    GET: async (_body, _query, req) => {
+      const token = getAuthToken(req);
+      AI_CORE.resolveAIContext(token, 'boq');
+      return { success: true, available: BOQ_AI.isAIAvailable() };
+    },
+  },
+  '/api/ai/boq/review-items': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'boq');
+      if (!Array.isArray(body?.items) || !body.items.length) throw new Error('يجب إرسال قائمة بنود حصر الكميات (items)');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'boq', operationType: 'review_boq_items', projectId: body.project_id || null, dataSources: ['boqReports/user-submitted-items'] },
+        () => BOQ_AI.reviewBOQItems({ items: body.items, projectName: body.project_name || null })
+      );
+    },
+  },
+  '/api/ai/boq/detect-abnormal-values': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'boq');
+      if (!Array.isArray(body?.items) || !body.items.length) throw new Error('يجب إرسال قائمة بنود حصر الكميات (items)');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'boq', operationType: 'detect_abnormal_values', projectId: body.project_id || null, dataSources: ['boqReports/user-submitted-items'] },
+        () => BOQ_AI.detectAbnormalValues({ items: body.items, projectName: body.project_name || null })
+      );
+    },
+  },
+  '/api/ai/boq/compare-planned-executed': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'boq');
+      if (!Array.isArray(body?.planned_items) || !body.planned_items.length) throw new Error('يجب إرسال بنود الكميات المخططة (planned_items)');
+      if (!Array.isArray(body?.executed_items) || !body.executed_items.length) throw new Error('يجب إرسال بنود الكميات المنفذة (executed_items)');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'boq', operationType: 'compare_planned_vs_executed', projectId: body.project_id || null, dataSources: ['boqReports/user-submitted-items'] },
+        () => BOQ_AI.compareplannedVsExecuted({ plannedItems: body.planned_items, executedItems: body.executed_items, projectName: body.project_name || null })
+      );
+    },
+  },
+  '/api/ai/boq/detect-version-differences': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'boq');
+      if (!Array.isArray(body?.version_a) || !body.version_a.length) throw new Error('يجب إرسال بنود النسخة الأولى (version_a)');
+      if (!Array.isArray(body?.version_b) || !body.version_b.length) throw new Error('يجب إرسال بنود النسخة الثانية (version_b)');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'boq', operationType: 'detect_version_differences', projectId: body.project_id || null, dataSources: ['boqReports/user-submitted-items'] },
+        () => BOQ_AI.detectVersionDifferences({ versionA: body.version_a, versionB: body.version_b, labelA: body.label_a || undefined, labelB: body.label_b || undefined })
+      );
+    },
+  },
+  '/api/ai/boq/quantity-trend': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'boq');
+      if (!Array.isArray(body?.snapshots) || body.snapshots.length < 2) throw new Error('يجب إرسال لقطتين زمنيتين (snapshots) على الأقل');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'boq', operationType: 'analyze_quantity_trend', projectId: body.project_id || null, dataSources: ['boqReports/user-submitted-snapshots'] },
+        () => BOQ_AI.analyzeQuantityTrend({ snapshots: body.snapshots, itemDescription: body.item_description || null })
+      );
+    },
+  },
+  '/api/ai/boq/link-to-budget': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'boq');
+      if (!Array.isArray(body?.items) || !body.items.length) throw new Error('يجب إرسال قائمة بنود حصر الكميات (items)');
+      if (!body?.budget_id) throw new Error('معرّف الميزانية (budget_id) مطلوب');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'boq', operationType: 'link_quantities_to_budget', projectId: body.project_id || null, dataSources: ['boqReports/user-submitted-items', 'budgetManagement'] },
+        () => BOQ_AI.linkQuantitiesToBudget({ items: body.items, budgetId: body.budget_id })
+      );
+    },
+  },
+  '/api/ai/boq/link-to-schedule': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'boq');
+      if (!Array.isArray(body?.items) || !body.items.length) throw new Error('يجب إرسال قائمة بنود حصر الكميات (items)');
+      if (!Array.isArray(body?.schedule_activities) || !body.schedule_activities.length) throw new Error('يجب إرسال أنشطة الجدول الزمني (schedule_activities)');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'boq', operationType: 'link_quantities_to_schedule', projectId: body.project_id || null, dataSources: ['boqReports/user-submitted-items', 'schedule/user-submitted-activities'] },
+        () => BOQ_AI.linkQuantitiesToSchedule({ items: body.items, scheduleActivities: body.schedule_activities, projectName: body.project_name || null })
+      );
+    },
+  },
+  '/api/ai/boq/analyze-rebar-data': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'rebar');
+      if (!body?.rebar_results) throw new Error('يجب إرسال نتائج حاسبة حديد التسليح (rebar_results)');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'rebar', operationType: 'analyze_rebar_data', projectId: body.project_id || null, dataSources: ['rebarCalculator/user-submitted-results'] },
+        () => BOQ_AI.analyzeRebarData({ rebarResults: body.rebar_results, projectName: body.project_name || null })
+      );
+    },
+  },
+  '/api/ai/boq/engineering-summary': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      const ctx = AI_CORE.resolveAIContext(token, 'boq');
+      if (!Array.isArray(body?.items) || !body.items.length) throw new Error('يجب إرسال قائمة بنود حصر الكميات (items)');
+      return AI_CORE.withAILogging(
+        { userId: ctx.userId, username: ctx.username, domain: 'boq', operationType: 'generate_boq_engineering_summary', projectId: body.project_id || null, dataSources: ['boqReports/user-submitted-items'] },
+        () => BOQ_AI.generateBOQEngineeringSummary({ items: body.items, projectName: body.project_name || null, additionalContext: body.additional_context || null })
+      );
     },
   },
 };
