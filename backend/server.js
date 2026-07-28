@@ -100,6 +100,8 @@ const AI_PROJECT = require('./utils/aiProjectIntelligence'); // القسم 15 - 
 const AI_ASSISTANT = require('./utils/aiEngineerAssistant');
 const AI_DELAY = require('./utils/aiDelayPrediction'); // القسم 15 - الجزء 5/10
 const AI_SCHED = require('./utils/aiScheduleAnalytics'); // القسم 15 - الجزء 6/10
+const AI_KNOWLEDGE = require('./utils/aiKnowledgeSearch'); // القسم 15 - الجزء 9/10
+const AI_GOV = require('./utils/aiGovernance'); // القسم 15 - الجزء 10/10 (الأخير)
 const BUDGET_INTEG = require('./utils/budgetIntegrations');
 const REPORTS_CENTER = require('./utils/reportsCenter'); // القسم 14 - الجزء 1/10
 const REPORT_BUILDER = require('./utils/reportBuilder'); // القسم 14 - الجزء 2/10
@@ -9512,6 +9514,136 @@ const API_HANDLERS = {
         { userId: ctx.userId, username: ctx.username, domain: 'boq', operationType: 'generate_boq_engineering_summary', projectId: body.project_id || null, dataSources: ['boqReports/user-submitted-items'] },
         () => BOQ_AI.generateBOQEngineeringSummary({ items: body.items, projectName: body.project_name || null, additionalContext: body.additional_context || null })
       );
+    },
+  },
+
+  // ===================================================================================
+  // القسم الخامس عشر (الجزء 9/10) - البحث الموحّد + قاعدة المعرفة + ذكاء الأعمال
+  //                                    + الأسئلة المركّبة + تحليل الصور + التقرير الموحّد
+  // ===================================================================================
+  '/api/ai/search': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      return AI_KNOWLEDGE.unifiedSearch(token, { q: body.q, domains: body.domains || null, projectId: body.project_id || null });
+    },
+  },
+  '/api/ai/knowledge/rebuild-index': {
+    POST: async (_body, _query, req) => {
+      const token = getAuthToken(req);
+      AI_CORE.resolveAIContext(token, 'knowledge');
+      return { success: true, index: AI_KNOWLEDGE.rebuildKnowledgeIndex() };
+    },
+  },
+  '/api/ai/knowledge/query': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      AI_CORE.resolveAIContext(token, 'knowledge');
+      if (!body?.query) throw new Error('نص السؤال (query) مطلوب');
+      return AI_KNOWLEDGE.retrieveFromKnowledgeBase(body.query, { topK: Number(body.top_k) || 5 });
+    },
+  },
+  '/api/ai/query/projects': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      return AI_KNOWLEDGE.compositeProjectQuery(token, { conditions: body.conditions || {} });
+    },
+  },
+  '/api/ai/query/equipment-maintenance-cost': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      return AI_KNOWLEDGE.compositeEquipmentMaintenanceCostQuery(token, { months: Number(body.months) || 3 });
+    },
+  },
+  '/api/ai/business/client-performance': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      if (!body?.client_id) throw new Error('معرّف العميل (client_id) مطلوب');
+      return AI_KNOWLEDGE.analyzeClientPerformance(token, { clientId: body.client_id });
+    },
+  },
+  '/api/ai/business/compare-suppliers': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      return AI_KNOWLEDGE.compareSuppliers(token, { supplierIds: body.supplier_ids || [] });
+    },
+  },
+  '/api/ai/vision/analyze-site-image': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      if (!body?.image_path) throw new Error('مسار الصورة (image_path) مطلوب');
+      return AI_KNOWLEDGE.analyzeSiteImage(token, { imagePath: body.image_path, projectId: body.project_id || null, compareWithImagePath: body.compare_with_image_path || null });
+    },
+  },
+  '/api/ai/reports/unified-monthly': {
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      if (!body?.project_id) throw new Error('معرّف المشروع (project_id) مطلوب');
+      return AI_KNOWLEDGE.generateUnifiedMonthlyReport(token, { projectId: body.project_id });
+    },
+  },
+
+  // ===================================================================================
+  // القسم الخامس عشر (الجزء 10/10 - الأخير) - إدارة النماذج/المزوّدين + التكلفة
+  //                                            + الصلاحيات + حماية البيانات + الحوكمة
+  // ===================================================================================
+  '/api/ai/settings/providers': {
+    GET: async (_body, _query, req) => {
+      const token = getAuthToken(req);
+      return AI_GOV.getProviderSettingsPublic(token);
+    },
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      if (!body?.provider) throw new Error('اسم المزوّد (provider) مطلوب');
+      return AI_GOV.updateProviderSettings(token, {
+        provider: body.provider, model: body.model, temperature: body.temperature,
+        max_tokens: body.max_tokens, timeout_ms: body.timeout_ms, max_retries: body.max_retries,
+        daily_request_limit: body.daily_request_limit, set_active: !!body.set_active,
+      });
+    },
+  },
+  '/api/ai/settings/cost-dashboard': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      return AI_GOV.getCostDashboard(token, { from: query.from || null, to: query.to || null });
+    },
+  },
+  '/api/ai/settings/my-permissions': {
+    GET: async (_body, _query, req) => {
+      const token = getAuthToken(req);
+      return AI_GOV.getMyAIPermissions(token);
+    },
+  },
+  '/api/ai/settings/retention-policy': {
+    GET: async (_body, _query, req) => {
+      const token = getAuthToken(req);
+      return AI_GOV.getRetentionPolicy(token);
+    },
+    POST: async (body, _query, req) => {
+      const token = getAuthToken(req);
+      return AI_GOV.updateRetentionPolicy(token, { keepOperationsDays: body.keep_operations_days, keepSensitiveConversations: body.keep_sensitive_conversations });
+    },
+  },
+  '/api/ai/settings/apply-retention': {
+    POST: async (_body, _query, req) => {
+      const token = getAuthToken(req);
+      return AI_GOV.applyRetentionPolicy(token);
+    },
+  },
+  '/api/ai/settings/operations-log': {
+    GET: async (_body, query, req) => {
+      const token = getAuthToken(req);
+      return AI_GOV.reviewAIOperationsLog(token, {
+        userId: query.user_id || null, domain: query.domain || null, operationType: query.operation_type || null,
+        success: query.success !== undefined ? query.success === 'true' : null,
+        from: query.from || null, to: query.to || null,
+        page: Number(query.page) || 1, pageSize: Number(query.pageSize) || 50,
+      });
+    },
+  },
+  '/api/ai/settings/self-test': {
+    POST: async (_body, _query, req) => {
+      const token = getAuthToken(req);
+      return AI_GOV.runGovernanceSelfTests(token);
     },
   },
 };
