@@ -45,6 +45,7 @@ function tryRequire(rel) {
 
 const SUB_AI_MODULES = {
   budget: { file: './budgetAI', mod: tryRequire('./budgetAI'), label_ar: 'الذكاء المالي (الميزانية)', section: 13 },
+  boq: { file: './boqAI', mod: tryRequire('./boqAI'), label_ar: 'ذكاء حصر الكميات (BOQ)', section: 3 },
   hse: { file: './hseAI', mod: tryRequire('./hseAI'), label_ar: 'ذكاء السلامة المهنية', section: 8 },
   qms: { file: './qmsAI', mod: tryRequire('./qmsAI'), label_ar: 'ذكاء الجودة', section: 9 },
   drawing: { file: './drawingAI', mod: tryRequire('./drawingAI'), label_ar: 'تحليل المخططات', section: 12 },
